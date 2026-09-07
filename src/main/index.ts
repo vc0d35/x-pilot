@@ -13,6 +13,7 @@ import { AgentController } from './agent/controller';
 import { CodexProvider } from './agent/codex/provider';
 import { registerSidebarIpc, registerFocusRelay } from './ipc';
 import { xviewTools } from './tools/xview';
+import { DraftStore } from './tools/xview/drafts';
 import { HistoryStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
@@ -36,11 +37,15 @@ app.whenReady().then(async () => {
     attachNavigationPolicy(child.webContents, { allowHosts: () => [...settings.get().navigation.allowHosts, 'accounts.google.com', 'appleid.apple.com'], openExternal });
   });
 
+  const approvals = new ApprovalBroker();
   const registry = new ToolRegistry();
   const bridge = new WebMcpBridge(ipcMain, xView.webContents);
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
-  registry.addSource(new AppToolSource('xview', xviewTools, { xview, allowHosts: () => settings.get().navigation.allowHosts }));
+  registry.addSource(new AppToolSource('xview', xviewTools, {
+    xview, allowHosts: () => settings.get().navigation.allowHosts,
+    approvals, postingMode: () => settings.get().posting.mode, drafts: new DraftStore(),
+  }));
   registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));
 
   const history = new HistoryStore(join(app.getPath('userData'), 'history.sqlite'));
@@ -48,7 +53,6 @@ app.whenReady().then(async () => {
   registry.addSource(new AppToolSource('app', appTools, { history }));
   app.on('will-quit', () => history.close());
 
-  const approvals = new ApprovalBroker();
   const workspaceDir = join(app.getPath('userData'), 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
   const agent = new AgentController({

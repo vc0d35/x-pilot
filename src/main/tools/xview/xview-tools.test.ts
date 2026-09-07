@@ -4,6 +4,8 @@ import { search } from './search';
 import { readPost, normalizePostUrl } from './read-post';
 import { ok, fail } from '../../../shared/tools';
 import { DEFAULT_ALLOW_HOSTS } from '../../../shared/settings';
+import { ApprovalBroker } from '../../approvals';
+import { DraftStore } from './drafts';
 
 function ctx(current = 'https://x.com/home') {
   const state = { url: current };
@@ -12,7 +14,7 @@ function ctx(current = 'https://x.com/home') {
     navigate: vi.fn(async (u: string) => { state.url = u; }),
     callPreload: vi.fn(async (name: string) => name === 'x_get_page_state' ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true }) : ok({ post: { id: '1' }, thread: [], article: null })),
   };
-  return { xview, allowHosts: () => DEFAULT_ALLOW_HOSTS };
+  return { xview, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm' as const, drafts: new DraftStore() };
 }
 
 describe('normalizePostUrl', () => {
