@@ -28,6 +28,10 @@ export class ApprovalBroker {
     return true;
   }
 
+  cancelAll(decision = 'cancel'): void {
+    for (const id of [...this.waiting.keys()]) this.finish(id, decision);
+  }
+
   private finish(id: string, decision: string): void {
     const w = this.waiting.get(id);
     if (!w) return;

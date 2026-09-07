@@ -3,17 +3,17 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CodexProvider, buildTurnText } from './provider';
 import { ApprovalBroker } from '../../approvals';
-import { ok } from '../../../shared/tools';
+import { ok, type ToolResult } from '../../../shared/tools';
 import type { AgentEvent } from '../../../shared/agent';
 import { DEFAULT_SETTINGS } from '../../../shared/settings';
 
 const FAKE = fileURLToPath(new URL('./fake-codex.mjs', import.meta.url));
 
-function makeProvider() {
+function makeProvider(callTool: (name: string) => Promise<ToolResult> = async (name) => ok({ url: 'https://x.com/home', tool: name })) {
   const approvals = new ApprovalBroker();
   const stderr: string[] = [];
   const provider = new CodexProvider({
-    callTool: async (name) => ok({ url: 'https://x.com/home', tool: name }),
+    callTool,
     approvals,
     spawn: () => { const p = spawn(process.execPath, [FAKE]); p.stderr.on('data', (d) => stderr.push(String(d))); return p; },
   });
@@ -82,6 +82,47 @@ describe('CodexProvider', () => {
       if (Date.now() - start > 3000) throw new Error('no disconnected status');
       await new Promise((r) => setTimeout(r, 10));
     }
+  });
+
+  it('resets isRunning and emits a failed turn.completed when turn/start itself is rejected', async () => {
+    const { provider, events } = makeProvider();
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await expect(provider.send('please REJECT_TURN')).rejects.toThrow('bad model');
+    expect(provider.isRunning()).toBe(false);
+    const completed = events.find((e) => e.type === 'turn.completed') as { status: string; error?: string };
+    expect(completed.status).toBe('failed');
+    await provider.stop();
+  });
+
+  it('fails the turn, cancels pending approvals, and disconnects when the process dies mid-turn', async () => {
+    const { provider, events } = makeProvider();
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('please DIE');
+    await waitFor(events, 'approval.requested');
+    const start = Date.now();
+    while (!events.some((e) => e.type === 'status' && e.status === 'disconnected')) {
+      if (Date.now() - start > 3000) throw new Error('no disconnected status');
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const types = events.map((e) => e.type);
+    expect(types).toContain('turn.completed');
+    const completed = events.find((e) => e.type === 'turn.completed') as { status: string };
+    expect(completed.status).toBe('failed');
+    const resolved = events.find((e) => e.type === 'approval.resolved') as { decision: string };
+    expect(resolved.decision).toBe('cancel');
+    expect(provider.isRunning()).toBe(false);
+  });
+
+  it('reports a failed tool call to the agent instead of crashing when callTool rejects', async () => {
+    const { provider, events } = makeProvider(async () => { throw new Error('boom'); });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitFor(events, 'turn.completed');
+    const toolDone = events.find((e) => e.type === 'tool.completed') as { success: boolean };
+    expect(toolDone.success).toBe(false);
+    const msg = events.find((e) => e.type === 'message.completed') as { text: string };
+    expect(msg.text).toContain('Error: boom');
+    await provider.stop();
   });
 });
 

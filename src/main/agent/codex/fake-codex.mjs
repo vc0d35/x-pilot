@@ -18,9 +18,17 @@ rl.on('line', async (line) => {
   if (method === 'turn/interrupt') return out({ jsonrpc: '2.0', id, result: {} });
   if (method === 'turn/start') {
     const turnId = 'turn-1';
+    const userText = params.input[0].text;
+    if (userText.includes('REJECT_TURN')) {
+      return out({ jsonrpc: '2.0', id, error: { code: -32000, message: 'bad model' } });
+    }
     out({ jsonrpc: '2.0', id, result: { turn: { id: turnId, items: [], status: 'inProgress' } } });
     out({ jsonrpc: '2.0', method: 'turn/started', params: { threadId, turn: { id: turnId, items: [], status: 'inProgress' } } });
-    const userText = params.input[0].text;
+    if (userText.includes('DIE')) {
+      out({ jsonrpc: '2.0', id: 'req-die', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-die', command: 'ls', cwd: '/tmp' } });
+      setTimeout(() => process.exit(3), 50);
+      return;
+    }
     if (userText.includes('APPROVE')) {
       out({ jsonrpc: '2.0', id: 'req-approve', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-1', command: 'ls', cwd: '/tmp' } });
       return; // continues in the response branch below

@@ -22,4 +22,20 @@ describe('ApprovalBroker', () => {
     expect(broker.resolve('whatever', 'accept')).toBe(false);
     vi.useRealTimers();
   });
+
+  it('cancelAll resolves every outstanding request with the given decision', async () => {
+    const broker = new ApprovalBroker();
+    const events: unknown[] = [];
+    broker.onEvent((e) => events.push(e));
+    const p1 = broker.request({ kind: 'command', title: 't1', detail: 'd1', options: [] }, 5000);
+    const p2 = broker.request({ kind: 'fileChange', title: 't2', detail: 'd2', options: [] }, 5000);
+    broker.cancelAll('cancel');
+    await expect(p1).resolves.toBe('cancel');
+    await expect(p2).resolves.toBe('cancel');
+    const resolvedEvents = events.filter((e) => (e as { type: string }).type === 'approval.resolved');
+    expect(resolvedEvents).toHaveLength(2);
+    expect(resolvedEvents.every((e) => (e as { decision: string }).decision === 'cancel')).toBe(true);
+    // no-op when nothing is waiting
+    expect(() => broker.cancelAll()).not.toThrow();
+  });
 });

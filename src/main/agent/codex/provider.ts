@@ -52,9 +52,14 @@ export class CodexProvider implements AgentProvider {
     const rpc = new JsonRpcStdio(proc.stdin, proc.stdout);
     this.rpc = rpc;
     proc.on('error', (err) => this.emit({ type: 'status', status: 'error', message: `Could not start codex: ${err.message}. Install Codex CLI and run \`codex login\`.` }));
+    proc.stdin.on('error', () => {});
     proc.on('exit', (code) => {
       rpc.rejectAll(new Error(`codex exited with code ${code}`));
+      if (this.running) {
+        this.emit({ type: 'turn.completed', turnId: this.turnId ?? '', status: 'failed', error: `codex exited (${code})` });
+      }
       this.running = false;
+      this.deps.approvals.cancelAll('cancel');
       this.emit({ type: 'status', status: 'disconnected', message: `codex exited (${code})` });
     });
     rpc.onNotification((m, p) => this.onNotification(m, p));
@@ -98,7 +103,15 @@ export class CodexProvider implements AgentProvider {
     this.emit({ type: 'user.message', text });
     this.running = true;
     this.emit({ type: 'status', status: 'running' });
-    await this.rpc.request('turn/start', { threadId: this.threadId, input: [{ type: 'text', text: full, text_elements: [] }] });
+    try {
+      await this.rpc.request('turn/start', { threadId: this.threadId, input: [{ type: 'text', text: full, text_elements: [] }] });
+    } catch (err) {
+      this.running = false;
+      const message = err instanceof Error ? err.message : String(err);
+      this.emit({ type: 'turn.completed', turnId: '', status: 'failed', error: message });
+      this.emit({ type: 'status', status: 'ready' });
+      throw err;
+    }
   }
 
   async interrupt(): Promise<void> {
@@ -169,9 +182,14 @@ export class CodexProvider implements AgentProvider {
     const p = params as Record<string, unknown>;
     switch (method) {
       case 'item/tool/call': {
-        const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {});
-        const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
-        return { contentItems: [{ type: 'inputText', text }], success: result.success };
+        try {
+          const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {});
+          const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
+          return { contentItems: [{ type: 'inputText', text }], success: result.success };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return { contentItems: [{ type: 'inputText', text: `Error: ${message}` }], success: false };
+        }
       }
       case 'item/commandExecution/requestApproval': {
         const decision = await this.deps.approvals.request({
