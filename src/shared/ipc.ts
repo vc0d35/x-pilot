@@ -1,0 +1,26 @@
+export const IPC = {
+  // X preload -> main
+  webmcpRegister: 'webmcp:register',
+  webmcpResult: 'webmcp:result',
+  historyLiked: 'history:liked',
+  historyUnliked: 'history:unliked',
+  focusChanged: 'focus:changed',
+  // main -> X preload
+  webmcpCall: 'webmcp:call',
+  // sidebar <-> main
+  agentSend: 'agent:send',
+  agentInterrupt: 'agent:interrupt',
+  agentNewThread: 'agent:newThread',
+  agentReconnect: 'agent:reconnect',
+  agentResolveApproval: 'agent:resolveApproval',
+  agentEvent: 'agent:event',
+  agentListModels: 'agent:listModels',
+  settingsGet: 'settings:get',
+  settingsSet: 'settings:set',
+  settingsChanged: 'settings:changed',
+  libraryList: 'library:list',
+  libraryOpen: 'library:open',
+  libraryChooseDir: 'library:chooseDir',
+  historyClear: 'history:clear',
+  focusUpdate: 'focus:update',
+} as const;
