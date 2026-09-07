@@ -4,5 +4,5 @@
     "strict": true, "noEmit": true, "skipLibCheck": true, "esModuleInterop": true,
     "resolveJsonModule": true, "types": ["node", "vite/client"], "composite": true
   },
-  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "electron.vite.config.ts", "vitest.config.ts", "tests/**/*"]
+  "include": ["src/main/**/*", "src/preload/**/*", "src/shared/**/*", "src/raw.d.ts", "electron.vite.config.ts", "vitest.config.ts", "tests/**/*"]
 }
