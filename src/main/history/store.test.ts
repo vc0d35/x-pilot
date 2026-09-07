@@ -53,4 +53,12 @@ describe('HistoryStore', () => {
     s.clear();
     expect(s.listLibrary()).toHaveLength(1); // clear() keeps the library
   });
+
+  it('recognises recorded library paths regardless of the current folder', () => {
+    const s = new HistoryStore(':memory:');
+    s.addLibraryItem({ postId: null, url: 'https://x.com/a/status/1', path: '/old/a.pdf', title: 'A' });
+    expect(s.hasLibraryPath('/old/a.pdf')).toBe(true);
+    expect(s.hasLibraryPath('/old/b.pdf')).toBe(false);
+    expect(s.hasLibraryPath('/etc/passwd')).toBe(false);
+  });
 });

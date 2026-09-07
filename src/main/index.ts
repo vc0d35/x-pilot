@@ -1,8 +1,8 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
-import { attachNavigationPolicy } from './navigation/policy';
+import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { SettingsStore } from './settings';
 import { ToolRegistry } from './tools/registry';
 import { AppToolSource } from './tools/registry';
@@ -37,7 +37,7 @@ app.whenReady().then(async () => {
   const openExternal = (url: string) => { openExternalCalls.push(url); if (!E2E) void shell.openExternal(url); };
   attachNavigationPolicy(xView.webContents, { allowHosts: () => settings.get().navigation.allowHosts, openExternal });
   xView.webContents.on('did-create-window', (child) => {
-    attachNavigationPolicy(child.webContents, { allowHosts: () => [...settings.get().navigation.allowHosts, 'accounts.google.com', 'appleid.apple.com'], openExternal });
+    attachNavigationPolicy(child.webContents, { allowHosts: () => [...settings.get().navigation.allowHosts, ...POPUP_ONLY_HOSTS], openExternal });
   });
 
   const approvals = new ApprovalBroker();
@@ -91,6 +91,10 @@ app.whenReady().then(async () => {
       void agent.start({ resume: true });
     });
   }
+}).catch((err) => {
+  console.error('[xpilot] fatal during startup', err);
+  dialog.showErrorBox('X Pilot failed to start', String(err));
+  app.quit();
 });
 
 app.on('window-all-closed', () => app.quit());

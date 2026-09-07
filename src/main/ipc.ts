@@ -1,4 +1,4 @@
-import { dialog, ipcMain, type WebContents } from 'electron';
+import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema } from '../shared/page';
@@ -33,19 +33,29 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   approvals.onEvent(push);
   sidebar.on('did-finish-load', () => { if (lastThread) push(lastThread); if (lastStatus) push(lastStatus); });
 
-  ipcMain.handle(IPC.agentSend, async (_e, raw) => { const { text, pageContext } = SendSchema.parse(raw); await agent.send(text, pageContext); });
-  ipcMain.handle(IPC.agentInterrupt, () => agent.interrupt());
-  ipcMain.handle(IPC.agentNewThread, () => agent.start({ resume: false }));
-  ipcMain.handle(IPC.agentReconnect, () => agent.start({ resume: true }));
-  ipcMain.handle(IPC.agentResolveApproval, (_e, raw) => { const { id, decision } = ResolveSchema.parse(raw); approvals.resolve(id, decision); });
-  ipcMain.handle(IPC.agentListModels, () => agent.listModels());
-  ipcMain.handle(IPC.settingsGet, () => settings.get());
-  ipcMain.handle(IPC.settingsSet, (_e, patch) => settings.update(patch as DeepPartial<Settings>));
+  /** Only the sidebar renderer may drive these channels; the X view shares the same ipcMain. */
+  const guarded = <A extends unknown[], R>(fn: (event: IpcMainInvokeEvent, ...args: A) => R) => (event: IpcMainInvokeEvent, ...args: A): R => {
+    if (event.sender.id !== sidebar.id) throw new Error('unauthorized');
+    return fn(event, ...args);
+  };
+
+  ipcMain.handle(IPC.agentSend, guarded(async (_e, raw) => { const { text, pageContext } = SendSchema.parse(raw); await agent.send(text, pageContext); }));
+  ipcMain.handle(IPC.agentInterrupt, guarded(() => agent.interrupt()));
+  ipcMain.handle(IPC.agentNewThread, guarded(() => agent.start({ resume: false })));
+  ipcMain.handle(IPC.agentReconnect, guarded(() => agent.start({ resume: true })));
+  ipcMain.handle(IPC.agentResolveApproval, guarded((_e, raw) => { const { id, decision } = ResolveSchema.parse(raw); approvals.resolve(id, decision); }));
+  ipcMain.handle(IPC.agentListModels, guarded(() => agent.listModels()));
+  ipcMain.handle(IPC.settingsGet, guarded(() => settings.get()));
+  ipcMain.handle(IPC.settingsSet, guarded((_e, patch) => settings.update(patch as DeepPartial<Settings>)));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
-  ipcMain.handle(IPC.historyClear, () => history.clear());
-  ipcMain.handle(IPC.libraryList, () => history.listLibrary());
-  ipcMain.handle(IPC.libraryOpen, async (_e, raw) => { const { path } = z.object({ path: z.string() }).parse(raw); if (!isInsideDir(path, libraryDir())) throw new Error('outside library'); await openPath(path); });
-  ipcMain.handle(IPC.libraryChooseDir, async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; });
+  ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
+  ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
+  ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {
+    const { path } = z.object({ path: z.string() }).parse(raw);
+    if (!isInsideDir(path, libraryDir()) && !history.hasLibraryPath(path)) throw new Error('outside library');
+    await openPath(path);
+  }));
+  ipcMain.handle(IPC.libraryChooseDir, guarded(async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; }));
 }
 
 export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {

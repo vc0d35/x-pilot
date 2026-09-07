@@ -23,9 +23,18 @@ export function decideNavigation(url: string, allowHosts: string[], opts: { isPo
   return 'external';
 }
 
+/** Login popups must not inherit the X preload (or any node access): they are third-party pages. */
+export function popupWindowOptions(): { webPreferences: { preload: undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean } } {
+  return { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } };
+}
+
+export type WindowOpenResponse =
+  | { action: 'deny' }
+  | { action: 'allow'; overrideBrowserWindowOptions?: { webPreferences: { preload?: string | undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean } } };
+
 export interface NavigationContents {
   on(event: 'will-navigate' | 'will-redirect', listener: (e: { preventDefault(): void }, url: string) => void): unknown;
-  setWindowOpenHandler(handler: (details: { url: string }) => { action: 'allow' | 'deny' }): void;
+  setWindowOpenHandler(handler: (details: { url: string }) => WindowOpenResponse): void;
 }
 
 export function attachNavigationPolicy(
@@ -42,7 +51,7 @@ export function attachNavigationPolicy(
   contents.on('will-redirect', guard);
   contents.setWindowOpenHandler(({ url }) => {
     const decision = decideNavigation(url, deps.allowHosts(), { isPopup: true });
-    if (decision === 'allow') return { action: 'allow' };
+    if (decision === 'allow') return { action: 'allow', overrideBrowserWindowOptions: popupWindowOptions() };
     if (decision === 'external') deps.openExternal(url);
     return { action: 'deny' };
   });

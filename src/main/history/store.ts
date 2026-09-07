@@ -85,6 +85,11 @@ export class HistoryStore {
     return { id: Number(res.lastInsertRowid), url: i.url, path: i.path, title: i.title, savedAt };
   }
 
+  /** True when this exact path was recorded as a saved library item (folder may have changed since). */
+  hasLibraryPath(path: string): boolean {
+    return this.db.prepare('SELECT 1 AS ok FROM library WHERE path = ? LIMIT 1').get(path) !== undefined;
+  }
+
   listLibrary(limit = 100): LibraryItem[] {
     return (this.db.prepare('SELECT id, url, path, title, saved_at FROM library ORDER BY id DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>)
       .map((r) => ({ id: r.id as number, url: r.url as string, path: r.path as string, title: r.title as string, savedAt: r.saved_at as string }));

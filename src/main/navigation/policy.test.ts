@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { decideNavigation, attachNavigationPolicy, DEFAULT_ALLOW_HOSTS } from './policy';
+import { decideNavigation, attachNavigationPolicy, DEFAULT_ALLOW_HOSTS, type WindowOpenResponse } from './policy';
 
 describe('decideNavigation', () => {
   it('allows x.com and subdomains', () => {
@@ -27,10 +27,10 @@ describe('decideNavigation', () => {
 describe('attachNavigationPolicy', () => {
   function fakeContents() {
     const em = new EventEmitter();
-    let handler: ((d: { url: string }) => { action: 'allow' | 'deny' }) | null = null;
+    let handler: ((d: { url: string }) => WindowOpenResponse) | null = null;
     return {
       on: (ev: string, l: (e: { preventDefault(): void }, url: string) => void) => em.on(ev, l),
-      setWindowOpenHandler: (h: (d: { url: string }) => { action: 'allow' | 'deny' }) => { handler = h; },
+      setWindowOpenHandler: (h: (d: { url: string }) => WindowOpenResponse) => { handler = h; },
       emit: (ev: string, url: string) => { const e = { prevented: false, preventDefault() { this.prevented = true; } }; em.emit(ev, e, url); return e.prevented; },
       open: (url: string) => handler!({ url }),
     };
@@ -52,6 +52,8 @@ describe('attachNavigationPolicy', () => {
     attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal });
     expect(c.open('https://example.com').action).toBe('deny');
     expect(openExternal).toHaveBeenCalledWith('https://example.com');
-    expect(c.open('https://accounts.google.com/x').action).toBe('allow');
+    const popup = c.open('https://accounts.google.com/x');
+    expect(popup.action).toBe('allow');
+    expect(popup).toEqual({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } } });
   });
 });

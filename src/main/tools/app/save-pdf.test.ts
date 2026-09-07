@@ -40,4 +40,11 @@ describe('library tools', () => {
     c.openPath.mockResolvedValueOnce('No app');
     expect(await openPdf.execute({ path: '/lib/a.pdf' }, c)).toEqual(fail('Could not open PDF: No app'));
   });
+  it('still opens an item recorded under a previous library folder', async () => {
+    const c = ctx();
+    c.history.addLibraryItem({ postId: null, url: 'u', path: '/old-folder/b.pdf', title: 'B' });
+    expect(await openPdf.execute({ path: '/old-folder/b.pdf' }, c)).toEqual(ok({ opened: true }));
+    expect(c.openPath).toHaveBeenCalledWith('/old-folder/b.pdf');
+    expect(await openPdf.execute({ path: '/old-folder/c.pdf' }, c)).toEqual(fail('Refusing to open a file outside the library folder'));
+  });
 });
