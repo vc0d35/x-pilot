@@ -1,4 +1,5 @@
-import { ipcMain, type WebContents } from 'electron';
+import { dialog, ipcMain, type WebContents } from 'electron';
+import { resolve } from 'node:path';
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema } from '../shared/page';
@@ -16,13 +17,15 @@ export interface SidebarIpcDeps {
   approvals: ApprovalBroker;
   settings: SettingsStore;
   history: HistoryStore;
+  libraryDir(): string;
+  openPath(p: string): Promise<string>;
 }
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
 const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, agent, approvals, settings, history } = deps;
+  const { sidebar, agent, approvals, settings, history, libraryDir, openPath } = deps;
   const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
@@ -40,6 +43,9 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.settingsSet, (_e, patch) => settings.update(patch as DeepPartial<Settings>));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
   ipcMain.handle(IPC.historyClear, () => history.clear());
+  ipcMain.handle(IPC.libraryList, () => history.listLibrary());
+  ipcMain.handle(IPC.libraryOpen, async (_e, raw) => { const { path } = z.object({ path: z.string() }).parse(raw); const dir = resolve(libraryDir()); if (!resolve(path).startsWith(dir)) throw new Error('outside library'); await openPath(path); });
+  ipcMain.handle(IPC.libraryChooseDir, async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; });
 }
 
 export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {

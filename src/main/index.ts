@@ -1,4 +1,4 @@
-import { app, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
@@ -17,6 +17,7 @@ import { DraftStore } from './tools/xview/drafts';
 import { HistoryStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
+import { exportPdf } from './library/pdf';
 
 const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 const E2E = process.env.XPILOT_E2E === '1';
@@ -50,7 +51,18 @@ app.whenReady().then(async () => {
 
   const history = new HistoryStore(join(app.getPath('userData'), 'history.sqlite'));
   registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
-  registry.addSource(new AppToolSource('app', appTools, { history }));
+  const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), 'X Pilot');
+  const appCtx = {
+    history, libraryDir,
+    exportPdf: (url: string, outDir: string) => exportPdf({ url, outDir }, {
+      createWindow: () => {
+        const w = new BrowserWindow({ show: false, width: 900, height: 1400, webPreferences: { partition: 'persist:x', sandbox: true, contextIsolation: true } });
+        return { loadURL: (u) => w.loadURL(u), executeJavaScript: (c) => w.webContents.executeJavaScript(c, true), printToPDF: (o) => w.webContents.printToPDF(o), destroy: () => w.destroy() };
+      },
+    }),
+    openPath: (p: string) => shell.openPath(p),
+  };
+  registry.addSource(new AppToolSource('app', appTools, appCtx));
   app.on('will-quit', () => history.close());
 
   const workspaceDir = join(app.getPath('userData'), 'workspace');
@@ -59,7 +71,7 @@ app.whenReady().then(async () => {
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
-  registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history });
+  registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
