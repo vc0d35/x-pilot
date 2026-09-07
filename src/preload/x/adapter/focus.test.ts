@@ -46,4 +46,22 @@ describe('installFocusTracker', () => {
     expect(send).toHaveBeenCalledTimes(2);
     vi.useRealTimers();
   });
+  it('short-circuits expensive queries when URL and dialog state unchanged', () => {
+    document.body.innerHTML = fixture('x-status.html');
+    let url = 'https://x.com/alice/status/111';
+    const send = vi.fn();
+    const off = installFocusTracker(document, () => url, send, 100);
+    vi.advanceTimersByTime(250);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0][0]?.post.id).toBe('111');
+    document.body.innerHTML = fixture('x-timeline.html');
+    vi.advanceTimersByTime(100);
+    expect(send).toHaveBeenCalledTimes(1);
+    url = 'https://x.com/home';
+    vi.advanceTimersByTime(100);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send.mock.calls[1][0]).toBeNull();
+    off();
+    vi.useRealTimers();
+  });
 });
