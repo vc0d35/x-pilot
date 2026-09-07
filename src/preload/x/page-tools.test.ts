@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createPageToolHost } from './page-tools';
 
 describe('createPageToolHost', () => {
@@ -25,9 +25,26 @@ describe('createPageToolHost', () => {
     const host = createPageToolHost();
     await expect(host.call('nope', {})).resolves.toEqual({ success: false, error: 'Unknown page tool: nope' });
     host.bridgeApi.registerTool({ name: 'slow', description: 'd' });
-    host.bridgeApi.onCall(() => { /* never responds */ });
+    let calls = 0;
+    host.bridgeApi.onCall((callId) => {
+      calls++;
+      if (calls === 1) return; // first call: never responds -> timeout
+      host.bridgeApi.respond(callId, 'garbage');
+    });
     await expect(host.call('slow', {}, 20)).resolves.toEqual({ success: false, error: 'Page tool timed out: slow' });
-    host.bridgeApi.onCall((callId) => host.bridgeApi.respond(callId, 'garbage'));
     await expect(host.call('slow', {}, 100)).resolves.toEqual({ success: false, error: 'Page tool returned a malformed result: slow' });
+  });
+
+  it('onCall is first-writer-wins: a later registration is ignored and warns', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const host = createPageToolHost();
+    host.bridgeApi.registerTool({ name: 'echo', description: 'd' });
+    const seen: string[] = [];
+    host.bridgeApi.onCall(() => seen.push('first'));
+    host.bridgeApi.onCall(() => seen.push('second'));
+    void host.call('echo', {});
+    expect(seen).toEqual(['first']);
+    expect(warn).toHaveBeenCalledWith('[xpilot] modelContext bridge already connected');
+    warn.mockRestore();
   });
 });
