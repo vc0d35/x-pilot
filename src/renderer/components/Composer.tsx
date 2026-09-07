@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import type { PageContext } from '../../shared/page';
 
-export function Composer(props: { disabled: boolean; running: boolean; focus: PageContext | null; onSend: (text: string, ctx: PageContext | null) => void }) {
+export function Composer(props: { disabled: boolean; running: boolean; focus: PageContext | null; onSend: (text: string, ctx: PageContext | null) => Promise<void> }) {
   const [text, setText] = useState('');
-  const submit = () => {
+  const submit = async () => {
     const t = text.trim();
     if (!t || props.disabled || props.running) return;
-    props.onSend(t, props.focus);
+    await props.onSend(t, props.focus);
     setText('');
   };
   return (
