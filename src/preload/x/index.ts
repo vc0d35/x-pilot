@@ -5,6 +5,7 @@ import { IPC } from '../../shared/ipc';
 import { createPageToolHost } from './page-tools';
 import type { PreloadCtx } from './context';
 import { adapterTools } from './adapter/tools';
+import { installLikeCapture } from './adapter/capture';
 
 const host = createPageToolHost();
 contextBridge.exposeInMainWorld('__xpilot', host.bridgeApi);
@@ -28,3 +29,5 @@ ipcRenderer.on(IPC.webmcpCall, async (_event, msg: { callId: string; name: strin
   }
   ipcRenderer.send(IPC.webmcpResult, { callId: msg.callId, result });
 });
+
+installLikeCapture(document, () => location.href, (channel, payload) => ipcRenderer.send(channel, payload));

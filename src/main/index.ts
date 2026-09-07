@@ -13,6 +13,9 @@ import { AgentController } from './agent/controller';
 import { CodexProvider } from './agent/codex/provider';
 import { registerSidebarIpc } from './ipc';
 import { xviewTools } from './tools/xview';
+import { HistoryStore } from './history/store';
+import { registerHistoryIpc } from './history/ipc';
+import { appTools } from './tools/app';
 
 const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 const E2E = process.env.XPILOT_E2E === '1';
@@ -40,6 +43,11 @@ app.whenReady().then(async () => {
   registry.addSource(new AppToolSource('xview', xviewTools, { xview, allowHosts: () => settings.get().navigation.allowHosts }));
   registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));
 
+  const history = new HistoryStore(join(app.getPath('userData'), 'history.sqlite'));
+  registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
+  registry.addSource(new AppToolSource('app', appTools, { history }));
+  app.on('will-quit', () => history.close());
+
   const approvals = new ApprovalBroker();
   const workspaceDir = join(app.getPath('userData'), 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
@@ -47,7 +55,7 @@ app.whenReady().then(async () => {
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
-  registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings });
+  registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
 

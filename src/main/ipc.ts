@@ -6,6 +6,7 @@ import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
 import type { SettingsStore } from './settings';
+import type { HistoryStore } from './history/store';
 import type { DeepPartial, Settings } from '../shared/settings';
 
 export interface SidebarIpcDeps {
@@ -13,13 +14,14 @@ export interface SidebarIpcDeps {
   agent: AgentController;
   approvals: ApprovalBroker;
   settings: SettingsStore;
+  history: HistoryStore;
 }
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
 const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, agent, approvals, settings } = deps;
+  const { sidebar, agent, approvals, settings, history } = deps;
   const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
@@ -36,4 +38,5 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.settingsGet, () => settings.get());
   ipcMain.handle(IPC.settingsSet, (_e, patch) => settings.update(patch as DeepPartial<Settings>));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
+  ipcMain.handle(IPC.historyClear, () => history.clear());
 }
