@@ -38,3 +38,8 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Save this as a PDF" on a long post and on an X Article → file in the library folder, no nav chrome, text expanded.
 - [ ] Library panel lists it; Open PDF works; Change folder persists across restart.
 - [ ] Change the library folder, then Open PDF on an item saved under the old folder still works.
+
+## Passkeys (needs XPILOT_TEAM_ID + `npm run sign-dev`, see docs/passkeys.md)
+- [ ] Startup log shows `passkeys enabled with keychain group …`.
+- [ ] Adding a security key/passkey in X settings triggers a Touch ID prompt titled "X Pilot".
+- [ ] Sign out, sign in with the passkey: Touch ID prompt appears and login completes.

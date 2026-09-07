@@ -10,7 +10,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "npm run build && playwright test"
+    "e2e": "npm run build && playwright test",
+    "sign-dev": "bash scripts/sign-dev.sh",
+    "dist": "npm run build && node scripts/render-entitlements.mjs && electron-builder --mac"
   },
   "dependencies": {
     "react": "^19.2.0",
@@ -24,6 +26,7 @@
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
     "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",
     "jsdom": "^30.0.0",
     "typescript": "^5.9.0",

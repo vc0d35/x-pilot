@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
+import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { SettingsStore } from './settings';
 import { ToolRegistry } from './tools/registry';
@@ -32,6 +33,7 @@ app.whenReady().then(async () => {
     rendererUrl: process.env.ELECTRON_RENDERER_URL,
     rendererFile: join(__dirname, '../renderer/index.html'),
   });
+  configureTouchIdPasskeys({ app, onSelectAccount: (l) => { xView.webContents.session.on('select-webauthn-account', l); }, group: resolveKeychainGroup(process.env, process.platform) });
 
   const openExternalCalls: string[] = [];
   const openExternal = (url: string) => { openExternalCalls.push(url); if (!E2E) void shell.openExternal(url); };

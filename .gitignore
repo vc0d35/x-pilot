@@ -5,3 +5,5 @@ test-results
 playwright-report
 *.local
 *.tsbuildinfo
+build/entitlements.mac.plist
+dist
