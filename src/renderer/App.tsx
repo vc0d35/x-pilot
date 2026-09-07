@@ -18,8 +18,10 @@ export function App() {
         onStop={() => void window.xpilot.interrupt()} onNewThread={() => void window.xpilot.newThread()} />
       <EntryList entries={state.entries} onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)} />
       <Composer disabled={state.status !== 'ready' && state.status !== 'running'} running={state.running} focus={focus}
-        onSend={(text, ctx) => window.xpilot.send(text, ctx).catch((err) =>
-          dispatch({ type: 'turn.completed', turnId: '', status: 'failed', error: err instanceof Error ? err.message : String(err) }))} />
+        onSend={(text, ctx) => window.xpilot.send(text, ctx).then(() => true, (err) => {
+          dispatch({ type: 'turn.completed', turnId: '', status: 'failed', error: err instanceof Error ? err.message : String(err) });
+          return false;
+        })} />
     </div>
   );
 }
