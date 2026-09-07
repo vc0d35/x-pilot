@@ -11,7 +11,7 @@ import { XViewController } from './xview';
 import { ApprovalBroker } from './approvals';
 import { AgentController } from './agent/controller';
 import { CodexProvider } from './agent/codex/provider';
-import { registerSidebarIpc } from './ipc';
+import { registerSidebarIpc, registerFocusRelay } from './ipc';
 import { xviewTools } from './tools/xview';
 import { HistoryStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
@@ -56,6 +56,7 @@ app.whenReady().then(async () => {
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
   registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history });
+  registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
 

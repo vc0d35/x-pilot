@@ -6,6 +6,7 @@ import { createPageToolHost } from './page-tools';
 import type { PreloadCtx } from './context';
 import { adapterTools } from './adapter/tools';
 import { installLikeCapture } from './adapter/capture';
+import { installFocusTracker } from './adapter/focus';
 
 const host = createPageToolHost();
 contextBridge.exposeInMainWorld('__xpilot', host.bridgeApi);
@@ -31,3 +32,4 @@ ipcRenderer.on(IPC.webmcpCall, async (_event, msg: { callId: string; name: strin
 });
 
 installLikeCapture(document, () => location.href, (channel, payload) => ipcRenderer.send(channel, payload));
+installFocusTracker(document, () => location.href, (ctx) => ipcRenderer.send(IPC.focusChanged, ctx));

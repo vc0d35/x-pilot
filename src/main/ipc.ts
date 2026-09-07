@@ -8,6 +8,7 @@ import type { ApprovalBroker } from './approvals';
 import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
 import type { DeepPartial, Settings } from '../shared/settings';
+import type { BridgeIpc } from './webmcp/bridge';
 
 export interface SidebarIpcDeps {
   sidebar: WebContents;
@@ -39,4 +40,16 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.settingsSet, (_e, patch) => settings.update(patch as DeepPartial<Settings>));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
   ipcMain.handle(IPC.historyClear, () => history.clear());
+}
+
+export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {
+  let last: unknown = null;
+  deps.ipc.on(IPC.focusChanged, (event, payload) => {
+    if (event.sender.id !== deps.xContentsId) return;
+    const parsed = PageContextSchema.nullable().safeParse(payload);
+    if (!parsed.success) return;
+    last = parsed.data;
+    if (!deps.sidebar.isDestroyed()) deps.sidebar.send(IPC.focusUpdate, parsed.data);
+  });
+  deps.sidebar.on('did-finish-load', () => deps.sidebar.send(IPC.focusUpdate, last));
 }
