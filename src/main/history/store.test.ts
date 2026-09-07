@@ -31,7 +31,9 @@ describe('HistoryStore', () => {
   it('indexes article title and body', () => {
     const s = new HistoryStore(':memory:');
     s.recordLike(post('9', 'short teaser', 'alice', { kind: 'article', articleTitle: 'On Compilers', articleBody: 'A long essay about parsing.' }));
-    expect(s.search({ query: 'parsing' }).map((h) => h.id)).toEqual(['9']);
+    const hits = s.search({ query: 'parsing' });
+    expect(hits.map((h) => h.id)).toEqual(['9']);
+    expect(hits[0].snippet).toContain('[parsing]');
   });
 
   it('survives FTS special characters in queries and clears', () => {

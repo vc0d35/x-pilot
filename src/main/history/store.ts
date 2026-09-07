@@ -61,7 +61,7 @@ export class HistoryStore {
     if (!match) return [];
     const rows = this.db.prepare(`
       SELECT p.id, p.url, p.author_handle, p.author_name, p.kind, p.liked_at, p.unliked_at,
-             snippet(posts_fts, 0, '[', ']', '…', 16) AS snippet
+             snippet(posts_fts, -1, '[', ']', '…', 16) AS snippet
       FROM posts_fts JOIN posts p ON p.rowid = posts_fts.rowid
       WHERE posts_fts MATCH ?
         AND (? IS NULL OR p.author_handle = ?)

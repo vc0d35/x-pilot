@@ -27,4 +27,17 @@ describe('installLikeCapture', () => {
     document.querySelector<HTMLElement>('button[data-testid="like"]')!.click();
     expect(send).not.toHaveBeenCalled();
   });
+
+  it('trusts the pointerdown snapshot when X optimistically flips the button before click fires', () => {
+    const send = vi.fn();
+    installLikeCapture(document, () => 'https://x.com/home', send);
+    const btn = document.querySelector<HTMLElement>('button[data-testid="like"]')!;
+    btn.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    // Simulate X's optimistic re-render swapping the button into its "liked" (unlike) state
+    // before the click event fires.
+    btn.dataset.testid = 'unlike';
+    btn.click();
+    expect(send).toHaveBeenCalledWith('history:liked', { post: expect.objectContaining({ id: '111' }), likedAt: expect.any(String) });
+    expect(send).not.toHaveBeenCalledWith('history:unliked', expect.anything());
+  });
 });
