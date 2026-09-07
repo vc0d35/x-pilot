@@ -1,4 +1,6 @@
-export const DEFAULT_ALLOW_HOSTS = ['x.com', '*.x.com', 'twitter.com', '*.twitter.com', 't.co'];
+import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
+
+export { DEFAULT_ALLOW_HOSTS };
 export const POPUP_ONLY_HOSTS = ['accounts.google.com', 'appleid.apple.com'];
 
 export type NavigationDecision = 'allow' | 'external' | 'deny';

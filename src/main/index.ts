@@ -1,7 +1,8 @@
 import { app, shell } from 'electron';
 import { join } from 'node:path';
 import { createMainWindow } from './window';
-import { attachNavigationPolicy, DEFAULT_ALLOW_HOSTS } from './navigation/policy';
+import { attachNavigationPolicy } from './navigation/policy';
+import { SettingsStore } from './settings';
 
 const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 
@@ -14,14 +15,16 @@ app.whenReady().then(() => {
   });
   void xView.webContents.loadURL(START_URL);
 
+  const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+
   attachNavigationPolicy(xView.webContents, {
-    allowHosts: () => DEFAULT_ALLOW_HOSTS, // replaced by settings in Task 4
+    allowHosts: () => settings.get().navigation.allowHosts,
     openExternal: (url) => void shell.openExternal(url),
   });
 
   xView.webContents.on('did-create-window', (child) => {
     attachNavigationPolicy(child.webContents, {
-      allowHosts: () => [...DEFAULT_ALLOW_HOSTS, 'accounts.google.com', 'appleid.apple.com'],
+      allowHosts: () => [...settings.get().navigation.allowHosts, 'accounts.google.com', 'appleid.apple.com'],
       openExternal: (url) => void shell.openExternal(url),
     });
   });
