@@ -22,6 +22,8 @@ import { exportPdf } from './library/pdf';
 const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 const E2E = process.env.XPILOT_E2E === '1';
 
+if (process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USER_DATA);
+
 app.whenReady().then(async () => {
   const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
   const { xView, sidebar } = createMainWindow({
