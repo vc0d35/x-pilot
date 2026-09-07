@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SettingsStore } from './settings';
@@ -27,7 +27,9 @@ describe('SettingsStore', () => {
 
   it('ignores corrupt files and notifies listeners', () => {
     const file = tmpFile();
+    writeFileSync(file, '{not json');
     const s = new SettingsStore(file);
+    expect(s.get().posting.mode).toBe('confirm');
     const seen: string[] = [];
     s.onChange((st) => seen.push(st.posting.mode));
     s.update({ posting: { mode: 'autonomous' } });
