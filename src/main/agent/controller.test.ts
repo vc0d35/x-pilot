@@ -10,7 +10,7 @@ import type { AgentEvent } from '../../shared/agent';
 
 function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: string }>) {
   const listeners = new Set<(e: AgentEvent) => void>();
-  const p: AgentProvider & { starts: StartOptions[]; sent: string[] } = {
+  const p: AgentProvider & { starts: StartOptions[]; sent: string[]; emitEvent: (e: AgentEvent) => void } = {
     id: 'fake', starts: [], sent: [],
     start: vi.fn(async (o: StartOptions) => { p.starts.push(o); return startImpl ? startImpl(o) : { threadId: 'T' }; }),
     send: vi.fn(async (text: string) => { p.sent.push(text); }),
@@ -19,6 +19,7 @@ function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: strin
     onEvent: (cb) => { listeners.add(cb); return () => listeners.delete(cb); },
     isRunning: () => false,
     stop: vi.fn(async () => {}),
+    emitEvent: (e: AgentEvent) => { for (const cb of listeners) cb(e); },
   };
   return p;
 }
@@ -52,5 +53,19 @@ describe('AgentController', () => {
     await ctl.start({ resume: false });
     expect(failing.starts[0].threadId).toBeNull();
     expect(events.at(-1)).toEqual({ type: 'status', status: 'error', message: 'no codex' });
+  });
+
+  it('restarts once when the provider reports disconnected on its own', async () => {
+    const store = settings();
+    const providers = [fakeProvider(), fakeProvider()];
+    let i = 0;
+    const ctl = new AgentController({ registry: new ToolRegistry(), settings: store, workspaceDir: '/tmp', createProvider: () => providers[i++] });
+    await ctl.start({ resume: true });
+    providers[0].emitEvent({ type: 'status', status: 'disconnected' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(providers[1].starts).toHaveLength(1);
+    providers[1].emitEvent({ type: 'status', status: 'disconnected' });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(i).toBe(2); // no third provider
   });
 });

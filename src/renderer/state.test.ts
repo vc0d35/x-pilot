@@ -44,4 +44,11 @@ describe('sidebar reducer', () => {
     expect(s.threadId).toBe('th');
     expect(s.entries.at(-1)).toEqual({ kind: 'message', message: { id: expect.any(String), role: 'system', text: 'Turn failed: boom' } });
   });
+
+  it('reset clears entries but keeps status', () => {
+    const s = run([{ type: 'status', status: 'ready' }, { type: 'user.message', text: 'x' }]);
+    const r = reduce(s, { type: 'reset' });
+    expect(r.entries).toEqual([]);
+    expect(r.status).toBe('ready');
+  });
 });

@@ -14,6 +14,7 @@ export interface AgentControllerDeps {
 export class AgentController {
   private provider: AgentProvider | null = null;
   private unsubscribe: (() => void) | null = null;
+  private restartedOnce = false;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
   constructor(private readonly deps: AgentControllerDeps) {}
@@ -24,7 +25,15 @@ export class AgentController {
     await this.stop();
     if (!opts.resume) this.deps.settings.update({ threadId: null });
     const provider = this.deps.createProvider();
-    this.unsubscribe = provider.onEvent((e) => this.emit(e));
+    this.unsubscribe = provider.onEvent((e) => {
+      this.emit(e);
+      if (e.type === 'turn.completed') this.restartedOnce = false;
+      if (e.type === 'status' && e.status === 'disconnected' && this.provider === provider && !this.restartedOnce) {
+        this.restartedOnce = true;
+        this.emit({ type: 'status', status: 'starting', message: 'Codex exited; restarting once' });
+        void this.start({ resume: true });
+      }
+    });
     this.provider = provider;
     try {
       const { threadId } = await provider.start({
@@ -50,8 +59,9 @@ export class AgentController {
   async stop(): Promise<void> {
     this.unsubscribe?.();
     this.unsubscribe = null;
-    await this.provider?.stop();
+    const provider = this.provider;
     this.provider = null;
+    await provider?.stop();
   }
 
   private emit(e: AgentEvent): void { for (const cb of this.listeners) cb(e); }

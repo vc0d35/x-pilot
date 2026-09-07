@@ -80,6 +80,14 @@ app.whenReady().then(async () => {
   if (!E2E) {
     await bridge.waitForReady(20_000).catch(() => console.warn('[xpilot] X view tools not ready; starting agent without them'));
     await agent.start({ resume: true });
+
+    let lastAgentSettings = JSON.stringify(settings.get().agent);
+    settings.onChange((s) => {
+      const now = JSON.stringify(s.agent);
+      if (now === lastAgentSettings) return;
+      lastAgentSettings = now;
+      void agent.start({ resume: true });
+    });
   }
 });
 

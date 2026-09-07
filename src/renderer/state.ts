@@ -20,8 +20,10 @@ export const initialState: State = { status: 'starting', threadId: null, running
 let seq = 0;
 const localId = () => `local-${++seq}`;
 
-export function reduce(state: State, e: AgentEvent): State {
+export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
   switch (e.type) {
+    case 'reset':
+      return { ...state, entries: [], running: false };
     case 'status':
       return { ...state, status: e.status, statusMessage: e.message, running: e.status === 'running' };
     case 'thread':
