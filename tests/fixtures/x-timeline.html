@@ -1,0 +1,27 @@
+<div data-testid="primaryColumn">
+  <section aria-label="Timeline: Your Home Timeline">
+    <article data-testid="tweet" tabindex="0">
+      <div data-testid="User-Name">
+        <a role="link" href="/alice"><span>Alice Doe</span></a>
+        <a role="link" href="/alice"><span>@alice</span></a>
+      </div>
+      <a href="/alice/status/111" role="link"><time datetime="2026-09-01T10:00:00.000Z">Sep 1</time></a>
+      <div data-testid="tweetText"><span>Hello </span><img alt="🌍" src="e.png"><span>world</span></div>
+      <div role="group" aria-label="3 replies, 2 reposts, 10 likes, 1,500 views">
+        <button data-testid="reply"></button><button data-testid="retweet"></button><button data-testid="like" aria-label="10 Likes. Like"></button>
+      </div>
+    </article>
+    <article data-testid="tweet" tabindex="0">
+      <div data-testid="User-Name">
+        <a role="link" href="/bob"><span>Bob</span></a>
+        <a role="link" href="/bob"><span>@bob</span></a>
+      </div>
+      <a href="/bob/status/222" role="link"><time datetime="2026-09-02T11:00:00.000Z">Sep 2</time></a>
+      <div data-testid="tweetText"><span>Second post about rust</span></div>
+      <div role="group" aria-label="0 replies, 0 reposts, 1 like, 20 views">
+        <button data-testid="reply"></button><button data-testid="retweet"></button><button data-testid="unlike" aria-label="1 Like. Liked"></button>
+      </div>
+    </article>
+    <article data-testid="tweet"><div>promoted junk without text</div></article>
+  </section>
+</div>
