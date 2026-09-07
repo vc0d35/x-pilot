@@ -1,17 +1,16 @@
 import type { PageContext } from '../../../shared/page';
-import { extractArticle, extractPost, findMainArticle, pageKindFromUrl } from './extract';
+import { extractArticle, extractPost, findMainArticle, pageKindFromUrl, postFromArticleUrl } from './extract';
 import { SEL } from './selectors';
 
 export function computeFocus(doc: Document, url: string): PageContext | null {
   const kind = pageKindFromUrl(url);
   if (kind === 'post' || kind === 'article') {
     const main = findMainArticle(doc, url);
-    const post = main ? extractPost(main, url) : null;
+    const a = kind === 'article' ? extractArticle(doc) : null;
+    // An article page may render only the reader view; synthesise the post from the URL then.
+    const post = (main ? extractPost(main, url) : null) ?? (kind === 'article' ? postFromArticleUrl(url, a?.title ?? '') : null);
     if (!post) return null;
-    if (kind === 'article') {
-      const a = extractArticle(doc);
-      if (a) { post.kind = 'article'; post.articleTitle = a.title; post.articleBody = a.body; }
-    }
+    if (a) { post.kind = 'article'; post.articleTitle = a.title; post.articleBody = a.body; }
     return { url, post };
   }
   const dialog = doc.querySelector(SEL.dialog);

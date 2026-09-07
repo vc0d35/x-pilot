@@ -43,6 +43,21 @@ describe('preload tools', () => {
     expect(r.content.article).toBeNull();
   });
 
+  it('x_read_current_post reads an X Article page that has no tweet element', async () => {
+    window.history.pushState({}, '', '/i/article/555');
+    document.body.innerHTML = fixture('x-article.html');
+    const r = (await readCurrentPost.execute({}, ctx)) as { success: boolean; content: { post: { id: string; kind: string; url: string; authorHandle: string; articleTitle?: string | null; articleBody?: string | null }; thread: unknown[]; article: { title: string } | null } };
+    expect(r.success).toBe(true);
+    expect(r.content.post.id).toBe('555');
+    expect(r.content.post.kind).toBe('article');
+    expect(r.content.post.url).toBe('https://x.com/i/article/555');
+    expect(r.content.post.authorHandle).toBe('');
+    expect(r.content.post.articleTitle).toBe('On Compilers');
+    expect(r.content.post.articleBody).toContain('machine code');
+    expect(r.content.thread).toEqual([]);
+    expect(r.content.article?.title).toBe('On Compilers');
+  });
+
   it('x_read_current_post fails cleanly when no article appears', async () => {
     window.history.pushState({}, '', '/alice/status/111');
     const r = await readCurrentPost.execute({ timeoutMs: 50 }, ctx);

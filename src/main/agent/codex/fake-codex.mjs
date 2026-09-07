@@ -30,7 +30,10 @@ rl.on('line', async (line) => {
     out({ jsonrpc: '2.0', method: 'turn/started', params: { threadId, turn: { id: turnId, items: [], status: 'inProgress' } } });
     if (userText.includes('DIE')) {
       out({ jsonrpc: '2.0', id: 'req-die', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-die', command: 'ls', cwd: '/tmp' } });
-      setTimeout(() => process.exit(3), 50);
+      // The client never answers an approval on its own, so ping it with a request it does
+      // answer: its reply proves the (line-ordered) approval above was already dispatched, and
+      // we can die deterministically instead of on a racy timer.
+      out({ jsonrpc: '2.0', id: 'req-die-ack', method: 'item/tool/requestUserInput', params: { threadId, turnId, itemId: 'cmd-die', questions: [] } });
       return;
     }
     if (userText.includes('APPROVE')) {
@@ -42,6 +45,7 @@ rl.on('line', async (line) => {
     return;
   }
   // responses to our server requests
+  if (id === 'req-die-ack') return process.exit(3);
   if (id === 'req-1') {
     const text = msg.result.contentItems[0].text;
     out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'dynamicToolCall', id: 'call-1', namespace: null, tool: 'x_get_page_state', arguments: {}, status: 'completed', contentItems: msg.result.contentItems, success: msg.result.success, durationMs: 1 } } });

@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats } from './extract';
+import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats, postFromArticleUrl } from './extract';
 import { SEL } from './selectors';
 
 const here = import.meta.url;
@@ -29,6 +29,17 @@ describe('parseStats', () => {
   it('parses the aria-label group', () => {
     expect(parseStats('3 replies, 2 reposts, 10 likes, 1,500 views')).toEqual({ replies: 3, reposts: 2, likes: 10, views: 1500 });
     expect(parseStats('1 like')).toEqual({ replies: 0, reposts: 0, likes: 1, views: 0 });
+  });
+});
+
+describe('postFromArticleUrl', () => {
+  it('synthesises an article post from /i/article and /handle/article urls', () => {
+    expect(postFromArticleUrl('https://x.com/i/article/555', 'On Compilers')).toMatchObject({ id: '555', kind: 'article', url: 'https://x.com/i/article/555', authorHandle: '', text: 'On Compilers' });
+    expect(postFromArticleUrl('https://x.com/alice/article/777')).toMatchObject({ id: '777', kind: 'article', url: 'https://x.com/alice/article/777', authorHandle: 'alice', text: '' });
+  });
+  it('returns null for non-article urls', () => {
+    expect(postFromArticleUrl('https://x.com/alice/status/111')).toBeNull();
+    expect(postFromArticleUrl('not a url')).toBeNull();
   });
 });
 

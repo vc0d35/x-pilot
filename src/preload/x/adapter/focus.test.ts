@@ -18,6 +18,16 @@ describe('computeFocus', () => {
     expect(f?.post.id).toBe('111');
     expect(f?.url).toBe('https://x.com/alice/status/111');
   });
+  it('is a synthesised article post on an X Article page with no tweet element', () => {
+    document.body.innerHTML = fixture('x-article.html');
+    const f = computeFocus(document, 'https://x.com/i/article/555');
+    expect(f?.post.id).toBe('555');
+    expect(f?.post.kind).toBe('article');
+    expect(f?.post.url).toBe('https://x.com/i/article/555');
+    expect(f?.post.articleTitle).toBe('On Compilers');
+    expect(f?.post.text).toBe('On Compilers');
+    expect(f?.post.articleBody).toContain('machine code');
+  });
   it('is the quoted post when a reply dialog is open on the timeline', () => {
     document.body.innerHTML = fixture('x-timeline.html') + `<div role="dialog">
       <article data-testid="tweet"><div data-testid="User-Name"><a role="link" href="/bob"><span>Bob</span></a><a role="link" href="/bob"><span>@bob</span></a></div>

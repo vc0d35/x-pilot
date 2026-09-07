@@ -11,6 +11,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Which page am I on?" → `x_get_page_state` tool row, correct answer.
 - [ ] Stop button interrupts a long answer.
 - [ ] New thread clears the list; a settings change (model) restarts and resumes the thread.
+- [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 
 ## Focus context
 - [ ] Open a post → chip "Post by @…" appears; "is this true?" is answered about that post.
@@ -21,6 +22,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Summarise the visible posts" on Home.
 - [ ] "Read <post url>" navigates and returns the thread text.
 - [ ] Open an X Article; "summarise this article" returns title + body.
+- [ ] Open an X Article directly by URL (not from the timeline): "summarise this article" works and the chip shows the article title.
 
 ## Liked history
 - [ ] Like two posts; "what did I like about <word>?" finds them.
@@ -35,3 +37,4 @@ Run `npm run dev`, logged into x.com in the X view.
 ## PDF
 - [ ] "Save this as a PDF" on a long post and on an X Article → file in the library folder, no nav chrome, text expanded.
 - [ ] Library panel lists it; Open PDF works; Change folder persists across restart.
+- [ ] Change the library folder, then Open PDF on an item saved under the old folder still works.

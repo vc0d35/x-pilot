@@ -19,10 +19,11 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
   if (!ctx) return text;
   const p = ctx.post;
   if (lastPostId === p.id) return `Current page: still the ${p.kind} by @${p.authorHandle} at ${p.url}\n\n${text}`;
-  const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`];
+  const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`, '<page-content untrusted>'];
   if (p.articleTitle) lines.push(`Title: ${p.articleTitle}`);
   lines.push(p.text);
   if (p.articleBody) lines.push('', p.articleBody.slice(0, 4000));
+  lines.push('</page-content>');
   return `${lines.join('\n')}\n\n${text}`;
 }
 
@@ -53,15 +54,25 @@ export class CodexProvider implements AgentProvider {
     this.proc = proc;
     const rpc = new JsonRpcStdio(proc.stdin, proc.stdout);
     this.rpc = rpc;
-    proc.on('error', (err) => this.emit({ type: 'status', status: 'error', message: `Could not start codex: ${err.message}. Install Codex CLI and run \`codex login\`.` }));
-    proc.stdin.on('error', () => {});
-    proc.on('exit', (code) => {
+    // 'exit' and 'close' both fire for a normal death, and a spawn failure ('error', e.g. no
+    // `codex` on PATH) reports only 'error' + 'close' - so handle all three, exactly once.
+    let died = false;
+    const die = (code: number | null) => {
+      if (died) return;
+      died = true;
       rpc.rejectAll(new Error(`codex exited with code ${code}`));
       this.disconnected = true;
       this.finishTurn('failed', `codex exited (${code})`);
       this.deps.approvals.cancelAll('cancel');
       this.emit({ type: 'status', status: 'disconnected', message: `codex exited (${code})` });
+    };
+    proc.on('error', (err) => {
+      this.emit({ type: 'status', status: 'error', message: `Could not start codex: ${err.message}. Install Codex CLI and run \`codex login\`.` });
+      rpc.rejectAll(err); // so a pending initialize (and therefore start()) settles instead of hanging
     });
+    proc.stdin.on('error', () => {});
+    proc.on('exit', (code) => die(code));
+    proc.on('close', (code) => die(code));
     rpc.onNotification((m, p) => this.onNotification(m, p));
     rpc.onRequest((m, p) => this.onServerRequest(m, p));
 

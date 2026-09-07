@@ -45,6 +45,31 @@ export function parseStats(label: string): NonNullable<Post['stats']> {
 }
 
 const PERMALINK = /^\/([^/]+)\/status\/(\d+)/;
+// `i` is X's reserved namespace, so it must not be read as a handle: try it first.
+const ARTICLE_PERMALINK = /^\/(?:i\/article|([^/]+)\/article)\/(\d+)/;
+
+/**
+ * Fallback for X Article pages that render no `article[data-testid="tweet"]` element:
+ * synthesises the post from the URL alone so the rest of the pipeline has something to work with.
+ */
+export function postFromArticleUrl(url: string, title = ''): Post | null {
+  let path: string;
+  try { path = new URL(url).pathname; } catch { return null; }
+  const m = ARTICLE_PERMALINK.exec(path);
+  if (!m) return null;
+  const handle = m[1] ?? '';
+  const id = m[2];
+  return {
+    id,
+    url: handle ? `https://x.com/${handle}/article/${id}` : `https://x.com/i/article/${id}`,
+    authorHandle: handle,
+    authorName: '',
+    text: title,
+    postedAt: null,
+    kind: 'article',
+    stats: null,
+  };
+}
 
 function permalinkOf(article: Element): { handle: string; id: string; postedAt: string | null } | null {
   const time = article.querySelector<HTMLTimeElement>(SEL.permalinkTime);
