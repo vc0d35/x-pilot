@@ -19,6 +19,10 @@ rl.on('line', async (line) => {
   if (method === 'turn/start') {
     const turnId = 'turn-1';
     const userText = params.input[0].text;
+    if (userText.includes('DIE_EARLY')) {
+      process.exit(4);
+      return;
+    }
     if (userText.includes('REJECT_TURN')) {
       return out({ jsonrpc: '2.0', id, error: { code: -32000, message: 'bad model' } });
     }

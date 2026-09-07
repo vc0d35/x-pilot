@@ -106,10 +106,31 @@ describe('CodexProvider', () => {
     }
     const types = events.map((e) => e.type);
     expect(types).toContain('turn.completed');
-    const completed = events.find((e) => e.type === 'turn.completed') as { status: string };
+    const turnCompletedEvents = events.filter((e) => e.type === 'turn.completed');
+    expect(turnCompletedEvents).toHaveLength(1);
+    const completed = turnCompletedEvents[0] as { status: string };
     expect(completed.status).toBe('failed');
     const resolved = events.find((e) => e.type === 'approval.resolved') as { decision: string };
     expect(resolved.decision).toBe('cancel');
+    expect(provider.isRunning()).toBe(false);
+  });
+
+  it('emits exactly one failed turn.completed and no ready-after-disconnect when the process dies before turn/start responds', async () => {
+    const { provider, events } = makeProvider();
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await expect(provider.send('DIE_EARLY')).rejects.toThrow();
+    const start = Date.now();
+    while (!events.some((e) => e.type === 'status' && e.status === 'disconnected')) {
+      if (Date.now() - start > 3000) throw new Error('no disconnected status');
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    const turnCompletedEvents = events.filter((e) => e.type === 'turn.completed');
+    expect(turnCompletedEvents).toHaveLength(1);
+    expect((turnCompletedEvents[0] as { status: string }).status).toBe('failed');
+    const statusEvents = events.filter((e) => e.type === 'status') as Array<{ status: string }>;
+    expect(statusEvents[statusEvents.length - 1].status).toBe('disconnected');
+    const disconnectedIdx = statusEvents.findIndex((e) => e.status === 'disconnected');
+    expect(statusEvents.slice(disconnectedIdx + 1).some((e) => e.status === 'ready')).toBe(false);
     expect(provider.isRunning()).toBe(false);
   });
 

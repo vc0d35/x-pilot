@@ -33,6 +33,7 @@ export class CodexProvider implements AgentProvider {
   private threadId: string | null = null;
   private turnId: string | null = null;
   private running = false;
+  private disconnected = false;
   private lastPostId: string | null = null;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
@@ -46,6 +47,7 @@ export class CodexProvider implements AgentProvider {
   isRunning(): boolean { return this.running; }
 
   async start(opts: StartOptions): Promise<{ threadId: string }> {
+    this.disconnected = false;
     this.emit({ type: 'status', status: 'starting' });
     const proc = this.deps.spawn ? this.deps.spawn() : nodeSpawn('codex', ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
     this.proc = proc;
@@ -55,10 +57,8 @@ export class CodexProvider implements AgentProvider {
     proc.stdin.on('error', () => {});
     proc.on('exit', (code) => {
       rpc.rejectAll(new Error(`codex exited with code ${code}`));
-      if (this.running) {
-        this.emit({ type: 'turn.completed', turnId: this.turnId ?? '', status: 'failed', error: `codex exited (${code})` });
-      }
-      this.running = false;
+      this.disconnected = true;
+      this.finishTurn('failed', `codex exited (${code})`);
       this.deps.approvals.cancelAll('cancel');
       this.emit({ type: 'status', status: 'disconnected', message: `codex exited (${code})` });
     });
@@ -106,10 +106,8 @@ export class CodexProvider implements AgentProvider {
     try {
       await this.rpc.request('turn/start', { threadId: this.threadId, input: [{ type: 'text', text: full, text_elements: [] }] });
     } catch (err) {
-      this.running = false;
       const message = err instanceof Error ? err.message : String(err);
-      this.emit({ type: 'turn.completed', turnId: '', status: 'failed', error: message });
-      this.emit({ type: 'status', status: 'ready' });
+      this.finishTurn('failed', message, '');
       throw err;
     }
   }
@@ -133,6 +131,14 @@ export class CodexProvider implements AgentProvider {
 
   private emit(e: AgentEvent): void { for (const cb of this.listeners) cb(e); }
 
+  /** Idempotent: no-ops unless a turn is actually running, so a racing exit/notification/send-catch cannot double-fire. */
+  private finishTurn(status: 'completed' | 'interrupted' | 'failed', error?: string, turnId?: string): void {
+    if (!this.running) return;
+    this.running = false;
+    this.emit({ type: 'turn.completed', turnId: turnId ?? this.turnId ?? '', status, error });
+    if (!this.disconnected) this.emit({ type: 'status', status: 'ready' });
+  }
+
   private onNotification(method: string, params: unknown): void {
     const p = params as Record<string, unknown>;
     switch (method) {
@@ -144,9 +150,7 @@ export class CodexProvider implements AgentProvider {
       }
       case 'turn/completed': {
         const turn = p.turn as { id: string; status: 'completed' | 'interrupted' | 'failed'; error: { message: string } | null };
-        this.running = false;
-        this.emit({ type: 'turn.completed', turnId: turn.id, status: turn.status, error: turn.error?.message });
-        this.emit({ type: 'status', status: 'ready' });
+        this.finishTurn(turn.status, turn.error?.message, turn.id);
         return;
       }
       case 'item/agentMessage/delta':
