@@ -39,6 +39,34 @@ describe('ToolRegistry', () => {
     await expect(reg.call('x_t', {})).resolves.toEqual(ok('a'));
   });
 
+  it('hides internal tools from list() by default but includes them with includeInternal', async () => {
+    const reg = new ToolRegistry();
+    const src: ToolSource = {
+      id: 'x',
+      list: () => [
+        { name: 'x_public', description: 'p', inputSchema: {} },
+        { name: 'x_internal', description: 'i', inputSchema: {}, annotations: { internal: true } },
+      ],
+      call: async (name) => ok(name),
+    };
+    reg.addSource(src);
+    expect(reg.list().map((t) => t.name)).toEqual(['x_public']);
+    expect(reg.list({ includeInternal: true }).map((t) => t.name)).toEqual(['x_public', 'x_internal']);
+  });
+
+  it('rejects calling an internal tool unless allowInternal is set, and has() still reports it', async () => {
+    const reg = new ToolRegistry();
+    const src: ToolSource = {
+      id: 'x',
+      list: () => [{ name: 'x_click_post_button', description: 'i', inputSchema: {}, annotations: { internal: true } }],
+      call: async (name) => ok(name),
+    };
+    reg.addSource(src);
+    expect(reg.has('x_click_post_button')).toBe(true);
+    await expect(reg.call('x_click_post_button', {})).resolves.toEqual({ success: false, error: 'Tool is internal: x_click_post_button' });
+    await expect(reg.call('x_click_post_button', {}, { allowInternal: true })).resolves.toEqual(ok('x_click_post_button'));
+  });
+
   it('propagates change notifications from sources', () => {
     const reg = new ToolRegistry();
     let notify = () => {};

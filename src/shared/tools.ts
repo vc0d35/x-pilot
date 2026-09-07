@@ -7,7 +7,7 @@ export const ToolSpecSchema = z.object({
   description: z.string().min(1),
   inputSchema: JsonSchemaSchema.default({ type: 'object', properties: {} }),
   annotations: z
-    .object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional() })
+    .object({ readOnlyHint: z.boolean().optional(), destructiveHint: z.boolean().optional(), internal: z.boolean().optional() })
     .optional(),
 });
 export type ToolSpec = z.infer<typeof ToolSpecSchema>;

@@ -38,18 +38,22 @@ export class ToolRegistry {
     };
   }
 
-  /** Later sources win on name collisions. */
-  list(): ToolSpec[] {
+  /** Later sources win on name collisions. Internal tools are hidden unless `includeInternal` is set. */
+  list(opts?: { includeInternal?: boolean }): ToolSpec[] {
     const byName = new Map<string, ToolSpec>();
     for (const src of this.sources) for (const spec of src.list()) byName.set(spec.name, spec);
-    return [...byName.values()];
+    const specs = [...byName.values()];
+    return opts?.includeInternal ? specs : specs.filter((s) => !s.annotations?.internal);
   }
 
+  /** True even for internal tools: `has` reflects registration, not callability. */
   has(name: string): boolean { return this.resolve(name) !== undefined; }
 
-  async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
+  async call(name: string, args: Record<string, unknown>, opts?: { allowInternal?: boolean }): Promise<ToolResult> {
     const src = this.resolve(name);
     if (!src) return fail(`Unknown tool: ${name}`);
+    const spec = src.list().find((s) => s.name === name);
+    if (spec?.annotations?.internal && !opts?.allowInternal) return fail(`Tool is internal: ${name}`);
     try {
       return await src.call(name, args);
     } catch (err) {
