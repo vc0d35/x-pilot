@@ -15,6 +15,7 @@ export class AgentController {
   private provider: AgentProvider | null = null;
   private unsubscribe: (() => void) | null = null;
   private restartedOnce = false;
+  private generation = 0;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
   constructor(private readonly deps: AgentControllerDeps) {}
@@ -22,10 +23,12 @@ export class AgentController {
   onEvent(cb: (e: AgentEvent) => void): () => void { this.listeners.add(cb); return () => this.listeners.delete(cb); }
 
   async start(opts: { resume: boolean }): Promise<void> {
+    const gen = ++this.generation;
     await this.stop();
+    if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
     if (!opts.resume) this.deps.settings.update({ threadId: null });
     const provider = this.deps.createProvider();
-    this.unsubscribe = provider.onEvent((e) => {
+    const unsubscribe = provider.onEvent((e) => {
       this.emit(e);
       if (e.type === 'turn.completed') this.restartedOnce = false;
       if (e.type === 'status' && e.status === 'disconnected' && this.provider === provider && !this.restartedOnce) {
@@ -34,6 +37,7 @@ export class AgentController {
         void this.start({ resume: true });
       }
     });
+    this.unsubscribe = unsubscribe;
     this.provider = provider;
     try {
       const { threadId } = await provider.start({
@@ -42,8 +46,10 @@ export class AgentController {
         threadId: opts.resume ? this.deps.settings.get().threadId : null,
         workspaceDir: this.deps.workspaceDir,
       });
+      if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.deps.settings.update({ threadId });
     } catch (err) {
+      if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.emit({ type: 'status', status: 'error', message: err instanceof Error ? err.message : String(err) });
     }
   }

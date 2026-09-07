@@ -55,6 +55,56 @@ describe('AgentController', () => {
     expect(events.at(-1)).toEqual({ type: 'status', status: 'error', message: 'no codex' });
   });
 
+  it('a stale start() that resolves after a newer one has taken over does not clobber the live provider or emit an error', async () => {
+    const store = settings();
+    let resolveFirst!: (v: { threadId: string }) => void;
+    const firstDeferred = new Promise<{ threadId: string }>((resolve) => { resolveFirst = resolve; });
+    const providers = [fakeProvider(() => firstDeferred), fakeProvider()];
+    let i = 0;
+    const ctl = new AgentController({ registry: new ToolRegistry(), settings: store, workspaceDir: '/tmp', createProvider: () => providers[i++] });
+    const events: AgentEvent[] = [];
+    ctl.onEvent((e) => events.push(e));
+
+    const p1 = ctl.start({ resume: true });
+    await new Promise((r) => setTimeout(r, 0)); // let p1 reach provider.start() and suspend on the deferred
+    const p2 = ctl.start({ resume: true });
+    await p2;
+
+    expect(providers[0].stop).toHaveBeenCalled();
+    expect(providers[1].starts).toHaveLength(1);
+
+    resolveFirst({ threadId: 'stale' });
+    await p1;
+
+    await ctl.send('hi', null);
+    expect(providers[1].sent).toEqual(['hi']);
+    expect(providers[0].sent).toEqual([]);
+    expect(store.get().threadId).toBe('T');
+    expect(events.some((e) => e.type === 'status' && e.status === 'error')).toBe(false);
+  });
+
+  it('a stale start() that rejects after a newer one has taken over does not emit an error', async () => {
+    const store = settings();
+    let rejectFirst!: (e: unknown) => void;
+    const firstDeferred = new Promise<{ threadId: string }>((_resolve, reject) => { rejectFirst = reject; });
+    const providers = [fakeProvider(() => firstDeferred), fakeProvider()];
+    let i = 0;
+    const ctl = new AgentController({ registry: new ToolRegistry(), settings: store, workspaceDir: '/tmp', createProvider: () => providers[i++] });
+    const events: AgentEvent[] = [];
+    ctl.onEvent((e) => events.push(e));
+
+    const p1 = ctl.start({ resume: true });
+    await new Promise((r) => setTimeout(r, 0));
+    const p2 = ctl.start({ resume: true });
+    await p2;
+
+    rejectFirst(new Error('stale failure'));
+    await p1;
+
+    expect(providers[1].starts).toHaveLength(1);
+    expect(events.some((e) => e.type === 'status' && e.status === 'error')).toBe(false);
+  });
+
   it('restarts once when the provider reports disconnected on its own', async () => {
     const store = settings();
     const providers = [fakeProvider(), fakeProvider()];
