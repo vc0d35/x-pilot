@@ -16,6 +16,8 @@ export const SettingsSchema = z.object({
   }),
   navigation: z.object({ allowHosts: z.array(z.string()).default(DEFAULT_ALLOW_HOSTS) }),
   threadId: z.string().nullable().default(null),
+  /** Fingerprint of the tool list the stored thread was started with; a mismatch forces a fresh thread. */
+  threadToolsHash: z.string().nullable().default(null),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -41,8 +43,19 @@ export function normalizeSettings(raw: unknown): Settings {
     agent: { ...(isObj(r.agent) ? r.agent : {}), codex: isObj(r.agent) && isObj((r.agent as Record<string, unknown>).codex) ? (r.agent as Record<string, unknown>).codex : {} },
     navigation: isObj(r.navigation) ? r.navigation : {},
     threadId: r.threadId ?? null,
+    threadToolsHash: r.threadToolsHash ?? null,
   };
   return SettingsSchema.parse(shaped);
 }
 
 export const DEFAULT_SETTINGS: Settings = normalizeSettings({});
+
+export type PostingMode = Settings['posting']['mode'];
+
+export const AUTONOMOUS_WARNING = 'Autonomous mode lets the agent post without asking you. Continue?';
+
+/** Gate for switching posting mode: returns the mode to apply, or null when the user declined the warning. */
+export function confirmPostingMode(next: PostingMode, confirmFn: (message: string) => boolean): PostingMode | null {
+  if (next === 'autonomous' && !confirmFn(AUTONOMOUS_WARNING)) return null;
+  return next;
+}

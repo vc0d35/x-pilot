@@ -56,16 +56,25 @@ export const submitPost: ToolModule<XViewToolCtx> = {
     const state = composer.content as { present: boolean; text: string; canSubmit: boolean };
     if (!state.canSubmit) return fail('Post button is disabled (empty draft or over the length limit)');
     if (ctx.postingMode() === 'confirm') {
+      const approvedText = state.text;
       const decision = await ctx.approvals.request({
         kind: 'post',
         title: `Post this ${draft.target}?`,
-        detail: state.text,
+        detail: approvedText,
         options: [{ id: 'post', label: 'Post' }, { id: 'cancel', label: 'Cancel' }],
       }, POST_CONFIRM_TIMEOUT_MS);
       if (decision !== 'post') {
         ctx.drafts.delete(draft.id);
         await ctx.xview.navigate('https://x.com/home');
         return ok({ posted: false, url: null, reason: decision === 'timeout' ? 'Confirmation timed out' : 'Cancelled by the user' });
+      }
+      // The decision can arrive minutes later; re-read the composer so we only click Post
+      // on the exact text the user approved.
+      const recheck = await ctx.xview.callPreload('x_read_composer', { timeoutMs: 3000 });
+      const now = recheck.success ? (recheck.content as typeof state) : null;
+      if (!now?.present || now.text !== approvedText) {
+        ctx.drafts.delete(draft.id);
+        return fail('Composer changed after approval; not posting');
       }
     }
     const clicked = await ctx.xview.callPreload('x_click_post_button', {});

@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SettingsStore } from './settings';
+import { AUTONOMOUS_WARNING, confirmPostingMode } from '../shared/settings';
 
 const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'xpilot-')), 'settings.json');
 
@@ -34,5 +35,21 @@ describe('SettingsStore', () => {
     s.onChange((st) => seen.push(st.posting.mode));
     s.update({ posting: { mode: 'autonomous' } });
     expect(seen).toEqual(['autonomous']);
+  });
+});
+
+describe('confirmPostingMode', () => {
+  it('warns once before switching to autonomous and honours the answer', () => {
+    const seen: string[] = [];
+    const yes = (m: string) => { seen.push(m); return true; };
+    const no = (m: string) => { seen.push(m); return false; };
+    expect(confirmPostingMode('autonomous', yes)).toBe('autonomous');
+    expect(confirmPostingMode('autonomous', no)).toBeNull();
+    expect(seen).toEqual([AUTONOMOUS_WARNING, AUTONOMOUS_WARNING]);
+  });
+
+  it('never warns when switching back to confirm', () => {
+    const confirmFn = () => { throw new Error('should not be asked'); };
+    expect(confirmPostingMode('confirm', confirmFn)).toBe('confirm');
   });
 });

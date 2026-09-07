@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { Settings } from '../../shared/settings';
+import { confirmPostingMode, type PostingMode, type Settings } from '../../shared/settings';
 import type { ModelInfo } from '../../shared/sidebar-api';
 
 export function SettingsPanel({ settings }: { settings: Settings }) {
@@ -12,7 +12,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
   return (
     <div className="panel settings">
       <label>Posting mode
-        <select value={settings.posting.mode} onChange={(e) => set({ posting: { mode: e.target.value as 'confirm' | 'autonomous' } })}>
+        <select value={settings.posting.mode} onChange={(e) => { const mode = confirmPostingMode(e.target.value as PostingMode, confirm); if (mode) set({ posting: { mode } }); }}>
           <option value="confirm">Confirm each post in the sidebar</option>
           <option value="autonomous">Autonomous (agent clicks Post)</option>
         </select>

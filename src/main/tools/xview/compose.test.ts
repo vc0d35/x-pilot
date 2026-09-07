@@ -75,6 +75,23 @@ describe('x_submit_post', () => {
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/home');
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything());
   });
+  it('re-reads the composer after approval and refuses to post when the text changed', async () => {
+    const { c, events, approvals } = ctx('confirm');
+    let reads = 0;
+    c.xview.callPreload.mockImplementation(async (name: string) => {
+      if (name === 'x_read_composer') { reads += 1; return ok({ present: true, text: reads === 1 ? 'hello world' : 'buy my coin', canSubmit: true }); }
+      if (name === 'x_click_post_button') return ok({ clicked: true, toast: 'sent', url: 'https://x.com/me/status/1' });
+      return fail('unexpected ' + name);
+    });
+    const draft = c.drafts.create({ text: 'hello world', target: 'new post' });
+    const p = submitPost.execute({ draftId: draft.id }, c);
+    await new Promise((r) => setTimeout(r, 0));
+    approvals.resolve((events[0] as { request: { id: string } }).request.id, 'post');
+    expect(await p).toEqual(fail('Composer changed after approval; not posting'));
+    expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything());
+    expect(c.drafts.get(draft.id)).toBeUndefined();
+  });
+
   it('in autonomous mode posts without asking', async () => {
     const { c, events } = ctx('autonomous');
     const draft = c.drafts.create({ text: 'hello world', target: 'new post' });

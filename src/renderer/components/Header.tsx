@@ -1,4 +1,5 @@
 import type { AgentStatus } from '../../shared/agent';
+import { confirmPostingMode } from '../../shared/settings';
 
 export type Panel = 'chat' | 'library' | 'settings';
 
@@ -13,7 +14,7 @@ export function Header(props: { status: AgentStatus; statusMessage?: string; run
         <button className={props.panel === 'settings' ? 'tab tab-active' : 'tab'} onClick={() => props.onPanel('settings')}>Settings</button>
       </nav>
       <div className="spacer" />
-      <button className={`toggle toggle-${props.postingMode}`} onClick={props.onTogglePosting} title="Click to switch posting mode">
+      <button className={`toggle toggle-${props.postingMode}`} onClick={() => { if (confirmPostingMode(props.postingMode === 'confirm' ? 'autonomous' : 'confirm', confirm)) props.onTogglePosting(); }} title="Click to switch posting mode">
         {props.postingMode === 'confirm' ? 'Posts: confirm' : 'Posts: autonomous ⚠︎'}
       </button>
       {props.running && <button onClick={props.onStop}>Stop</button>}

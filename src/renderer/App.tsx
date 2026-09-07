@@ -29,6 +29,7 @@ export function App() {
         onTogglePosting={() => void window.xpilot.setSettings({ posting: { mode: settings?.posting.mode === 'confirm' ? 'autonomous' : 'confirm' } })}
         panel={panel} onPanel={setPanel} />
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
+      {settings?.posting.mode === 'autonomous' && <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>}
       {panel === 'library' ? (
         <LibraryPanel />
       ) : panel === 'settings' ? (
