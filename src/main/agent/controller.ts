@@ -1,8 +1,15 @@
+import { createHash } from 'node:crypto';
 import type { AgentEvent } from '../../shared/agent';
 import type { PageContext } from '../../shared/page';
 import type { SettingsStore } from '../settings';
+import type { ToolSpec } from '../../shared/tools';
 import type { ToolRegistry } from '../tools/registry';
 import type { AgentProvider, ModelInfo } from './provider';
+
+/** Stable fingerprint of the dynamic tools a thread was started with. */
+export function toolsFingerprint(tools: ToolSpec[]): string {
+  return createHash('sha256').update(JSON.stringify(tools.map((t) => [t.name, t.description, t.inputSchema]))).digest('hex');
+}
 
 export interface AgentControllerDeps {
   registry: ToolRegistry;
@@ -26,7 +33,15 @@ export class AgentController {
     const gen = ++this.generation;
     await this.stop();
     if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
-    if (!opts.resume) this.deps.settings.update({ threadId: null });
+    if (!opts.resume) this.deps.settings.update({ threadId: null, threadToolsHash: null });
+    const tools = this.deps.registry.list();
+    const toolsHash = toolsFingerprint(tools);
+    const stored = this.deps.settings.get();
+    let resumeThreadId: string | null = null;
+    if (opts.resume && stored.threadId) {
+      if (stored.threadToolsHash === toolsHash) resumeThreadId = stored.threadId;
+      else console.log('[xpilot] tool list changed since the stored thread; starting a fresh thread');
+    }
     const provider = this.deps.createProvider();
     const unsubscribe = provider.onEvent((e) => {
       this.emit(e);
@@ -41,13 +56,13 @@ export class AgentController {
     this.provider = provider;
     try {
       const { threadId } = await provider.start({
-        tools: this.deps.registry.list(),
+        tools,
         settings: this.deps.settings.get().agent.codex,
-        threadId: opts.resume ? this.deps.settings.get().threadId : null,
+        threadId: resumeThreadId,
         workspaceDir: this.deps.workspaceDir,
       });
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
-      this.deps.settings.update({ threadId });
+      this.deps.settings.update({ threadId, threadToolsHash: toolsHash });
     } catch (err) {
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.emit({ type: 'status', status: 'error', message: err instanceof Error ? err.message : String(err) });

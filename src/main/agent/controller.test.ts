@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentController } from './controller';
+import { AgentController, toolsFingerprint } from './controller';
 import type { AgentProvider, StartOptions } from './provider';
 import { ToolRegistry } from '../tools/registry';
 import { SettingsStore } from '../settings';
@@ -38,9 +38,23 @@ describe('AgentController', () => {
     expect(providers[0].starts[0].tools.map((t) => t.name)).toEqual(['x_a']);
     expect(providers[0].starts[0].threadId).toBeNull();
     expect(store.get().threadId).toBe('T');
+    expect(store.get().threadToolsHash).toBe(toolsFingerprint(registry.list()));
     await ctl.start({ resume: true });
     expect(providers[0].stop).toHaveBeenCalled();
     expect(providers[1].starts[0].threadId).toBe('T');
+  });
+
+  it('starts a fresh thread when the tool list no longer matches the stored fingerprint', async () => {
+    const registry = new ToolRegistry();
+    registry.addSource({ id: 's', list: () => [{ name: 'x_a', description: 'a', inputSchema: {} }], call: async () => ({ success: true, content: 1 }) });
+    const store = settings();
+    store.update({ threadId: 'old', threadToolsHash: 'a-hash-from-a-different-tool-list' });
+    const provider = fakeProvider();
+    const ctl = new AgentController({ registry, settings: store, workspaceDir: '/tmp', createProvider: () => provider });
+    await ctl.start({ resume: true });
+    expect(provider.starts[0].threadId).toBeNull();
+    expect(store.get().threadId).toBe('T');
+    expect(store.get().threadToolsHash).toBe(toolsFingerprint(registry.list()));
   });
 
   it('newThread clears the thread id and emits provider errors as status', async () => {
