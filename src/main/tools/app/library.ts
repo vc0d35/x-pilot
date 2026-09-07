@@ -1,5 +1,6 @@
-import { resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 import { fail, ok, type ToolModule } from '../../../shared/tools';
+import { isInsideDir } from '../../library/paths';
 import type { AppToolCtx } from './context';
 
 export const listLibrary: ToolModule<AppToolCtx> = {
@@ -11,8 +12,7 @@ export const openPdf: ToolModule<AppToolCtx> = {
   spec: { name: 'xpilot_open_pdf', description: 'Opens a saved PDF from the library in the system viewer.', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false } },
   execute: async (args, ctx) => {
     const path = resolve(String(args.path ?? ''));
-    const dir = resolve(ctx.libraryDir());
-    if (!path.startsWith(dir + sep) && path !== dir) return fail('Refusing to open a file outside the library folder');
+    if (!isInsideDir(path, ctx.libraryDir())) return fail('Refusing to open a file outside the library folder');
     const err = await ctx.openPath(path);
     return err ? fail(`Could not open PDF: ${err}`) : ok({ opened: true });
   },

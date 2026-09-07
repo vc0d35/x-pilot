@@ -1,8 +1,8 @@
 import { dialog, ipcMain, type WebContents } from 'electron';
-import { resolve } from 'node:path';
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema } from '../shared/page';
+import { isInsideDir } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
@@ -44,7 +44,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
   ipcMain.handle(IPC.historyClear, () => history.clear());
   ipcMain.handle(IPC.libraryList, () => history.listLibrary());
-  ipcMain.handle(IPC.libraryOpen, async (_e, raw) => { const { path } = z.object({ path: z.string() }).parse(raw); const dir = resolve(libraryDir()); if (!resolve(path).startsWith(dir)) throw new Error('outside library'); await openPath(path); });
+  ipcMain.handle(IPC.libraryOpen, async (_e, raw) => { const { path } = z.object({ path: z.string() }).parse(raw); if (!isInsideDir(path, libraryDir())) throw new Error('outside library'); await openPath(path); });
   ipcMain.handle(IPC.libraryChooseDir, async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; });
 }
 
