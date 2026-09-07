@@ -5,12 +5,14 @@ import { createMainWindow } from './window';
 import { attachNavigationPolicy } from './navigation/policy';
 import { SettingsStore } from './settings';
 import { ToolRegistry } from './tools/registry';
+import { AppToolSource } from './tools/registry';
 import { WebMcpBridge } from './webmcp/bridge';
 import { XViewController } from './xview';
 import { ApprovalBroker } from './approvals';
 import { AgentController } from './agent/controller';
 import { CodexProvider } from './agent/codex/provider';
 import { registerSidebarIpc } from './ipc';
+import { xviewTools } from './tools/xview';
 
 const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 const E2E = process.env.XPILOT_E2E === '1';
@@ -35,6 +37,7 @@ app.whenReady().then(async () => {
   const bridge = new WebMcpBridge(ipcMain, xView.webContents);
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
+  registry.addSource(new AppToolSource('xview', xviewTools, { xview, allowHosts: () => settings.get().navigation.allowHosts }));
   registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));
 
   const approvals = new ApprovalBroker();
