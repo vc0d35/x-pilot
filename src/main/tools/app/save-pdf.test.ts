@@ -2,12 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { savePdf } from './save-pdf';
 import { listLibrary, openPdf } from './library';
 import { HistoryStore } from '../../history/store';
+import { TaskManager } from '../../tasks/manager';
 import { fail, ok } from '../../../shared/tools';
 
 function ctx() {
   const history = new HistoryStore(':memory:');
   return {
     history,
+    tasks: new TaskManager({ store: history }),
     libraryDir: () => '/lib',
     exportPdf: vi.fn(async (url: string, outDir: string) => ({ path: `${outDir}/2026-09-07-alice-title-111.pdf`, title: 'Alice: title' })),
     openPath: vi.fn(async () => ''),

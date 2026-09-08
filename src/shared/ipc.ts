@@ -29,4 +29,8 @@ export const IPC = {
   sidebarFocusInput: 'sidebar:focusInput',
   conversationsList: 'conversations:list',
   conversationsOpen: 'conversations:open',
+  tasksList: 'tasks:list',
+  tasksUpdate: 'tasks:update',
+  tasksDelete: 'tasks:delete',
+  tasksRunNow: 'tasks:runNow',
 } as const;

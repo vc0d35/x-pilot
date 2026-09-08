@@ -22,6 +22,10 @@ export interface XPilotApi {
   setSettings(patch: DeepPartial<Settings>): Promise<Settings>;
   listLibrary(): Promise<LibraryItem[]>;
   listConversations(): Promise<Conversation[]>;
+  listTasks(): Promise<ScheduledTask[]>;
+  updateTask(id: number, patch: { enabled?: boolean }): Promise<ScheduledTask>;
+  deleteTask(id: number): Promise<void>;
+  runTaskNow(id: number): Promise<void>;
   /** Resumes a conversation; returns its transcript to replay into the dialog. */
   openConversation(threadId: string): Promise<AgentEvent[]>;
   openPdf(path: string): Promise<void>;

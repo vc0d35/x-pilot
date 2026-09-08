@@ -8,6 +8,7 @@ import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
 import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
+import type { TaskManager } from './tasks/manager';
 import type { DeepPartial, Settings } from '../shared/settings';
 import type { BridgeIpc } from './webmcp/bridge';
 
@@ -19,6 +20,7 @@ export interface SidebarIpcDeps {
   approvals: ApprovalBroker;
   settings: SettingsStore;
   history: HistoryStore;
+  tasks: TaskManager;
   libraryDir(): string;
   openPath(p: string): Promise<string>;
 }
@@ -27,7 +29,7 @@ const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextS
 const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, setSidebarCollapsed, openLink, agent, approvals, settings, history, libraryDir, openPath } = deps;
+  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, settings, history, libraryDir, openPath } = deps;
   const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
@@ -55,6 +57,10 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
   ipcMain.handle(IPC.conversationsList, guarded(() => agent.listConversations()));
   ipcMain.handle(IPC.conversationsOpen, guarded((_e, raw) => agent.openConversation(z.object({ threadId: z.string() }).parse(raw).threadId)));
+  ipcMain.handle(IPC.tasksList, guarded(() => tasks.list()));
+  ipcMain.handle(IPC.tasksUpdate, guarded((_e, raw) => { const { id, enabled } = z.object({ id: z.number().int(), enabled: z.boolean().optional() }).parse(raw); return tasks.update(id, { enabled }); }));
+  ipcMain.handle(IPC.tasksDelete, guarded((_e, raw) => { tasks.delete(z.object({ id: z.number().int() }).parse(raw).id); }));
+  ipcMain.handle(IPC.tasksRunNow, guarded((_e, raw) => tasks.runNow(z.object({ id: z.number().int() }).parse(raw).id)));
   ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
   ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {
     const { path } = z.object({ path: z.string() }).parse(raw);

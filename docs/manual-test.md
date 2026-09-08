@@ -47,3 +47,8 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Startup log shows `passkeys enabled with keychain group …`.
 - [ ] Adding a security key/passkey in X settings triggers a Touch ID prompt titled "XPilot".
 - [ ] Sign out, sign in with the passkey: Touch ID prompt appears and login completes.
+
+## Conversations and scheduled tasks
+- [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
+- [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
+- [ ] Pause/Resume/Delete work; a paused task has no next run.

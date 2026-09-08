@@ -1,0 +1,34 @@
+import { Cron } from 'croner';
+import type { TaskSchedule } from '../../shared/sidebar-api';
+
+const DURATION = /^(\d+)\s*(m|h|d)$/i;
+const UNIT_MS = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
+const MIN_EVERY_MS = 5 * 60_000;
+
+export function durationMs(every: string): number {
+  const m = DURATION.exec(every.trim());
+  if (!m) throw new Error(`Invalid "every" value "${every}": use a number followed by m, h or d (e.g. 30m, 1h, 1d)`);
+  return Number(m[1]) * UNIT_MS[m[2].toLowerCase() as keyof typeof UNIT_MS];
+}
+
+/** Validates a schedule from the agent or the UI. Throws with a message the agent can act on. */
+export function parseSchedule(input: Partial<Record<'every' | 'cron', unknown>>): TaskSchedule {
+  if (typeof input.every === 'string') {
+    if (durationMs(input.every) < MIN_EVERY_MS) throw new Error('"every" must be at least 5 minutes');
+    return { every: input.every.trim() };
+  }
+  if (typeof input.cron === 'string') {
+    try { new Cron(input.cron.trim()); } catch (err) { throw new Error(`Invalid cron expression "${input.cron}": ${err instanceof Error ? err.message : String(err)}`); }
+    return { cron: input.cron.trim() };
+  }
+  throw new Error('schedule must be { every: "30m" | "1h" | "1d" } or { cron: "0 * * * *" }');
+}
+
+export function nextRun(schedule: TaskSchedule, from: Date): Date {
+  if ('every' in schedule) return new Date(from.getTime() + durationMs(schedule.every));
+  const next = new Cron(schedule.cron).nextRun(from);
+  if (!next) throw new Error(`cron "${schedule.cron}" never runs`);
+  return next;
+}
+
+export const describeSchedule = (s: TaskSchedule): string => ('every' in s ? `every ${s.every}` : `cron ${s.cron}`);

@@ -1,18 +1,59 @@
 import { useEffect, useState } from 'react';
-import type { Conversation } from '../../shared/sidebar-api';
+import type { Conversation, ScheduledTask } from '../../shared/sidebar-api';
 
-export function HistoryPanel(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
+function describe(t: ScheduledTask): string { return 'every' in t.schedule ? `every ${t.schedule.every}` : `cron ${t.schedule.cron}`; }
+
+function TasksTab() {
+  const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const refresh = () => void window.xpilot.listTasks().then(setTasks);
+  useEffect(() => { refresh(); const iv = setInterval(refresh, 15_000); return () => clearInterval(iv); }, []);
+  if (tasks.length === 0) return <p className="hint">No scheduled tasks. Ask the agent, e.g. "every hour, post a one-line Amsterdam weather update". Tasks run only while XPilot is open.</p>;
+  return (
+    <div>
+      {tasks.map((t) => (
+        <div key={t.id} className={`task${t.enabled ? '' : ' task-off'}`}>
+          <div className="task-title">{t.title} <span className="badge">{describe(t)}</span>{!t.enabled && <span className="badge">paused</span>}</div>
+          <div className="task-prompt">{t.prompt}</div>
+          <div className="conv-meta">
+            {t.lastRunAt ? `last ${new Date(t.lastRunAt).toLocaleString()} · ${t.lastStatus ?? ''}` : 'never run'}
+            {t.enabled && t.nextRunAt ? ` · next ${new Date(t.nextRunAt).toLocaleString()}` : ''}
+          </div>
+          <div className="row">
+            <button onClick={() => void window.xpilot.updateTask(t.id, { enabled: !t.enabled }).then(refresh)}>{t.enabled ? 'Pause' : 'Resume'}</button>
+            <button onClick={() => { void window.xpilot.runTaskNow(t.id).then(refresh); refresh(); }}>Run now</button>
+            <button className="danger" onClick={() => { if (confirm(`Delete task "${t.title}"?`)) void window.xpilot.deleteTask(t.id).then(refresh); }}>Delete</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ConversationsTab(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
   const [items, setItems] = useState<Conversation[]>([]);
   useEffect(() => { void window.xpilot.listConversations().then(setItems); }, []);
-  if (items.length === 0) return <div className="panel"><p className="hint">No conversations yet.</p></div>;
+  if (items.length === 0) return <p className="hint">No conversations yet.</p>;
   return (
-    <div className="panel">
+    <div>
       {items.map((c) => (
         <button key={c.threadId} className={`conv${c.threadId === props.currentThreadId ? ' conv-current' : ''}`} onClick={() => props.onOpen(c.threadId)}>
           <span className="conv-title">{c.title || (c.kind === 'task' ? 'Task run' : 'Untitled')}</span>
           <span className="conv-meta">{c.kind === 'task' && <span className="badge">task</span>}{new Date(c.updatedAt).toLocaleString()}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+export function HistoryPanel(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
+  const [tab, setTab] = useState<'conversations' | 'tasks'>('conversations');
+  return (
+    <div className="panel">
+      <div className="tabs">
+        <button className={tab === 'conversations' ? 'tab tab-active' : 'tab'} onClick={() => setTab('conversations')}>Conversations</button>
+        <button className={tab === 'tasks' ? 'tab tab-active' : 'tab'} onClick={() => setTab('tasks')}>Scheduled tasks</button>
+      </div>
+      {tab === 'conversations' ? <ConversationsTab currentThreadId={props.currentThreadId} onOpen={props.onOpen} /> : <TasksTab />}
     </div>
   );
 }

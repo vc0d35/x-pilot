@@ -16,6 +16,8 @@ import { XViewController } from './xview';
 import { BackgroundXView } from './background-view';
 import { ApprovalBroker } from './approvals';
 import { AgentController } from './agent/controller';
+import { TaskManager } from './tasks/manager';
+import { TaskRunner } from './tasks/runner';
 import { CodexProvider } from './agent/codex/provider';
 import { registerSidebarIpc, registerFocusRelay } from './ipc';
 import { xviewTools } from './tools/xview';
@@ -86,8 +88,15 @@ app.whenReady().then(async () => {
   const history = new HistoryStore(join(app.getPath('userData'), 'history.sqlite'));
   registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
   const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), 'X Pilot');
+  const workspaceDir = join(app.getPath('userData'), 'workspace');
+  mkdirSync(workspaceDir, { recursive: true });
+  const taskRunner = new TaskRunner({
+    createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
+    tools: () => registry.list(), settings: () => settings.get().agent.codex, workspaceDir, store: history, log: (m) => console.log(m),
+  });
+  const tasks = new TaskManager({ store: history, run: (t) => taskRunner.run(t).then((status) => { if (taskRunner.lastThreadId) history.updateTask(t.id, { threadId: taskRunner.lastThreadId }); return status; }) });
   const appCtx = {
-    history, libraryDir,
+    history, tasks, libraryDir,
     exportPdf: (url: string, outDir: string) => exportPdf({ url, outDir }, {
       createWindow: () => {
         const w = new BrowserWindow({ show: false, width: 900, height: 1400, webPreferences: { partition: 'persist:x', sandbox: true, contextIsolation: true } });
@@ -99,8 +108,6 @@ app.whenReady().then(async () => {
   registry.addSource(new AppToolSource('app', appTools, appCtx));
   app.on('will-quit', () => history.close());
 
-  const workspaceDir = join(app.getPath('userData'), 'workspace');
-  mkdirSync(workspaceDir, { recursive: true });
   const agent = new AgentController({
     history,
     registry, settings, workspaceDir,
@@ -114,7 +121,7 @@ app.whenReady().then(async () => {
       sidebar.webContents.send(IPC.sidebarFocusInput);
     },
   });
-  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
+  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink, tasks, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { win, windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
@@ -123,6 +130,9 @@ app.whenReady().then(async () => {
   if (!E2E) {
     await bridge.waitForReady(20_000).catch(() => console.warn('[xpilot] X view tools not ready; starting agent without them'));
     await agent.start({ resume: true });
+    // Scheduled tasks run only while the app is open: tick every 30 s.
+    const ticker = setInterval(() => { void tasks.tick().catch((err) => console.error('[xpilot] task tick failed', err)); }, 30_000);
+    app.on('will-quit', () => clearInterval(ticker));
 
     let lastAgentSettings = JSON.stringify(settings.get().agent);
     settings.onChange((s) => {
