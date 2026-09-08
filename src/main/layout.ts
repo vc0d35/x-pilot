@@ -13,7 +13,6 @@ export interface Bounds {
   height: number;
 }
 
-/** Splits the window between the X view (left) and the sidebar (right); a collapsed sidebar takes no space. */
 export function computeLayout(
   width: number,
   height: number,

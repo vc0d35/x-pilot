@@ -15,7 +15,6 @@ export interface State {
   threadId: string | null;
   running: boolean;
   entries: Entry[];
-  /** What the agent is doing right now, while a turn runs. */
   activity: { activity: 'thinking' | 'tool' | 'writing'; detail?: string } | null;
   /** Id of the turn in progress; thinking events are folded into one entry per turn. */
   turnId: string | null;
@@ -101,7 +100,6 @@ function hasBrokenAdapter(value: unknown, depth = 0): boolean {
   return Object.values(record).some((v) => hasBrokenAdapter(v, depth + 1));
 }
 
-/** Appends to (or creates) the single thinking entry of the current turn and updates the matching step. */
 function applyThinking(entries: Entry[], turnId: string, e: Extract<AgentEvent, { type: 'thinking.delta' | 'thinking.completed' }>): Entry[] {
   const idx = entries.findIndex((en) => en.kind === 'thinking' && en.id === turnId);
   const entry: Extract<Entry, { kind: 'thinking' }> = idx >= 0 ? (entries[idx] as Extract<Entry, { kind: 'thinking' }>) : { kind: 'thinking', id: turnId, steps: [] };

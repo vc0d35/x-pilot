@@ -4,10 +4,9 @@ import { WebMcpBridge } from './webmcp/bridge';
 import { XViewController } from './xview';
 
 /**
- * A hidden window on the `persist:x` session running the same X preload as the visible
- * view. Read tools use it so research never moves the user's screen. Its like/focus IPC
- * is relayed only where main opts in (likes made here count as the user's), and its tools are not registered with the agent;
- * it is only reachable through the controller returned by `get()`.
+ * A hidden window on the `persist:x` session running the same X preload as the visible view, so
+ * read tools never move the user's screen. Its tools are not registered with the agent: it is only
+ * reachable through the controller returned by `get()`.
  */
 export class BackgroundXView {
   private win: BrowserWindow | null = null;

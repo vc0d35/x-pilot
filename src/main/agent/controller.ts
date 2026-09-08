@@ -14,13 +14,11 @@ export const MAX_TRANSCRIPT_OUTPUT = 4000;
 /** Events worth keeping in a conversation transcript (deltas and activity are transient). */
 export const RECORDED = new Set<AgentEvent['type']>(['user.message', 'message.completed', 'thinking.completed', 'tool.started', 'tool.completed', 'turn.completed']);
 
-/** The form of an event that goes into a stored transcript. */
 export function transcriptEvent(e: AgentEvent): AgentEvent {
   if (e.type !== 'tool.completed' || e.output.length <= MAX_TRANSCRIPT_OUTPUT) return e;
   return { ...e, output: e.output.slice(0, MAX_TRANSCRIPT_OUTPUT) + '… [truncated]' };
 }
 
-/** Stable fingerprint of the dynamic tools a thread was started with. */
 export function toolsFingerprint(tools: ToolSpec[]): string {
   return createHash('sha256').update(JSON.stringify(tools.map((t) => [t.name, t.description, t.inputSchema]))).digest('hex');
 }
@@ -104,7 +102,6 @@ export class AgentController {
     }
   }
 
-  /** Resumes a stored conversation and returns its transcript for the UI to replay. */
   async openConversation(threadId: string): Promise<AgentEvent[]> {
     // Already in it: nothing to restart (an empty thread cannot even be resumed by Codex yet).
     if (threadId !== this.threadId || !this.provider) await this.start({ resume: true, threadId });

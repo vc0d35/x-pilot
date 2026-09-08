@@ -35,7 +35,6 @@ describe('ApprovalBroker', () => {
     const resolvedEvents = events.filter((e) => (e as { type: string }).type === 'approval.resolved');
     expect(resolvedEvents).toHaveLength(2);
     expect(resolvedEvents.every((e) => (e as { decision: string }).decision === 'cancel')).toBe(true);
-    // no-op when nothing is waiting
     expect(() => broker.cancelAll()).not.toThrow();
   });
 });

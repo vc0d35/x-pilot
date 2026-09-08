@@ -1,11 +1,7 @@
 /**
- * Touch ID passkeys (WebAuthn platform authenticator) for the X view.
- *
- * Electron does not service platform-authenticator requests until
- * `app.configureWebAuthn` is called, and the credentials it creates live in
- * this device's Secure Enclave under a keychain access group that must also be
- * granted by the app's `keychain-access-groups` code-signing entitlement.
- * See docs/passkeys.md for the signing setup.
+ * Electron does not service platform-authenticator (Touch ID) requests until `app.configureWebAuthn`
+ * is called, and the credentials it creates need a keychain access group that the app's
+ * `keychain-access-groups` code-signing entitlement also grants. See docs/passkeys.md.
  */
 export const BUNDLE_ID = 'com.vicnicius.xpilot';
 

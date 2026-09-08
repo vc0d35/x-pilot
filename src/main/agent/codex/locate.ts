@@ -1,7 +1,6 @@
 /**
  * A packaged app launched from Finder inherits a bare PATH (`/usr/bin:/bin:/usr/sbin:/sbin`),
  * so a Codex installed via npm, nvm, Homebrew, bun or volta is invisible unless we go looking.
- * Every filesystem and process interaction is injected so this stays unit-testable.
  */
 export interface LocateDeps {
   /** The user's `agent.codex.binPath` setting, if any. */
@@ -50,7 +49,6 @@ export function candidateDirs(deps: Pick<LocateDeps, 'home' | 'listDir'>): strin
   return dirs;
 }
 
-/** Order: the explicit setting, every PATH entry, the well-known install dirs, the login shell. */
 export async function locateCodex(deps: LocateDeps): Promise<string | null> {
   const platform = String(deps.platform ?? process.platform);
   const bin = BIN_NAME(platform);

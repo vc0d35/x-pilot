@@ -4,7 +4,6 @@ export type RenderGroup =
   | Exclude<Entry, { kind: 'tool' }>
   | { kind: 'tools'; key: string; calls: ToolCall[] };
 
-/** Folds runs of consecutive tool calls into one collapsible group for rendering. */
 export function groupEntries(entries: Entry[]): RenderGroup[] {
   const out: RenderGroup[] = [];
   for (const en of entries) {

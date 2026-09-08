@@ -16,7 +16,6 @@ export function pageKindFromUrl(url: string): PageKind {
   return 'other';
 }
 
-/** Visible text including emoji <img alt> and line breaks, without doubling whitespace. */
 export function textWithEmoji(el: Element | null): string {
   if (!el) return '';
   let out = '';
@@ -48,10 +47,7 @@ const PERMALINK = /^\/([^/]+)\/status\/(\d+)/;
 // `i` is X's reserved namespace, so it must not be read as a handle: try it first.
 const ARTICLE_PERMALINK = /^\/(?:i\/article|([^/]+)\/article)\/(\d+)/;
 
-/**
- * Fallback for X Article pages that render no `article[data-testid="tweet"]` element:
- * synthesises the post from the URL alone so the rest of the pipeline has something to work with.
- */
+/** Fallback for X Article pages that render no `article[data-testid="tweet"]`: synthesises the post from the URL alone. */
 export function postFromArticleUrl(url: string, title = ''): Post | null {
   let path: string;
   try { path = new URL(url).pathname; } catch { return null; }

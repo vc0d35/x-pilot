@@ -13,7 +13,6 @@ export function buildRunPrompt(task: ScheduledTask, lastRunAt: string | null): s
   return `Scheduled task "${task.title}" (${describeSchedule(task.schedule)}), ${when}. Do the task below without asking questions; the user is not watching.\n\n${task.prompt}`;
 }
 
-/** Executes one task run on its own agent provider (a dedicated Codex process), recording a task conversation. */
 export class TaskRunner {
   lastThreadId: string | null = null;
 

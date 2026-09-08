@@ -86,7 +86,6 @@ export class CodexProvider implements AgentProvider {
 
   isRunning(): boolean { return this.running; }
 
-  /** The tail of the child's stderr, collapsed to one line for a status message. */
   stderrSummary(limit = STDERR_IN_MESSAGE): string {
     return this.stderrTail.replace(/\s+/g, ' ').trim().slice(-limit);
   }
@@ -134,7 +133,7 @@ export class CodexProvider implements AgentProvider {
     rpc.onRequest((m, p) => this.onServerRequest(m, p));
 
     await rpc.request('initialize', {
-      clientInfo: { name: 'x-pilot', title: 'X Pilot', version: this.deps.clientVersion ?? '0.0.0-dev' },
+      clientInfo: { name: 'x-pilot', title: 'XPilot', version: this.deps.clientVersion ?? '0.0.0-dev' },
       capabilities: { experimentalApi: true, requestAttestation: false },
     });
     rpc.notify('initialized');
@@ -343,7 +342,6 @@ export class CodexProvider implements AgentProvider {
   }
 }
 
-/** Queries of a Codex `webSearch` item: `action.queries` when present, else the single `query`. */
 function webSearchQueries(item: Record<string, unknown>): string[] {
   const action = item.action as { queries?: string[] | null; query?: string | null } | undefined;
   if (action?.queries?.length) return action.queries;

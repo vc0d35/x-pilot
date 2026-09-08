@@ -5,7 +5,6 @@ import { SEL } from '../selectors';
 import { extractWidgets, findNewPostsButton } from '../widgets';
 import { currentPageState } from './page-state';
 
-/** Internal: reads the trend and news widgets rendered in this window. Main decides which window to ask. */
 export const readWidgets: ToolModule<PreloadCtx> = {
   spec: {
     name: 'x_read_widgets',

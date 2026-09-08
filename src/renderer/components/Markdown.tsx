@@ -1,7 +1,7 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-/** Agent replies as Markdown. Links go through main so x.com opens in the window and the rest in the browser. */
+/** Links go through main so x.com opens in the window and everything else in the browser. */
 export function Markdown({ text }: { text: string }) {
   return (
     <ReactMarkdown

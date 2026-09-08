@@ -47,8 +47,8 @@ export function widgetItem(el: Element): WidgetItem | null {
 }
 
 /**
- * Trends and news headlines grouped under the heading that precedes them in document order.
- * An empty timeline cell ends a section (Explore lists trends after Today's News with no heading of their own).
+ * Grouped under the heading that precedes them in document order. An empty timeline cell ends a
+ * section (Explore lists trends after Today's News with no heading of their own).
  */
 export function extractWidgets(root: ParentNode): WidgetSection[] {
   const sections: WidgetSection[] = [];
@@ -69,7 +69,6 @@ export function extractWidgets(root: ParentNode): WidgetSection[] {
   return sections;
 }
 
-/** The "Show N posts" pill, if X is currently showing one. */
 export function findNewPostsButton(root: ParentNode): { button: HTMLElement; count: number } | null {
   for (const b of root.querySelectorAll<HTMLElement>(SEL.newPostsButton)) {
     const m = NEW_POSTS_LABEL.exec((b.textContent ?? '').trim());

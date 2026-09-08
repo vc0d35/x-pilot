@@ -6,7 +6,6 @@ export type InViewport = (el: Element) => boolean;
 const VISIBLE_LIMIT = 8;
 const EXCERPT = 160;
 
-/** True when any part of the element is inside the window's viewport. */
 export const inViewport: InViewport = (el) => {
   const r = el.getBoundingClientRect();
   return r.bottom > 0 && r.top < window.innerHeight && r.width > 0 && r.height > 0;

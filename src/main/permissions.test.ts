@@ -16,7 +16,6 @@ function fakeSession() {
   };
   return {
     session,
-    /** Runs the request handler and reports what it passed to the callback. */
     request(permission: string): boolean {
       let granted: boolean | null = null;
       state.request!(null, permission, (g) => { granted = g; }, {});
@@ -25,7 +24,6 @@ function fakeSession() {
     },
     check: (permission: string) => state.check!(null, permission, 'https://x.com', {}),
     device: () => state.device!({}),
-    /** Runs the display-media handler and reports the streams it offered. */
     display(): Record<string, never> {
       let streams: Record<string, never> | null = null;
       state.display!({}, (s) => { streams = s; });

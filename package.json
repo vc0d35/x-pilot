@@ -1,6 +1,5 @@
 {
   "name": "x-pilot",
-  "productName": "XPilot",
   "version": "0.1.0",
   "private": true,
   "description": "An AI copilot for x.com: an Electron shell around X with an agent sidebar driven by your local Codex CLI",

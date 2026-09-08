@@ -6,7 +6,6 @@ import { SEL } from '../selectors';
 
 const POST_ID = /\/status\/(\d+)/;
 
-/** Finds the rendered article for a post id (timeline card or the main post on its page). */
 export function findArticleByPostId(root: ParentNode, postId: string): Element | null {
   for (const a of root.querySelectorAll(SEL.article)) if (extractPost(a)?.id === postId) return a;
   return null;
@@ -38,7 +37,6 @@ export const likeInPage: ToolModule<PreloadCtx> = {
   },
 };
 
-/** Internal: selects a Home timeline tab ("For you" / "Following") by its label. */
 export const selectHomeTab: ToolModule<PreloadCtx> = {
   spec: {
     name: 'x_select_home_tab',

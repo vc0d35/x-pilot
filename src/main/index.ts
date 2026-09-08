@@ -131,10 +131,7 @@ async function start(): Promise<void> {
     };
     registry.addSource(new AppToolSource('app', appTools, appCtx));
 
-    /**
-     * A scheduled run gets the same app tools but never the visible window, and never the
-     * page tools of the window the user is looking at.
-     */
+    // A scheduled run gets the app tools but never the visible window, nor its page tools.
     const taskXview: XViewLike = {
       currentUrl: () => '',
       navigate: () => Promise.reject(new Error("Scheduled runs cannot move the user's window")),
@@ -197,7 +194,7 @@ async function start(): Promise<void> {
     }
   } catch (err) {
     console.error('[xpilot] fatal during startup', err);
-    dialog.showErrorBox('X Pilot failed to start', String(err));
+    dialog.showErrorBox('XPilot failed to start', String(err));
     app.quit();
   }
 }

@@ -5,7 +5,6 @@ import { nextRun, parseSchedule } from './schedule';
 export type RunStatus = 'completed' | 'failed' | 'interrupted';
 export type RunTask = (task: ScheduledTask) => Promise<RunStatus>;
 
-/** Owns the task table and decides when tasks run; the actual run is delegated to `run`. */
 export class TaskManager {
   private queue: Promise<void> = Promise.resolve();
   /** Tasks queued or running right now, so a tick during a long run cannot enqueue them twice. */
@@ -44,12 +43,10 @@ export class TaskManager {
     return this.enqueue(task);
   }
 
-  /** Called by the scheduler: queues every due task. Runs happen one at a time, in the background. */
   async tick(): Promise<void> {
     for (const task of this.deps.store.dueTasks(this.now().toISOString())) void this.enqueue(task).catch(() => undefined);
   }
 
-  /** Resolves once nothing is queued or running. */
   async idle(): Promise<void> {
     while (this.active.size > 0) await this.queue;
   }

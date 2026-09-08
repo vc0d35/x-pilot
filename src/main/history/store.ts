@@ -6,10 +6,7 @@ import type { AgentEvent } from '../../shared/agent';
 export interface HistoryQuery { query: string; author?: string; since?: string; until?: string; limit?: number }
 export interface HistoryHit { id: string; url: string; authorHandle: string; authorName: string; kind: string; snippet: string; likedAt: string; unlikedAt: string | null }
 
-/**
- * Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a
- * released entry: add a new one, so installs at any older version reach the same schema.
- */
+/** Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a released entry: add a new one. */
 const MIGRATIONS: string[] = [`
 CREATE TABLE IF NOT EXISTS posts(
   id TEXT PRIMARY KEY, url TEXT NOT NULL, author_handle TEXT NOT NULL, author_name TEXT NOT NULL,
@@ -50,7 +47,6 @@ function tableExists(db: DatabaseSync, name: string): boolean {
   return db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(name) !== undefined;
 }
 
-/** Brings the database up to the current schema version, atomically. */
 export function migrate(db: DatabaseSync): number {
   let version = Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
   // Databases created before migrations existed carry version 0 with the v1 schema already in place.
@@ -137,7 +133,6 @@ export class HistoryStore {
     return { id: Number(res.lastInsertRowid), url: i.url, path: i.path, title: i.title, savedAt };
   }
 
-  /** True when this exact path was recorded as a saved library item (folder may have changed since). */
   hasLibraryPath(path: string): boolean {
     return this.db.prepare('SELECT 1 AS ok FROM library WHERE path = ? LIMIT 1').get(path) !== undefined;
   }
@@ -146,8 +141,6 @@ export class HistoryStore {
     return (this.db.prepare('SELECT id, url, path, title, saved_at FROM library ORDER BY id DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>)
       .map((r) => ({ id: r.id as number, url: r.url as string, path: r.path as string, title: r.title as string, savedAt: r.saved_at as string }));
   }
-
-  // --- conversations --------------------------------------------------------------------
 
   upsertConversation(c: { threadId: string; kind: 'chat' | 'task'; taskId?: number | null; toolsHash: string | null }): void {
     const now = stamp();
@@ -175,7 +168,6 @@ export class HistoryStore {
       ORDER BY c.updated_at DESC, c.rowid DESC LIMIT ?`).all(limit) as Array<Record<string, unknown>>).map(rowToConversation);
   }
 
-  /** Removes conversations that never received an event, except the one given (the live thread). */
   pruneEmptyConversations(exceptThreadId: string | null): void {
     this.db.prepare(`DELETE FROM conversations WHERE (? IS NULL OR thread_id <> ?) AND NOT EXISTS (SELECT 1 FROM conversation_events e WHERE e.thread_id = conversations.thread_id)`).run(exceptThreadId, exceptThreadId);
   }
@@ -184,8 +176,6 @@ export class HistoryStore {
     const r = this.db.prepare('SELECT * FROM conversations WHERE thread_id = ?').get(threadId) as Record<string, unknown> | undefined;
     return r ? rowToConversation(r) : null;
   }
-
-  // --- scheduled tasks ------------------------------------------------------------------
 
   createTask(t: { title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; nextRunAt: string | null }): ScheduledTask {
     const res = this.db.prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -215,7 +205,6 @@ export class HistoryStore {
     return (this.db.prepare('SELECT * FROM tasks ORDER BY id').all() as Array<Record<string, unknown>>).map(rowToTask);
   }
 
-  /** Enabled tasks whose next run is at or before `now` (ISO). */
   dueTasks(now: string): ScheduledTask[] {
     return (this.db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(now) as Array<Record<string, unknown>>).map(rowToTask);
   }

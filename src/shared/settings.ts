@@ -14,7 +14,6 @@ export const SettingsSchema = z.object({
       reasoningEffort: z.string().nullable().default(null),
       approvalPolicy: z.enum(['untrusted', 'on-request', 'never']).default('on-request'),
       sandbox: z.enum(['read-only', 'workspace-write']).default('read-only'),
-      /** Codex built-in web search: live results, cached index, or off. */
       webSearch: z.enum(['live', 'cached', 'disabled']).default('live'),
       /** Absolute path to the `codex` binary; null means auto-detect (PATH, common install dirs, login shell). */
       binPath: z.string().nullable().default(null),
@@ -22,7 +21,6 @@ export const SettingsSchema = z.object({
   }),
   navigation: z.object({ allowHosts: z.array(z.string()).default(DEFAULT_ALLOW_HOSTS) }),
   threadId: z.string().nullable().default(null),
-  /** Last window position/size, restored on launch when still on a connected display. */
   window: z.object({
     bounds: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().default(null),
   }),
