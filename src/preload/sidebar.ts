@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { IPC } from '../shared/ipc';
+// Channel names are inlined at build time (see electron.vite.config.ts): this preload is
+// sandboxed and must not require() any sibling module.
+declare const __XPILOT_IPC__: typeof import('../shared/ipc').IPC;
+const IPC = __XPILOT_IPC__;
 import type { XPilotApi } from '../shared/sidebar-api';
 
 const subscribe = <T,>(channel: string) => (cb: (v: T) => void) => {

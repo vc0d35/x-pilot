@@ -3,8 +3,8 @@
 Run `npm run dev`, logged into x.com in the X view.
 
 ## Navigation
-- [ ] Clicking a t.co link in a post opens the target in the system browser; the X view stays on x.com.
-- [ ] Google/Apple sign-in popups (if used) open in-app; other popups go external.
+- [x] Clicking a t.co link in a post opens the target in the system browser; the X view stays on x.com.
+- [x] Google/Apple sign-in popups (if used) open in-app; other popups go external.
 
 ## Agent
 - [ ] Header reaches `ready`; an error banner appears if `codex login` is needed.

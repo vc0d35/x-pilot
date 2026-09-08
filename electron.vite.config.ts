@@ -1,6 +1,7 @@
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import { resolve } from 'node:path';
+import { IPC } from './src/shared/ipc';
 
 export default defineConfig({
   main: {
@@ -9,6 +10,10 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    // The sidebar preload runs sandboxed, so it must be a single self-contained file:
+    // a sandboxed preload cannot require() sibling chunks. Inline the channel table
+    // instead of importing src/shared/ipc.ts, which the X preload also imports.
+    define: { __XPILOT_IPC__: JSON.stringify(IPC) },
     build: {
       rollupOptions: {
         input: {

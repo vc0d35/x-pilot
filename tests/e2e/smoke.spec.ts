@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication } from '@playwright/test';
-import { mkdtempSync } from 'node:fs';
+import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -26,7 +26,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await app.close(); });
 
-type Harness = { registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> }; openExternalCalls: string[]; xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } } };
+type Harness = { sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } }; registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> }; openExternalCalls: string[]; xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } } };
 const inMain = <T,>(fn: (t: Harness) => T | Promise<T>) => app.evaluate(async (_electron, fnSrc: string) => {
   const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
   return (new Function('t', `return (${fnSrc})(t)`))(t);
@@ -47,4 +47,11 @@ test('x_get_page_state works on a non-x.com page', async () => {
 test('external links are routed to the system browser', async () => {
   await inMain((t) => t.xView.webContents.executeJavaScript("document.getElementById('ext').click()"));
   await expect.poll(() => inMain((t) => t.openExternalCalls)).toContain('https://example.com/outside');
+});
+
+test('the sidebar preload loads and the React header renders', async () => {
+  const built = readFileSync(resolve('out/preload/sidebar.js'), 'utf8');
+  expect(built).not.toMatch(/require\("\.\//); // sandboxed preload must be self-contained
+  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 }).toBe('object');
+  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('X Pilot');
 });
