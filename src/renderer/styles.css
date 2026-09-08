@@ -1,20 +1,10 @@
-/* Berkeley Mono is bundled from src/renderer/public/fonts (see the README there). */
-@font-face { font-family: 'Berkeley Mono'; font-weight: 100 900; font-style: normal; font-display: swap;
-  src: url('./fonts/BerkeleyMonoVariable.woff2') format('woff2'), url('./fonts/BerkeleyMonoVariable.ttf') format('truetype'); }
-@font-face { font-family: 'Berkeley Mono'; font-weight: 400; font-style: normal; font-display: swap;
-  src: url('./fonts/BerkeleyMono-Regular.woff2') format('woff2'), url('./fonts/BerkeleyMono-Regular.otf') format('opentype'); }
-@font-face { font-family: 'Berkeley Mono'; font-weight: 700; font-style: normal; font-display: swap;
-  src: url('./fonts/BerkeleyMono-Bold.woff2') format('woff2'), url('./fonts/BerkeleyMono-Bold.otf') format('opentype'); }
-@font-face { font-family: 'Berkeley Mono'; font-weight: 400; font-style: italic; font-display: swap;
-  src: url('./fonts/BerkeleyMono-Italic.woff2') format('woff2'), url('./fonts/BerkeleyMono-Italic.otf') format('opentype'); }
-@font-face { font-family: 'Berkeley Mono'; font-weight: 700; font-style: italic; font-display: swap;
-  src: url('./fonts/BerkeleyMono-BoldItalic.woff2') format('woff2'), url('./fonts/BerkeleyMono-BoldItalic.otf') format('opentype'); }
+/* IBM Plex Mono (OFL) is bundled via @fontsource/ibm-plex-mono, imported in main.tsx. */
 
 /* Monochrome theme: off-white on near-black, or the inverse, following the system. */
 :root {
   color-scheme: light dark;
   --bg: #f4f4f2; --fg: #1c1c1c; --muted: #6b6b6b; --line: #d6d6d2; --raised: #e9e9e6; --ok: #2f9e44;
-  font-family: 'Berkeley Mono', ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.45;
+  font-family: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace; font-size: 13px; line-height: 1.45;
 }
 @media (prefers-color-scheme: dark) {
   :root { --bg: #121212; --fg: #ececea; --muted: #8f8f8f; --line: #2c2c2c; --raised: #1d1d1d; --ok: #3ddc84; }

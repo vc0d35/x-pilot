@@ -15,6 +15,7 @@
     "dist": "npm run build && node scripts/render-entitlements.mjs && electron-builder --mac"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.3.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "zod": "^4.5.0"
