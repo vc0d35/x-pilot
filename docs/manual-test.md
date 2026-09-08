@@ -58,3 +58,8 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Like <url of a post not on screen>" → liked via the hidden window; the visible window does not move.
 - [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
 - [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.
+
+## Inspecting the live app
+Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --list` and
+`node scripts/inspect.mjs x "document.title"` (targets: x, bg, sidebar, or a URL substring;
+`--screenshot file.png` captures the page).

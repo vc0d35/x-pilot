@@ -31,6 +31,8 @@ const START_URL = process.env.XPILOT_START_URL ?? 'https://x.com/home';
 const E2E = process.env.XPILOT_E2E === '1';
 
 if (process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USER_DATA);
+// Opt-in DevTools Protocol endpoint (localhost only) so tooling can inspect the live views: XPILOT_CDP_PORT=9222 npm run dev
+if (process.env.XPILOT_CDP_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.XPILOT_CDP_PORT);
 
 app.whenReady().then(async () => {
   const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
