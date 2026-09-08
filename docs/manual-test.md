@@ -16,9 +16,8 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 
 ## Focus context
-- [ ] Open a post → chip "Post by @…" appears; "is this true?" is answered about that post.
-- [ ] Detach the chip → the agent needs to be told which post.
-- [ ] Reply dialog on the timeline → chip shows the post being replied to.
+- [ ] Open a post; "is this true?" is answered about that post (the focused post is sent with the turn; no chip is shown).
+- [ ] Reply dialog on the timeline → questions refer to the post being replied to.
 
 ## Reading
 - [ ] "Summarise the visible posts" on Home.
