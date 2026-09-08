@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from 'react';
 import { reduce, initialState } from './state';
-import { Header, type Panel } from './components/Header';
+import { Header, ExpandHandle, type Panel } from './components/Header';
 import { EntryList } from './components/EntryList';
 import { Composer } from './components/Composer';
 import { LibraryPanel } from './components/LibraryPanel';
@@ -13,12 +13,16 @@ export function App() {
   const [focus, setFocus] = useState<PageContext | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [panel, setPanel] = useState<Panel>('chat');
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(() => window.xpilot.onSidebarCollapsed(setCollapsed), []);
 
   useEffect(() => window.xpilot.onEvent(dispatch), []);
   useEffect(() => window.xpilot.onFocus(setFocus), []);
   useEffect(() => { void window.xpilot.getSettings().then(setSettings); return window.xpilot.onSettings(setSettings); }, []);
 
   const adapterBroken = state.entries.some((en) => en.kind === 'tool' && en.call.status === 'done' && (en.call.output ?? '').includes('"adapterHealthy":false'));
+
+  if (collapsed) return <ExpandHandle status={state.status} onExpand={() => void window.xpilot.setSidebarCollapsed(false)} />;
 
   return (
     <div className="app">

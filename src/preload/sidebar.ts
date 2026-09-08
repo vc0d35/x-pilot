@@ -28,6 +28,7 @@ const api: XPilotApi = {
   onEvent: subscribe(IPC.agentEvent),
   onFocus: subscribe(IPC.focusUpdate),
   onSettings: subscribe(IPC.settingsChanged),
+  onSidebarCollapsed: subscribe(IPC.sidebarCollapsed),
 };
 
 contextBridge.exposeInMainWorld('xpilot', api);

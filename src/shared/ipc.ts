@@ -24,4 +24,5 @@ export const IPC = {
   historyClear: 'history:clear',
   focusUpdate: 'focus:update',
   sidebarSetCollapsed: 'sidebar:setCollapsed',
+  sidebarCollapsed: 'sidebar:collapsed',
 } as const;
