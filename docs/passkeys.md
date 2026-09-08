@@ -38,28 +38,50 @@ be granted by a code-signing entitlement. Two consequences:
    security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
    ```
 
-## 2. Development (`npm run dev`)
+## 2. Provisioning profile (required)
+
+macOS treats `keychain-access-groups` as a *restricted* entitlement: an app that carries it
+without an embedded provisioning profile authorising the group is killed at launch
+(exit 137, no crash report). Electron's docs omit this. Create a macOS development
+profile once:
+
+1. Xcode → File → New → Project → macOS → App. Product name `XPilotSigning`,
+   organisation identifier `com.vicnicius`, so the bundle id is `com.vicnicius.xpilot`
+   (edit it in Signing & Capabilities if Xcode appends the product name).
+2. Signing & Capabilities: tick "Automatically manage signing", pick your team,
+   then `+ Capability` → **Keychain Sharing** → add the group `com.vicnicius.xpilot.webauthn`
+   (Xcode stores it as `$(AppIdentifierPrefix)com.vicnicius.xpilot.webauthn`).
+3. Build the project once (⌘B). Xcode writes the profile to
+   `~/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile`.
+   The throwaway project can be deleted afterwards; the profile stays.
+
+`npm run sign-dev` finds the profile by team, bundle id and group. For packaged builds
+copy it to `build/embedded.provisionprofile` (git-ignored).
+
+## 3. Development (`npm run dev`)
 
 ```bash
-npm run sign-dev                   # derives your Team ID, re-signs node_modules/electron
-XPILOT_TEAM_ID=N0TYOURTEAM npm run dev   # use the Team ID sign-dev printed
+npm run sign-dev            # derives your Team ID, embeds the profile, re-signs node_modules/electron
+XPILOT_TEAM_ID=<printed>  npm run dev
 ```
 
-Re-run `npm run sign-dev` after every `npm install` that updates Electron. The main
-process logs `passkeys enabled with keychain group …` on startup; without
-`XPILOT_TEAM_ID` it logs `passkeys disabled` and everything else works as before.
-Set `XPILOT_KEYCHAIN_GROUP` instead to use a custom group.
+The script prints `passkeys ENABLED` or, without a profile, `passkeys DISABLED` and
+signs with base entitlements so the app still runs. Re-run it after any `npm install`
+that updates Electron. The main process logs `passkeys enabled with keychain group …`
+on startup. Set `XPILOT_KEYCHAIN_GROUP` to use a custom group.
 
-## 3. Packaged build
+## 4. Packaged build
 
 ```bash
-XPILOT_TEAM_ID=A1B2C3D4E5 npm run dist
+cp ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/<the-profile>.provisionprofile build/embedded.provisionprofile
+XPILOT_TEAM_ID=<your team id> npm run dist
 ```
 
-electron-builder signs `dist/mac*/X Pilot.app` with your identity and the rendered
-`build/entitlements.mac.plist`.
+electron-builder signs `dist/mac*/X Pilot.app` with your identity, the rendered
+`build/entitlements.mac.plist` (app) and `build/entitlements.mac.inherit.plist`
+(helpers), and embeds the profile.
 
-## 4. First login
+## 5. First login
 
 1. Sign in to X once with another second factor (authenticator app, SMS, or a backup
    code). The session persists in the app.

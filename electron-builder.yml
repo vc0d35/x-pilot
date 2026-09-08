@@ -11,6 +11,8 @@ mac:
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
-  entitlementsInherit: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  # macOS development/Developer ID profile granting keychain-access-groups (see docs/passkeys.md)
+  provisioningProfile: build/embedded.provisionprofile
   target:
     - dir
