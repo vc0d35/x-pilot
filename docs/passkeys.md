@@ -16,20 +16,33 @@ be granted by a code-signing entitlement. Two consequences:
    A free Apple ID gives you a "Personal Team"; a paid Apple Developer Program
    membership gives a regular team (needed only for notarised distribution).
 2. Select the account → Manage Certificates… → `+` → **Apple Development**.
-3. Find your Team ID: it is shown next to the team name in that Accounts pane, or run
+3. Check the certificate is valid:
 
    ```bash
    security find-identity -v -p codesigning
    ```
 
-   and copy the 10-character code in parentheses, e.g. `Apple Development: you@example.com (A1B2C3D4E5)`.
+   If it says `0 valid identities found` even though Xcode created the certificate, your
+   keychain is missing Apple's current intermediate. Install it and re-check:
+
+   ```bash
+   curl -sSLO https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer
+   security import AppleWWDRCAG3.cer -k ~/Library/Keychains/login.keychain-db
+   ```
+
+4. Your Team ID is the certificate's `OU` field (the code in parentheses on an
+   "Apple Development" certificate is a certificate id, not the team). `npm run sign-dev`
+   derives it automatically; to see it yourself:
+
+   ```bash
+   security find-certificate -c "Apple Development" -p | openssl x509 -noout -subject
+   ```
 
 ## 2. Development (`npm run dev`)
 
 ```bash
-export XPILOT_TEAM_ID=A1B2C3D4E5   # your Team ID
-npm run sign-dev                   # re-signs node_modules/electron with the entitlement
-XPILOT_TEAM_ID=$XPILOT_TEAM_ID npm run dev
+npm run sign-dev                   # derives your Team ID, re-signs node_modules/electron
+XPILOT_TEAM_ID=N0TYOURTEAM npm run dev   # use the Team ID sign-dev printed
 ```
 
 Re-run `npm run sign-dev` after every `npm install` that updates Electron. The main
