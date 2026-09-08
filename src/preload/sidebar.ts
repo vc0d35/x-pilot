@@ -30,6 +30,7 @@ const api: XPilotApi = {
   onFocus: subscribe(IPC.focusUpdate),
   onSettings: subscribe(IPC.settingsChanged),
   onSidebarCollapsed: subscribe(IPC.sidebarCollapsed),
+  onFocusInput: subscribe(IPC.sidebarFocusInput),
 };
 
 contextBridge.exposeInMainWorld('xpilot', api);

@@ -2,6 +2,7 @@ import { app, net, BrowserWindow, dialog, ipcMain, screen, shell } from 'electro
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
+import { IPC } from '../shared/ipc';
 import { pickInitialBounds } from './window-state';
 import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
@@ -104,7 +105,14 @@ app.whenReady().then(async () => {
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
-  installAppMenu({ toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()) });
+  installAppMenu({
+    toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()),
+    focusAgentInput: () => {
+      if (isSidebarCollapsed()) setSidebarCollapsed(false);
+      sidebar.webContents.focus();
+      sidebar.webContents.send(IPC.sidebarFocusInput);
+    },
+  });
   registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 

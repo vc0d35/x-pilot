@@ -22,6 +22,7 @@ export interface XPilotApi {
   /** Opens a link the user clicked in the sidebar: x.com in the main window, anything else in the browser. */
   openLink(url: string): Promise<void>;
   onSidebarCollapsed(cb: (collapsed: boolean) => void): () => void;
+  onFocusInput(cb: () => void): () => void;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onFocus(cb: (ctx: PageContext | null) => void): () => void;
   onSettings(cb: (s: Settings) => void): () => void;
