@@ -10,7 +10,7 @@ XPilot is a desktop shell around x.com with an agent next to it. The agent runs 
 │        │               │               │                 │             │        │
 │        │               │        ┌──────┴──────┐   codex app-server   codex     │
 │        │               │        │ tool sources│   (interactive)      (per run) │
-│        │               │        │ webmcp bridge│        stdio JSON-RPC          │
+│        │               │        │ adapter bridge│       stdio JSON-RPC          │
 │        │               │        │ xview tools  │                                │
 │        │               │        │ app tools    │                                │
 │        │               │        └──────┬──────┘                                │
@@ -20,8 +20,8 @@ XPilot is a desktop shell around x.com with an agent next to it. The agent runs 
 │ Sidebar view         │   │ X view (visible)       │   │ Hidden X windows      │
 │ React, sandboxed,    │   │ x.com, persist:x,      │   │ same session, one for │
 │ own preload, CSP     │   │ isolated preload with  │   │ the agent, one for    │
-│                      │   │ adapter tools + WebMCP │   │ scheduled runs; PDF   │
-│                      │   │ polyfill               │   │ export window         │
+│                      │   │ the adapter tools      │   │ scheduled runs; PDF   │
+│                      │   │                        │   │ export window         │
 └──────────────────────┘   └────────────────────────┘   └───────────────────────┘
 ```
 
@@ -33,11 +33,10 @@ Every Codex conversation is a separate `codex app-server` child process speaking
 
 ## 2. The X adapter
 
-X does not implement WebMCP, so we make the page agent-drivable ourselves. The X view's preload runs in Electron's isolated world with `contextIsolation` and the renderer sandbox on. It does three things:
+X offers nothing for agents, so we make the page agent-drivable ourselves. The X view's preload runs in Electron's isolated world with `contextIsolation` and the renderer sandbox on, where page scripts cannot see or alter it. It does two things:
 
 - **Registers adapter tools** with the main process over IPC. Each tool is a `ToolModule` with a JSON-schema `spec` and an `execute` that reads or drives the DOM. Reads use extractors in `src/preload/x/adapter/extract.ts` and `widgets.ts`; every CSS selector lives in `selectors.ts`, so an X markup change is a one-file fix. Fixtures captured from the real site in `tests/fixtures/` keep the extractors honest.
 - **Tracks focus.** `computeFocus` derives what the user is looking at (a post page, a reply dialog, the posts on screen) and sends a `PageContext` to the sidebar, which prepends it to the next message as a hint. Liking a post is captured with a pointerdown snapshot so the liked-posts index only ever stores posts the user chose to like.
-- **Injects a WebMCP polyfill** into the page's main world so that, if X or any embedded page ever registers `document.modelContext` tools, they surface through `x_list_page_tools` and `x_call_page_tool`. Page-registered tools are never merged into the agent's tool list; they are data the agent can inspect.
 
 Health is reported rather than assumed: `x_get_page_state` waits for X's layout to render and returns `adapterHealthy: false` when it cannot find it, and the agent is told to say so.
 
@@ -47,7 +46,7 @@ Health is reported rather than assumed: `x_get_page_state` waits for X's layout 
 
 | Source | Runs in | Examples |
 | --- | --- | --- |
-| WebMCP bridge | the visible X view's preload | `x_get_page_state`, `x_read_visible_posts`, `x_scroll`, `x_show_new_posts` |
+| adapter bridge | the visible X view's preload | `x_get_page_state`, `x_read_visible_posts`, `x_scroll`, `x_show_new_posts` |
 | xview tools | main, driving a view | `x_read_post`, `x_search`, `x_read_timeline`, `x_read_news_and_trends`, `x_like_post`, `x_compose_post`, `x_submit_post`, `x_navigate` |
 | app tools | main, app services | `xpilot_search_history`, `xpilot_save_article_pdf`, `xpilot_list_library`, `xpilot_schedule_task` |
 
@@ -108,7 +107,7 @@ The sidebar is a small React app. State is a reducer over `AgentEvent`s, so a li
 
 **`node:sqlite` vs better-sqlite3.** The built-in module needs no native build step per Electron version and ships FTS5. It is still marked experimental by Node, so the store is kept behind a small class so it could be swapped.
 
-**Injecting a WebMCP polyfill vs waiting for sites to ship it.** The polyfill is cheap and forward-looking, and it demonstrates the W3C shape end to end in the e2e fixture. Since no site registers tools today, it is a capability rather than a feature, and it can be dropped if it ever becomes a liability.
+**A page-side WebMCP polyfill.** Early versions also installed a `document.modelContext` polyfill in the page's main world so that tools registered by X or an embedded page would surface to the agent. No site registers such tools, our own adapter tools never used that path (they live in the isolated world precisely so page scripts cannot tamper with them), and the polyfill was a main-world surface any script on x.com could reach. We removed it. The adapter tools keep the WebMCP tool shape, so if X ever ships the real API it can be consumed alongside them.
 
 **Principles vs scripted flows in the prompt.** Enumerating every way a user might refer to the post on their screen would be brittle and token-hungry. The instructions state principles and provide the current page as a hint; the model deduces the rest. See `docs/agent-principles.md`.
 

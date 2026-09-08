@@ -1,6 +1,6 @@
 import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { attachNavigationPolicy } from './navigation/policy';
-import { WebMcpBridge } from './webmcp/bridge';
+import { AdapterBridge } from './adapter/bridge';
 import { XViewController } from './xview';
 
 /**
@@ -24,7 +24,7 @@ export class BackgroundXView {
     attachNavigationPolicy(contents, { allowHosts: this.opts.allowHosts, openExternal: () => { /* background reads never open external pages */ } });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.opts.onContents?.(contents);
-    const bridge = new WebMcpBridge(ipcMain, contents);
+    const bridge = new AdapterBridge(ipcMain, contents);
     this.win = win;
     this.controller = new XViewController(contents, bridge);
     win.on('closed', () => { this.win = null; this.controller = null; });

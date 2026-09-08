@@ -42,8 +42,8 @@ describe('HistoryStore', () => {
 
   it('survives FTS special characters in queries and clears', () => {
     const s = new HistoryStore(':memory:');
-    s.recordLike(post('1', 'what is "webmcp" (really)?'));
-    expect(s.search({ query: 'webmcp (really)?' }).map((h) => h.id)).toEqual(['1']);
+    s.recordLike(post('1', 'what is "sqlite" (really)?'));
+    expect(s.search({ query: 'sqlite (really)?' }).map((h) => h.id)).toEqual(['1']);
     expect(s.search({ query: '' })).toEqual([]);
     s.clear();
     expect(s.count()).toBe(0);

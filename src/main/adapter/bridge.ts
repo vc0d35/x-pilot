@@ -17,12 +17,12 @@ const ResultSchema = z.object({ callId: z.string(), result: ToolResultSchema });
 
 const CALL_READY_TIMEOUT_MS = 10_000;
 
-export class WebMcpBridge implements ToolSource {
-  readonly id = 'webmcp';
+export class AdapterBridge implements ToolSource {
+  readonly id = 'adapter';
   /**
    * Last-known specs, kept across navigations: the preload registers a compile-time constant tool
    * set, so the list stays true while a page reloads. Agent threads snapshot the tool list once, at
-   * thread start, and would otherwise start with no page tools when they open mid-navigation.
+   * thread start, and would otherwise start with no adapter tools when they open mid-navigation.
    */
   private tools: ToolSpec[] = [];
   private ready = false;
@@ -31,7 +31,7 @@ export class WebMcpBridge implements ToolSource {
   private readyWaiters: Array<() => void> = [];
 
   constructor(ipc: BridgeIpc, private readonly target: BridgeTarget, private readonly timeoutMs = 20_000) {
-    ipc.on(IPC.webmcpRegister, (event, payload) => {
+    ipc.on(IPC.adapterRegister, (event, payload) => {
       if (event.sender.id !== target.id) return;
       const parsed = RegisterSchema.safeParse(payload);
       if (!parsed.success) return;
@@ -40,7 +40,7 @@ export class WebMcpBridge implements ToolSource {
       for (const cb of this.listeners) cb();
       for (const w of this.readyWaiters.splice(0)) w();
     });
-    ipc.on(IPC.webmcpResult, (event, payload) => {
+    ipc.on(IPC.adapterResult, (event, payload) => {
       if (event.sender.id !== target.id) return;
       const parsed = ResultSchema.safeParse(payload);
       if (!parsed.success) return;
@@ -67,9 +67,9 @@ export class WebMcpBridge implements ToolSource {
     }
     const callId = randomUUID();
     return new Promise<ToolResult>((resolve) => {
-      const timer = setTimeout(() => { this.pending.delete(callId); resolve(fail(`Page tool call timed out: ${name}`)); }, this.timeoutMs);
+      const timer = setTimeout(() => { this.pending.delete(callId); resolve(fail(`Adapter tool call timed out: ${name}`)); }, this.timeoutMs);
       this.pending.set(callId, { resolve, timer });
-      this.target.send(IPC.webmcpCall, { callId, name, args });
+      this.target.send(IPC.adapterCall, { callId, name, args });
     });
   }
 

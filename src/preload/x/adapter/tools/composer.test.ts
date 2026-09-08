@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
-import { createPageToolHost } from '../../model-context-host';
 
-const ctx = { pageTools: createPageToolHost() };
+const ctx = {};
 const openComposer = (text = '') => {
   document.body.innerHTML = `<div role="dialog"><div data-testid="tweetTextarea_0" contenteditable="true">${text}</div><button data-testid="tweetButton">Post</button></div>`;
 };

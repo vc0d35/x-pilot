@@ -2,9 +2,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { fixture } from '../../../../../tests/fixtures';
 import { likeInPage, selectHomeTab } from './engage';
-import { createPageToolHost } from '../../model-context-host';
 
-const ctx = { pageTools: createPageToolHost() };
+const ctx = {};
 
 describe('x_like_in_page', () => {
   beforeEach(() => {

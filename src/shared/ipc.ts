@@ -1,12 +1,12 @@
 export const IPC = {
   // X preload -> main
-  webmcpRegister: 'webmcp:register',
-  webmcpResult: 'webmcp:result',
+  adapterRegister: 'adapter:register',
+  adapterResult: 'adapter:result',
   historyLiked: 'history:liked',
   historyUnliked: 'history:unliked',
   focusChanged: 'focus:changed',
   // main -> X preload
-  webmcpCall: 'webmcp:call',
+  adapterCall: 'adapter:call',
   // sidebar <-> main
   agentSend: 'agent:send',
   agentInterrupt: 'agent:interrupt',

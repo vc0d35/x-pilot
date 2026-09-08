@@ -1,9 +1,9 @@
 import type { WebContents } from 'electron';
 import type { ToolResult } from '../shared/tools';
-import type { WebMcpBridge } from './webmcp/bridge';
+import type { AdapterBridge } from './adapter/bridge';
 
 export class XViewController {
-  constructor(private readonly contents: WebContents, private readonly bridge: WebMcpBridge) {}
+  constructor(private readonly contents: WebContents, private readonly bridge: AdapterBridge) {}
 
   currentUrl(): string { return this.contents.getURL(); }
 

@@ -12,7 +12,7 @@ test.beforeAll(async () => {
     env: {
       ...process.env,
       XPILOT_E2E: '1',
-      XPILOT_START_URL: pathToFileURL(resolve('tests/fixtures/webmcp-page.html')).href,
+      XPILOT_START_URL: pathToFileURL(resolve('tests/fixtures/local-page.html')).href,
       XPILOT_USER_DATA: mkdtempSync(join(tmpdir(), 'xpilot-e2e-')),
     },
   });
@@ -32,11 +32,9 @@ const inMain = <T,>(fn: (t: Harness) => T | Promise<T>) => app.evaluate(async (_
   return (new Function('t', `return (${fnSrc})(t)`))(t);
 }, fn.toString());
 
-test('preload registers adapter tools and the page registers a WebMCP tool', async () => {
-  await expect.poll(() => inMain((t) => t.registry.list().map((x) => x.name)), { timeout: 15_000 }).toContain('x_get_page_state');
-  await expect.poll(() => inMain(async (t) => { const r = await t.registry.call('x_list_page_tools', {}); return (r.content as { name: string }[]).map((x) => x.name); })).toEqual(['demo-echo']);
-  const echoed = await inMain((t) => t.registry.call('x_call_page_tool', { name: 'demo-echo', args: { s: 'hi' } }));
-  expect(echoed).toEqual({ success: true, content: { echoed: 'hi', title: 'fixture ready' } });
+test('the preload registers its adapter tools with the main-process registry', async () => {
+  await expect.poll(() => inMain((t) => t.registry.list().map((x) => x.name)), { timeout: 15_000 })
+    .toEqual(expect.arrayContaining(['x_get_page_state', 'x_read_visible_posts']));
 });
 
 test('x_get_page_state works on a non-x.com page', async () => {

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { IPC } from '../../shared/ipc';
 import { PostSchema } from '../../shared/page';
-import type { BridgeIpc } from '../webmcp/bridge';
+import type { BridgeIpc } from '../adapter/bridge';
 import type { HistoryStore } from './store';
 
 const LikedSchema = z.object({ post: PostSchema, likedAt: z.string() });

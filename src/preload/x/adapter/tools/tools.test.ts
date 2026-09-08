@@ -5,9 +5,8 @@ import { pageState } from './page-state';
 import { readVisiblePosts } from './read-visible';
 import { readCurrentPost } from './read-current-post';
 import { showNewPosts } from './widgets';
-import { createPageToolHost } from '../../model-context-host';
 
-const ctx = { pageTools: createPageToolHost() };
+const ctx = {};
 
 describe('preload tools', () => {
   beforeEach(() => { document.body.innerHTML = ''; });

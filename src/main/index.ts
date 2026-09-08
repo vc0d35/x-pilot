@@ -13,7 +13,7 @@ import { hardenWebContents } from './hardening';
 import { createLinkRouter, rateLimit } from './links';
 import { SettingsStore } from './settings';
 import { AppToolSource, ToolRegistry } from './tools/registry';
-import { WebMcpBridge } from './webmcp/bridge';
+import { AdapterBridge } from './adapter/bridge';
 import { XViewController } from './xview';
 import { BackgroundXView } from './background-view';
 import { ApprovalBroker } from './approvals';
@@ -92,7 +92,7 @@ async function start(): Promise<void> {
 
     const approvals = new ApprovalBroker();
     const registry = new ToolRegistry();
-    const bridge = new WebMcpBridge(ipcMain, xView.webContents);
+    const bridge = new AdapterBridge(ipcMain, xView.webContents);
     registry.addSource(bridge);
     const xview = new XViewController(xView.webContents, bridge);
     const backgroundOptions = { preload: join(__dirname, '../preload/x.js'), allowHosts, openExternal };
@@ -131,7 +131,7 @@ async function start(): Promise<void> {
     };
     registry.addSource(new AppToolSource('app', appTools, appCtx));
 
-    // A scheduled run gets the app tools but never the visible window, nor its page tools.
+    // A scheduled run gets the app tools but never the visible window, nor its adapter tools.
     const taskXview: XViewLike = {
       currentUrl: () => '',
       navigate: () => Promise.reject(new Error("Scheduled runs cannot move the user's window")),

@@ -10,7 +10,7 @@ import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import type { DeepPartial, Settings } from '../shared/settings';
-import type { BridgeIpc } from './webmcp/bridge';
+import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
   sidebar: WebContents;
