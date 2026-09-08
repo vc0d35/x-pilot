@@ -32,16 +32,16 @@ export function computeFocus(doc: Document, url: string, isVisible: InViewport =
     const post = (main ? extractPost(main, url) : null) ?? (kind === 'article' ? postFromArticleUrl(url, a?.title ?? '') : null);
     if (!post) return null;
     if (a) { post.kind = 'article'; post.articleTitle = a.title; post.articleBody = a.body; }
-    return { url, post };
+    return { url, kind, post };
   }
   const dialog = doc.querySelector(SEL.dialog);
   if (dialog && dialog.querySelector(SEL.composerTextarea)) {
     const quoted = dialog.querySelector(SEL.article);
     const post = quoted ? extractPost(quoted, url) : null;
-    if (post) return { url, post };
+    if (post) return { url, kind, post };
   }
   const visible = visiblePosts(doc, isVisible);
-  return visible.length ? { url, post: null, visible } : null;
+  return visible.length ? { url, kind, post: null, visible } : null;
 }
 
 /** Identity of a context, for change detection: the focused post, or the ordered visible posts. */

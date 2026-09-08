@@ -13,6 +13,7 @@ describe('computeFocus', () => {
     document.body.innerHTML = fixture('x-timeline.html');
     const f = computeFocus(document, 'https://x.com/home', allVisible);
     expect(f?.post).toBeNull();
+    expect(f?.kind).toBe('home');
     expect(f?.visible?.map((v) => [v.authorHandle, v.id])).toEqual([['alice', '111'], ['bob', '222']]);
     expect(f?.visible?.[0].text).toBe('Hello 🌍world');
   });

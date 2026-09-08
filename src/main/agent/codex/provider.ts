@@ -36,9 +36,7 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
   const visible = ctx.visible ?? [];
   if (visible.length === 0) return text;
   if (lastKey === contextKey(ctx)) return `Current page: still the same view of ${ctx.url}\n\n${text}`;
-  let kind = 'page';
-  try { const path = new URL(ctx.url).pathname; kind = path === '/' || path === '/home' ? 'home' : path.startsWith('/search') ? 'search' : path.endsWith('/likes') ? 'likes' : 'timeline'; } catch { /* keep 'page' */ }
-  const lines = [`Current page: ${kind} at ${ctx.url}. Posts on screen, top to bottom:`];
+  const lines = [`Current page: ${ctx.kind} at ${ctx.url}. Posts on screen, top to bottom:`];
   visible.forEach((v, i) => lines.push(`${i + 1}. @${v.authorHandle} — ${v.url}`, `<page-content untrusted>${v.text}</page-content>`));
   return `${lines.join('\n')}\n\n${text}`;
 }

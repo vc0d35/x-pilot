@@ -32,6 +32,7 @@ export type VisiblePost = z.infer<typeof VisiblePostSchema>;
 /** What the user is looking at: a focused post (post/article pages, reply dialogs) or the posts on screen. */
 export const PageContextSchema = z.object({
   url: z.string(),
+  kind: PageKindSchema,
   post: PostSchema.nullable(),
   visible: z.array(VisiblePostSchema).optional(),
 });
