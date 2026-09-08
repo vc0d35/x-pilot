@@ -102,6 +102,7 @@ app.whenReady().then(async () => {
   const workspaceDir = join(app.getPath('userData'), 'workspace');
   mkdirSync(workspaceDir, { recursive: true });
   const agent = new AgentController({
+    history,
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });

@@ -62,3 +62,36 @@ describe('HistoryStore', () => {
     expect(s.hasLibraryPath('/etc/passwd')).toBe(false);
   });
 });
+
+describe('conversations', () => {
+  it('creates, titles, appends events, lists newest first', () => {
+    const s = new HistoryStore(':memory:');
+    s.upsertConversation({ threadId: 't1', kind: 'chat', toolsHash: 'h' });
+    s.upsertConversation({ threadId: 't2', kind: 'task', taskId: 7, toolsHash: 'h' });
+    s.appendEvent('t1', { type: 'user.message', text: 'Is this true? A very long question that keeps going on and on and on' });
+    s.appendEvent('t1', { type: 'message.completed', itemId: 'm1', text: 'Yes' });
+    const list = s.listConversations();
+    expect(list.map((c) => c.threadId)).toEqual(['t1', 't2']); // t1 updated last by its events
+    expect(list[0].title).toBe('Is this true? A very long question that keeps going on and o…');
+    expect(list[1]).toMatchObject({ kind: 'task', taskId: 7, title: 'Task run' });
+    expect(s.listEvents('t1').map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    expect(s.getConversation('nope')).toBeNull();
+  });
+});
+
+describe('tasks', () => {
+  it('creates, lists, updates and deletes tasks', () => {
+    const s = new HistoryStore(':memory:');
+    const t = s.createTask({ title: 'Weather', prompt: 'Post the weather', schedule: { every: '1h' }, threadMode: 'resume', nextRunAt: '2026-09-08T10:00:00.000Z' });
+    expect(t.id).toBe(1);
+    expect(s.listTasks()[0]).toMatchObject({ title: 'Weather', enabled: true, schedule: { every: '1h' }, threadMode: 'resume', threadId: null, lastRunAt: null });
+    s.updateTask(1, { enabled: false, threadId: 'th-1', lastRunAt: '2026-09-08T10:00:05.000Z', lastStatus: 'completed', nextRunAt: '2026-09-08T11:00:00.000Z' });
+    expect(s.getTask(1)).toMatchObject({ enabled: false, threadId: 'th-1', lastStatus: 'completed', nextRunAt: '2026-09-08T11:00:00.000Z' });
+    expect(s.dueTasks('2026-09-08T11:00:00.000Z')).toEqual([]); // disabled
+    s.updateTask(1, { enabled: true });
+    expect(s.dueTasks('2026-09-08T11:00:00.000Z').map((x) => x.id)).toEqual([1]);
+    expect(s.dueTasks('2026-09-08T10:59:59.000Z')).toEqual([]);
+    s.deleteTask(1);
+    expect(s.listTasks()).toEqual([]);
+  });
+});

@@ -53,6 +53,8 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.linkOpen, guarded((_e, raw) => { openLink(z.object({ url: z.string().max(2048) }).parse(raw).url); }));
   ipcMain.handle(IPC.sidebarSetCollapsed, guarded((_e, raw) => { setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed); }));
   ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
+  ipcMain.handle(IPC.conversationsList, guarded(() => agent.listConversations()));
+  ipcMain.handle(IPC.conversationsOpen, guarded((_e, raw) => agent.openConversation(z.object({ threadId: z.string() }).parse(raw).threadId)));
   ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
   ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {
     const { path } = z.object({ path: z.string() }).parse(raw);

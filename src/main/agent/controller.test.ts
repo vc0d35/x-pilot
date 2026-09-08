@@ -1,3 +1,4 @@
+import { HistoryStore } from '../history/store';
 import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -131,5 +132,26 @@ describe('AgentController', () => {
     providers[1].emitEvent({ type: 'status', status: 'disconnected' });
     await new Promise((r) => setTimeout(r, 0));
     expect(i).toBe(2); // no third provider
+  });
+});
+
+describe('conversations', () => {
+  it('records the thread and its events, and reopens a conversation by id', async () => {
+    const store = settings();
+    const history = new HistoryStore(':memory:');
+    const providers = [fakeProvider(), fakeProvider(async () => ({ threadId: 'T2' })), fakeProvider()];
+    let i = 0;
+    const ctl = new AgentController({ registry: new ToolRegistry(), settings: store, history, workspaceDir: '/tmp', createProvider: () => providers[i++] });
+    await ctl.start({ resume: false });
+    providers[0].emitEvent({ type: 'user.message', text: 'hello there' });
+    providers[0].emitEvent({ type: 'message.completed', itemId: 'm1', text: 'hi' });
+    providers[0].emitEvent({ type: 'message.delta', itemId: 'm2', delta: 'not stored' });
+    await ctl.start({ resume: false }); // second conversation, thread T2
+    expect(history.listConversations().map((c) => [c.threadId, c.title])).toEqual([['T2', ''], ['T', 'hello there']]);
+    expect(history.listEvents('T').map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    const events = await ctl.openConversation('T');
+    expect(providers[2].starts[0].threadId).toBe('T');
+    expect(events.map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    expect(store.get().threadId).toBe('T');
   });
 });

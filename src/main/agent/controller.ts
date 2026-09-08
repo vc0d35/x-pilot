@@ -4,6 +4,8 @@ import type { PageContext } from '../../shared/page';
 import type { SettingsStore } from '../settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { ToolRegistry } from '../tools/registry';
+import type { HistoryStore } from '../history/store';
+import type { Conversation } from '../../shared/sidebar-api';
 import type { AgentProvider, ModelInfo } from './provider';
 
 /** Stable fingerprint of the dynamic tools a thread was started with. */
@@ -16,10 +18,13 @@ export interface AgentControllerDeps {
   settings: SettingsStore;
   workspaceDir: string;
   createProvider: () => AgentProvider;
+  /** Conversation store; optional so lightweight tests can omit it. */
+  history?: HistoryStore;
 }
 
 export class AgentController {
   private provider: AgentProvider | null = null;
+  private threadId: string | null = null;
   private unsubscribe: (() => void) | null = null;
   private restartedOnce = false;
   private generation = 0;
@@ -29,11 +34,16 @@ export class AgentController {
 
   onEvent(cb: (e: AgentEvent) => void): () => void { this.listeners.add(cb); return () => this.listeners.delete(cb); }
 
-  async start(opts: { resume: boolean }): Promise<void> {
+  /** Events worth keeping in a conversation transcript (deltas and activity are transient). */
+  private static readonly RECORDED = new Set<AgentEvent['type']>(['user.message', 'message.completed', 'thinking.completed', 'tool.started', 'tool.completed', 'turn.completed']);
+
+  async start(opts: { resume: boolean; threadId?: string | null }): Promise<void> {
     const gen = ++this.generation;
     await this.stop();
     if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
     if (!opts.resume) this.deps.settings.update({ threadId: null, threadToolsHash: null });
+    else if (opts.threadId) this.deps.settings.update({ threadId: opts.threadId, threadToolsHash: this.deps.history?.getConversation(opts.threadId) ? toolsFingerprint(this.deps.registry.list()) : null });
+    this.threadId = null;
     const tools = this.deps.registry.list();
     const toolsHash = toolsFingerprint(tools);
     const stored = this.deps.settings.get();
@@ -45,6 +55,7 @@ export class AgentController {
     const provider = this.deps.createProvider();
     const unsubscribe = provider.onEvent((e) => {
       this.emit(e);
+      if (this.threadId && AgentController.RECORDED.has(e.type)) this.deps.history?.appendEvent(this.threadId, e);
       if (e.type === 'turn.completed') this.restartedOnce = false;
       if (e.type === 'status' && e.status === 'disconnected' && this.provider === provider && !this.restartedOnce) {
         this.restartedOnce = true;
@@ -62,12 +73,24 @@ export class AgentController {
         workspaceDir: this.deps.workspaceDir,
       });
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
+      this.threadId = threadId;
+      this.deps.history?.upsertConversation({ threadId, kind: 'chat', toolsHash });
       this.deps.settings.update({ threadId, threadToolsHash: toolsHash });
     } catch (err) {
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.emit({ type: 'status', status: 'error', message: err instanceof Error ? err.message : String(err) });
     }
   }
+
+  /** Resumes a stored conversation and returns its transcript for the UI to replay. */
+  async openConversation(threadId: string): Promise<AgentEvent[]> {
+    await this.start({ resume: true, threadId });
+    return this.deps.history?.listEvents(threadId) ?? [];
+  }
+
+  listConversations(): Conversation[] { return this.deps.history?.listConversations() ?? []; }
+
+  currentThreadId(): string | null { return this.threadId; }
 
   async send(text: string, ctx: PageContext | null): Promise<void> {
     if (!this.provider) throw new Error('Agent is not running');

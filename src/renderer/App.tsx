@@ -5,6 +5,7 @@ import { EntryList } from './components/EntryList';
 import { Composer } from './components/Composer';
 import { LibraryPanel } from './components/LibraryPanel';
 import { SettingsPanel } from './components/SettingsPanel';
+import { HistoryPanel } from './components/HistoryPanel';
 import type { PageContext } from '../shared/page';
 import type { Settings } from '../shared/settings';
 
@@ -32,7 +33,13 @@ export function App() {
         panel={panel} onPanel={setPanel} onCollapse={() => void window.xpilot.setSidebarCollapsed(true)} />
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
       {settings?.posting.mode === 'autonomous' && <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>}
-      {panel === 'library' ? (
+      {panel === 'history' ? (
+        <HistoryPanel currentThreadId={state.threadId} onOpen={(threadId) => {
+          dispatch({ type: 'reset' });
+          setPanel('chat');
+          void window.xpilot.openConversation(threadId).then((events) => { for (const e of events) dispatch(e); });
+        }} />
+      ) : panel === 'library' ? (
         <LibraryPanel />
       ) : panel === 'settings' ? (
         settings && <SettingsPanel settings={settings} />

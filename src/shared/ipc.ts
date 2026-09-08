@@ -27,4 +27,6 @@ export const IPC = {
   sidebarCollapsed: 'sidebar:collapsed',
   linkOpen: 'link:open',
   sidebarFocusInput: 'sidebar:focusInput',
+  conversationsList: 'conversations:list',
+  conversationsOpen: 'conversations:open',
 } as const;
