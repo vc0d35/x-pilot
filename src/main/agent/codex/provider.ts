@@ -89,7 +89,10 @@ export class CodexProvider implements AgentProvider {
       approvalPolicy: opts.settings.approvalPolicy,
       sandbox: opts.settings.sandbox,
       developerInstructions: DEVELOPER_INSTRUCTIONS,
-      config: opts.settings.reasoningEffort ? { model_reasoning_effort: opts.settings.reasoningEffort } : undefined,
+      config: {
+        ...(opts.settings.reasoningEffort ? { model_reasoning_effort: opts.settings.reasoningEffort } : {}),
+        web_search: opts.settings.webSearch,
+      },
     };
     let res: { thread: { id: string } };
     if (opts.threadId) {
@@ -172,6 +175,7 @@ export class CodexProvider implements AgentProvider {
         if (item.type === 'dynamicToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: item.tool as string, args: item.arguments });
         if (item.type === 'commandExecution') this.emit({ type: 'tool.started', itemId: item.id as string, name: 'shell', args: item.command });
         if (item.type === 'mcpToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: `${item.server}/${item.tool}`, args: item.arguments });
+        if (item.type === 'webSearch') this.emit({ type: 'tool.started', itemId: item.id as string, name: 'web_search', args: { queries: webSearchQueries(item) } });
         return;
       }
       case 'item/completed': {
@@ -183,6 +187,7 @@ export class CodexProvider implements AgentProvider {
         }
         if (item.type === 'commandExecution') this.emit({ type: 'tool.completed', itemId: item.id as string, name: 'shell', success: item.exitCode === 0, output: (item.aggregatedOutput as string | null) ?? '' });
         if (item.type === 'mcpToolCall') this.emit({ type: 'tool.completed', itemId: item.id as string, name: `${item.server}/${item.tool}`, success: !item.error, output: JSON.stringify(item.result ?? item.error ?? null) });
+        if (item.type === 'webSearch') this.emit({ type: 'tool.completed', itemId: item.id as string, name: 'web_search', success: true, output: (item.query as string | null) ?? webSearchQueries(item).join(' | ') });
         return;
       }
       case 'error':
@@ -230,4 +235,12 @@ export class CodexProvider implements AgentProvider {
         throw new Error(`Unsupported server request: ${method}`);
     }
   }
+}
+
+/** Queries of a Codex `webSearch` item: `action.queries` when present, else the single `query`. */
+function webSearchQueries(item: Record<string, unknown>): string[] {
+  const action = item.action as { queries?: string[] | null; query?: string | null } | undefined;
+  if (action?.queries?.length) return action.queries;
+  const q = action?.query ?? (item.query as string | null | undefined);
+  return q ? [q] : [];
 }

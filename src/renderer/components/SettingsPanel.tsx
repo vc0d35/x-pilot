@@ -31,6 +31,13 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           </select>
         </label>
       )}
+      <label>Web search
+        <select value={codex.webSearch} onChange={(e) => set({ agent: { codex: { webSearch: e.target.value as Settings['agent']['codex']['webSearch'] } } })}>
+          <option value="live">Live (fact-check against the web)</option>
+          <option value="cached">Cached index only</option>
+          <option value="disabled">Off</option>
+        </select>
+      </label>
       <label>Codex command approvals
         <select value={codex.approvalPolicy} onChange={(e) => set({ agent: { codex: { approvalPolicy: e.target.value as Settings['agent']['codex']['approvalPolicy'] } } })}>
           <option value="on-request">Ask when Codex requests</option>

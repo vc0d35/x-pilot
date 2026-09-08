@@ -66,6 +66,19 @@ describe('CodexProvider', () => {
     await provider.stop();
   });
 
+  it('passes the web search mode to thread/start and surfaces web searches as tool rows', async () => {
+    const { provider, events, stderr } = makeProvider();
+    await provider.start({ tools, settings: { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'cached', reasoningEffort: 'low' }, workspaceDir: '/tmp' });
+    expect(stderr.join('')).toContain('CFG:{"model_reasoning_effort":"low","web_search":"cached"}');
+    await provider.send('What page?');
+    await waitFor(events, 'turn.completed');
+    const started = events.find((e) => e.type === 'tool.started' && e.name === 'web_search') as { args: unknown } | undefined;
+    expect(started?.args).toEqual({ queries: ['electron latest version', 'electron releases'] });
+    const done = events.find((e) => e.type === 'tool.completed' && e.name === 'web_search') as { success: boolean; output: string } | undefined;
+    expect(done).toMatchObject({ success: true, output: 'electron latest version' });
+    await provider.stop();
+  });
+
   it('lists models', async () => {
     const { provider } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
@@ -149,7 +162,7 @@ describe('CodexProvider', () => {
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     await provider.send('What page?');
     await waitFor(events, 'turn.completed');
-    const toolDone = events.find((e) => e.type === 'tool.completed') as { success: boolean };
+    const toolDone = events.find((e) => e.type === 'tool.completed' && e.name === 'x_get_page_state') as { success: boolean };
     expect(toolDone.success).toBe(false);
     const msg = events.find((e) => e.type === 'message.completed') as { text: string };
     expect(msg.text).toContain('Error: boom');

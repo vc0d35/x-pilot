@@ -11,6 +11,7 @@ rl.on('line', async (line) => {
   if (method === 'initialized') return;
   if (method === 'thread/start') {
     process.stderr.write('DYN:' + JSON.stringify(params.dynamicTools) + '\n');
+    process.stderr.write('CFG:' + JSON.stringify(params.config ?? null) + '\n');
     return out({ jsonrpc: '2.0', id, result: { thread: { id: threadId }, model: params.model ?? 'fake-model', modelProvider: 'openai', serviceTier: null, cwd: params.cwd, instructionSources: [], approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: { type: 'readOnly' }, reasoningEffort: null } });
   }
   if (method === 'thread/resume') return out({ jsonrpc: '2.0', id, result: { thread: { id: params.threadId }, model: 'fake-model' } });
@@ -40,6 +41,10 @@ rl.on('line', async (line) => {
       out({ jsonrpc: '2.0', id: 'req-approve', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-1', command: 'ls', cwd: '/tmp' } });
       return; // continues in the response branch below
     }
+    // A built-in web search the model ran before calling our tool.
+    const ws = { type: 'webSearch', id: 'ws-1', query: 'electron latest version', action: { type: 'search', query: null, queries: ['electron latest version', 'electron releases'] } };
+    out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: ws } });
+    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId, completedAtMs: 0, item: ws } });
     out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: { type: 'dynamicToolCall', id: 'call-1', namespace: null, tool: 'x_get_page_state', arguments: {}, status: 'inProgress', contentItems: null, success: null, durationMs: null } } });
     out({ jsonrpc: '2.0', id: 'req-1', method: 'item/tool/call', params: { threadId, turnId, callId: 'call-1', namespace: null, tool: 'x_get_page_state', arguments: {} } });
     return;

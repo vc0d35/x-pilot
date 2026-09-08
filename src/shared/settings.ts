@@ -12,6 +12,8 @@ export const SettingsSchema = z.object({
       reasoningEffort: z.string().nullable().default(null),
       approvalPolicy: z.enum(['untrusted', 'on-request', 'never']).default('on-request'),
       sandbox: z.enum(['read-only', 'workspace-write']).default('read-only'),
+      /** Codex built-in web search: live results, cached index, or off. */
+      webSearch: z.enum(['live', 'cached', 'disabled']).default('live'),
     }),
   }),
   navigation: z.object({ allowHosts: z.array(z.string()).default(DEFAULT_ALLOW_HOSTS) }),
