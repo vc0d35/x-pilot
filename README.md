@@ -68,4 +68,4 @@ This builds and runs electron-builder for macOS. Signing and notarization for di
 
 ## License
 
-The project license has not been chosen yet; it is the first item in [docs/release-todo.md](docs/release-todo.md). The bundled IBM Plex Mono font is under the SIL Open Font License, see `docs/licenses/`.
+XPilot is released under the [PolyForm Noncommercial License 1.0.0](LICENSE): you may use, modify and share it for any noncommercial purpose. Commercial use needs a separate agreement with the author. The bundled IBM Plex Mono font is under the SIL Open Font License, see `docs/licenses/`.

@@ -4,10 +4,10 @@ Goal: someone downloads XPilot on a Mac, opens it, logs into X, and it works. Th
 
 ## Decisions to make
 
-- [ ] *decision* **License.** Pick one (MIT and Apache-2.0 are the usual choices for an app like this), add `LICENSE`, set `license` in `package.json`, and reference it in the README.
-- [ ] *decision* **Public repository and author name.** Fill `repository`, `homepage` and `bugs` in `package.json`; decide what `author` should say.
+- [x] *decision* **License.** PolyForm Noncommercial 1.0.0: `LICENSE`, `package.json` and the README agree.
+- [x] *decision* **Public repository and author name.** `github.com/vc0d35/x-pilot`, author `vc0d35`.
 - [ ] *decision* **Should scheduling a task ask for confirmation?** A scheduled task is a persistent grant: an injected instruction that reaches `xpilot_schedule_task` re-runs unattended. Posting confirms by default; tasks do not. Options: confirm on create, or show a persistent "N tasks scheduled" indicator with one-click review.
-- [ ] *decision* **Where do the internal build plans live?** `docs/superpowers/plans` is ~5,300 lines of task-by-task build log, about 40% of the repo by lines. Keep for history, move to a `docs/history/` folder, or drop from the public tree.
+- [x] *decision* **Internal build plans stay out of the public repo.** `docs/superpowers/plans` is removed; the design specs stay.
 
 ## Packaging and signing
 

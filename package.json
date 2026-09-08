@@ -3,8 +3,19 @@
   "version": "0.1.0",
   "private": true,
   "description": "An AI copilot for x.com: an Electron shell around X with an agent sidebar driven by your local Codex CLI",
-  "author": "vicnicius",
-  "engines": { "node": ">=22.5" },
+  "author": "vc0d35",
+  "license": "PolyForm-Noncommercial-1.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/vc0d35/x-pilot.git"
+  },
+  "homepage": "https://github.com/vc0d35/x-pilot#readme",
+  "bugs": {
+    "url": "https://github.com/vc0d35/x-pilot/issues"
+  },
+  "engines": {
+    "node": ">=22.5"
+  },
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev --watch",
