@@ -28,11 +28,16 @@ code { font: inherit; }
 
 .status { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12px; }
 .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); display: inline-block; }
-.status-ready .status-dot, .status-running .status-dot { background: var(--ok); }
-.status-running .status-dot { animation: pulse 1.2s ease-in-out infinite; }
-.status-starting .status-dot { background: var(--muted); animation: pulse 1.2s ease-in-out infinite; }
+/* Connected: a slow, soft breathe (opacity + glow); running breathes a little faster. */
+.status-ready .status-dot, .status-running .status-dot { background: var(--ok); animation: breathe 3.2s ease-in-out infinite; }
+.status-running .status-dot { animation-duration: 1.6s; }
+.status-starting .status-dot { background: var(--muted); animation: breathe 1.6s ease-in-out infinite; }
 .status-error .status-dot, .status-disconnected .status-dot { background: var(--fg); }
-@keyframes pulse { 50% { opacity: .35; } }
+@keyframes breathe {
+  0%, 100% { opacity: .55; box-shadow: 0 0 0 0 transparent; }
+  50% { opacity: 1; box-shadow: 0 0 6px 1px color-mix(in srgb, currentColor 0%, var(--ok) 45%); }
+}
+@media (prefers-reduced-motion: reduce) { .status-dot { animation: none !important; opacity: 1; } }
 
 .banner { padding: 4px 10px; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--line); }
 
