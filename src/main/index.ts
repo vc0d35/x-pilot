@@ -1,7 +1,8 @@
-import { app, net, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, net, BrowserWindow, dialog, ipcMain, screen, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
+import { pickInitialBounds } from './window-state';
 import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { resolveShortLink, routeShortLink } from './navigation/shortlink';
@@ -30,7 +31,9 @@ if (process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USE
 
 app.whenReady().then(async () => {
   const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
-  const { xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
+  const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
+    bounds: pickInitialBounds(settings.get().window.bounds, screen.getAllDisplays().map((d) => d.workArea)),
+    onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
     preloadX: join(__dirname, '../preload/x.js'),
     preloadSidebar: join(__dirname, '../preload/sidebar.js'),
     rendererUrl: process.env.ELECTRON_RENDERER_URL,
@@ -95,7 +98,7 @@ app.whenReady().then(async () => {
   registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
-  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
+  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { win, windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
 
   await xView.webContents.loadURL(START_URL);
   if (!E2E) {

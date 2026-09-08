@@ -18,6 +18,10 @@ export const SettingsSchema = z.object({
   }),
   navigation: z.object({ allowHosts: z.array(z.string()).default(DEFAULT_ALLOW_HOSTS) }),
   threadId: z.string().nullable().default(null),
+  /** Last window position/size, restored on launch when still on a connected display. */
+  window: z.object({
+    bounds: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().default(null),
+  }),
   /** Fingerprint of the tool list the stored thread was started with; a mismatch forces a fresh thread. */
   threadToolsHash: z.string().nullable().default(null),
 });
@@ -45,6 +49,7 @@ export function normalizeSettings(raw: unknown): Settings {
     agent: { ...(isObj(r.agent) ? r.agent : {}), codex: isObj(r.agent) && isObj((r.agent as Record<string, unknown>).codex) ? (r.agent as Record<string, unknown>).codex : {} },
     navigation: isObj(r.navigation) ? r.navigation : {},
     threadId: r.threadId ?? null,
+    window: isObj(r.window) ? r.window : {},
     threadToolsHash: r.threadToolsHash ?? null,
   };
   return SettingsSchema.parse(shaped);

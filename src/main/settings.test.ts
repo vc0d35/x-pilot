@@ -53,3 +53,13 @@ describe('confirmPostingMode', () => {
     expect(confirmPostingMode('confirm', confirmFn)).toBe('confirm');
   });
 });
+
+describe('window bounds persistence', () => {
+  it('defaults to null and round-trips a saved position', () => {
+    const file = tmpFile();
+    const s = new SettingsStore(file);
+    expect(s.get().window.bounds).toBeNull();
+    s.update({ window: { bounds: { x: 10, y: 20, width: 1200, height: 800 } } });
+    expect(new SettingsStore(file).get().window.bounds).toEqual({ x: 10, y: 20, width: 1200, height: 800 });
+  });
+});

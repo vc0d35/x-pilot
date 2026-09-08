@@ -1,12 +1,15 @@
 import { BaseWindow, WebContentsView } from 'electron';
 import { computeLayout } from './layout';
 import { IPC } from '../shared/ipc';
+import type { WindowBounds } from './window-state';
 
 export interface MainWindowOptions {
   preloadX: string;
   preloadSidebar: string;
   rendererUrl?: string;   // dev server
   rendererFile?: string;  // built index.html
+  bounds: WindowBounds;
+  onBoundsChanged(bounds: WindowBounds): void;
 }
 
 export interface MainWindow {
@@ -18,7 +21,13 @@ export interface MainWindow {
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
-  const win = new BaseWindow({ width: 1500, height: 950, minWidth: 1000, minHeight: 600, title: 'XPilot' });
+  const win = new BaseWindow({ ...opts.bounds, minWidth: 1000, minHeight: 600, title: 'XPilot' });
+  let saveTimer: NodeJS.Timeout | null = null;
+  const scheduleSave = () => {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => { if (!win.isDestroyed()) opts.onBoundsChanged(win.getBounds()); }, 400);
+  };
+  win.on('move', scheduleSave);
 
   const xView = new WebContentsView({
     webPreferences: {
@@ -49,7 +58,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
     sidebar.setBounds(l.sidebar);
   };
   layout();
-  win.on('resize', layout);
+  win.on('resize', () => { layout(); scheduleSave(); });
 
   if (opts.rendererUrl) void sidebar.webContents.loadURL(opts.rendererUrl);
   else if (opts.rendererFile) void sidebar.webContents.loadFile(opts.rendererFile);
