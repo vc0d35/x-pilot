@@ -7,5 +7,6 @@ import { readCurrentPost } from './read-current-post';
 import { scroll } from './scroll';
 import { likeInPage, selectHomeTab } from './engage';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
+import { readWidgets, showNewPosts } from './widgets';
 
-export const adapterTools: ToolModule<PreloadCtx>[] = [pageState, readVisiblePosts, readCurrentPost, scroll, listPageTools, callPageTool, readComposer, typeInComposer, clickPostButton, likeInPage, selectHomeTab];
+export const adapterTools: ToolModule<PreloadCtx>[] = [pageState, readVisiblePosts, readCurrentPost, scroll, listPageTools, callPageTool, readComposer, typeInComposer, clickPostButton, likeInPage, selectHomeTab, readWidgets, showNewPosts];

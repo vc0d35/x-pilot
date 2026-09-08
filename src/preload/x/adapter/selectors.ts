@@ -19,6 +19,16 @@ export const SEL = {
   /** The rich-text body only (the read view also contains the author header and follow controls). */
   articleBody: '[data-testid="twitterArticleRichTextView"]',
   articleTitle: '[data-testid="twitter-article-title"]',
+  // Right-column widgets and the Explore page: "What's happening" trends and "Today's News" headlines.
+  sectionHeading: 'h2',
+  trend: '[data-testid="trend"]',
+  newsArticle: '[data-testid^="news_sidebar_article_"]',
+  timelineCell: '[data-testid="cellInnerDiv"]',
+  /** The "Show N posts" pill X inserts at the top of a timeline when new posts arrived (a plain button, no test id). */
+  newPostsButton: '[data-testid="primaryColumn"] [data-testid="cellInnerDiv"] button',
 } as const;
+
+/** Label of the new-posts pill; the count is the first capture group. */
+export const NEW_POSTS_LABEL = /^show\s+([\d,.]+)\s+posts?$/i;
 
 export const RESERVED_TOP_LEVEL = new Set(['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i', 'compose', 'intent', 'login', 'signup', 'logout', 'bookmarks', 'lists', 'communities', 'jobs', 'premium', 'tos', 'privacy']);

@@ -22,6 +22,8 @@ export const PageStateSchema = z.object({
   kind: PageKindSchema,
   title: z.string(),
   adapterHealthy: z.boolean(),
+  /** Count announced by the "Show N posts" pill, when one is on screen. */
+  newPostsAvailable: z.number().optional(),
 });
 export type PageState = z.infer<typeof PageStateSchema>;
 

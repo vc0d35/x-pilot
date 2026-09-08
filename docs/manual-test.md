@@ -59,6 +59,11 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
 - [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.
 
+## News, trends and new posts
+- [ ] On Home: "what's trending?" → answered from the sidebar widget on screen (source: visible), no navigation.
+- [ ] On Home: "what's in Today's News?" → the hidden window loads Explore (source: background); the visible window does not move.
+- [ ] Wait for the "Show N posts" pill on Home, then "show me the new posts" → x_show_new_posts clicks it and the timeline refreshes on screen.
+
 ## Inspecting the live app
 Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --list` and
 `node scripts/inspect.mjs x "document.title"` (targets: x, bg, sidebar, or a URL substring;

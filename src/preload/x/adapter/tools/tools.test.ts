@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { pageState } from './page-state';
 import { readVisiblePosts } from './read-visible';
 import { readCurrentPost } from './read-current-post';
+import { showNewPosts } from './widgets';
 import { createPageToolHost } from '../../page-tools';
 
 const here = import.meta.url;
@@ -22,6 +23,17 @@ describe('preload tools', () => {
     expect(r).toEqual({ success: true, content: { url: 'http://localhost:3000/alice/status/111', kind: 'post', title: 'Alice on X', adapterHealthy: true } });
     document.body.innerHTML = '<div>blank</div>';
     expect((await pageState.execute({}, ctx)) as { content: { adapterHealthy: boolean } }).toMatchObject({ content: { adapterHealthy: false } });
+  });
+
+  it('x_get_page_state reports the new-posts pill and x_show_new_posts clicks it', async () => {
+    window.history.pushState({}, '', '/home');
+    document.body.innerHTML = fixture('x-timeline.html');
+    expect((await pageState.execute({}, ctx)) as { content: { newPostsAvailable?: number } }).toMatchObject({ content: { newPostsAvailable: 3 } });
+    const pill = document.querySelector<HTMLElement>('[data-testid="cellInnerDiv"] button')!;
+    pill.addEventListener('click', () => pill.remove());
+    expect(await showNewPosts.execute({}, ctx)).toMatchObject({ success: true, content: { shown: true, count: 3, kind: 'home' } });
+    expect((await showNewPosts.execute({}, ctx)) as { content: { shown: boolean; newPostsAvailable?: number } }).toMatchObject({ content: { shown: false } });
+    expect(((await pageState.execute({}, ctx)) as { content: { newPostsAvailable?: number } }).content.newPostsAvailable).toBeUndefined();
   });
 
   it('x_read_visible_posts honours limit', async () => {
