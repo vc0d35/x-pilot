@@ -79,6 +79,16 @@ describe('CodexProvider', () => {
     await provider.stop();
   });
 
+  it('reports activity: thinking, then the tool, then writing', async () => {
+    const { provider, events } = makeProvider();
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitFor(events, 'turn.completed');
+    const acts = events.filter((e) => e.type === 'activity').map((e) => (e as { activity: string; detail?: string }).activity + (('detail' in e && e.detail) ? ':' + e.detail : ''));
+    expect(acts).toEqual(['thinking', 'tool:web_search', 'tool:x_get_page_state', 'writing']);
+    await provider.stop();
+  });
+
   it('lists models', async () => {
     const { provider } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });

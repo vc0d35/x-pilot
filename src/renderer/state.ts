@@ -13,9 +13,11 @@ export interface State {
   threadId: string | null;
   running: boolean;
   entries: Entry[];
+  /** What the agent is doing right now, while a turn runs. */
+  activity: { activity: 'thinking' | 'tool' | 'writing'; detail?: string } | null;
 }
 
-export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [] };
+export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null };
 
 let seq = 0;
 const localId = () => `local-${++seq}`;
@@ -31,12 +33,14 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'user.message':
       return { ...state, entries: [...state.entries, { kind: 'message', message: { id: localId(), role: 'user', text: e.text } }] };
     case 'turn.started':
-      return { ...state, running: true };
+      return { ...state, running: true, activity: null };
+    case 'activity':
+      return { ...state, activity: e.detail ? { activity: e.activity, detail: e.detail } : { activity: e.activity } };
     case 'turn.completed': {
       const entries = e.status === 'failed'
         ? [...state.entries, { kind: 'message' as const, message: { id: localId(), role: 'system' as const, text: `Turn failed: ${e.error ?? 'unknown error'}` } }]
         : state.entries;
-      return { ...state, running: false, entries };
+      return { ...state, running: false, entries, activity: null };
     }
     case 'message.delta': {
       const idx = state.entries.findIndex((en) => en.kind === 'message' && en.message.id === e.itemId);

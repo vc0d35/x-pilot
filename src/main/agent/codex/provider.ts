@@ -36,6 +36,7 @@ export class CodexProvider implements AgentProvider {
   private running = false;
   private disconnected = false;
   private lastPostId: string | null = null;
+  private writingItemId: string | null = null;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
   constructor(private readonly deps: CodexProviderDeps) {}
@@ -168,10 +169,16 @@ export class CodexProvider implements AgentProvider {
         return;
       }
       case 'item/agentMessage/delta':
+        if (this.writingItemId !== p.itemId) { this.writingItemId = p.itemId as string; this.emit({ type: 'activity', activity: 'writing' }); }
         this.emit({ type: 'message.delta', itemId: p.itemId as string, delta: p.delta as string });
         return;
       case 'item/started': {
         const item = p.item as Record<string, unknown>;
+        if (item.type === 'reasoning') this.emit({ type: 'activity', activity: 'thinking' });
+        if (item.type === 'dynamicToolCall') this.emit({ type: 'activity', activity: 'tool', detail: item.tool as string });
+        if (item.type === 'webSearch') this.emit({ type: 'activity', activity: 'tool', detail: 'web_search' });
+        if (item.type === 'commandExecution') this.emit({ type: 'activity', activity: 'tool', detail: 'shell' });
+        if (item.type === 'mcpToolCall') this.emit({ type: 'activity', activity: 'tool', detail: `${item.server}/${item.tool}` });
         if (item.type === 'dynamicToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: item.tool as string, args: item.arguments });
         if (item.type === 'commandExecution') this.emit({ type: 'tool.started', itemId: item.id as string, name: 'shell', args: item.command });
         if (item.type === 'mcpToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: `${item.server}/${item.tool}`, args: item.arguments });

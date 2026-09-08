@@ -52,3 +52,12 @@ describe('sidebar reducer', () => {
     expect(r.status).toBe('ready');
   });
 });
+
+it('tracks activity while running and clears it when the turn ends', () => {
+  let s = run([{ type: 'turn.started', turnId: 't' }, { type: 'activity', activity: 'thinking' }]);
+  expect(s.activity).toEqual({ activity: 'thinking' });
+  s = run([{ type: 'activity', activity: 'tool', detail: 'web_search' }], s);
+  expect(s.activity).toEqual({ activity: 'tool', detail: 'web_search' });
+  s = run([{ type: 'turn.completed', turnId: 't', status: 'completed' }], s);
+  expect(s.activity).toBeNull();
+});

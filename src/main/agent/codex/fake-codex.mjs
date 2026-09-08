@@ -41,6 +41,7 @@ rl.on('line', async (line) => {
       out({ jsonrpc: '2.0', id: 'req-approve', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-1', command: 'ls', cwd: '/tmp' } });
       return; // continues in the response branch below
     }
+    out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: { type: 'reasoning', id: 'r-1', summary: [], content: [] } } });
     // A built-in web search the model ran before calling our tool.
     const ws = { type: 'webSearch', id: 'ws-1', query: 'electron latest version', action: { type: 'search', query: null, queries: ['electron latest version', 'electron releases'] } };
     out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: ws } });

@@ -84,3 +84,6 @@ code { font: inherit; }
 .handle-brand { font-weight: 700; color: var(--fg); letter-spacing: .02em; }
 .handle:hover { color: var(--fg); background: var(--raised); }
 .handle .status-dot { width: 6px; height: 6px; }
+
+.activity { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 2px 4px; }
+.activity .status-dot { background: var(--muted); animation: breathe 1.4s ease-in-out infinite; }

@@ -17,6 +17,7 @@ export type AgentEvent =
   | { type: 'turn.completed'; turnId: string; status: 'completed' | 'interrupted' | 'failed'; error?: string }
   | { type: 'message.delta'; itemId: string; delta: string }
   | { type: 'message.completed'; itemId: string; text: string }
+  | { type: 'activity'; activity: 'thinking' | 'tool' | 'writing'; detail?: string }
   | { type: 'tool.started'; itemId: string; name: string; args: unknown }
   | { type: 'tool.completed'; itemId: string; name: string; success: boolean; output: string }
   | { type: 'approval.requested'; request: ApprovalRequest }

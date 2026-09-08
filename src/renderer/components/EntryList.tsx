@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Entry, ToolCall } from '../state';
+import type { Entry, State, ToolCall } from '../state';
 import { groupEntries } from '../grouping';
 
 function ToolRow({ call }: { call: ToolCall }) {
@@ -51,9 +51,9 @@ function ToolGroup({ calls }: { calls: ToolCall[] }) {
   );
 }
 
-export function EntryList({ entries, onResolve }: { entries: Entry[]; onResolve: (id: string, d: string) => void }) {
+export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; activity: State['activity']; onResolve: (id: string, d: string) => void }) {
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [entries]);
+  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [entries, activity]);
   return (
     <main className="entries">
       {groupEntries(entries).map((en, i) => {
@@ -61,7 +61,25 @@ export function EntryList({ entries, onResolve }: { entries: Entry[]; onResolve:
         if (en.kind === 'tools') return <ToolGroup key={en.key} calls={en.calls} />;
         return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} />;
       })}
+      <ActivityLine activity={activity} />
       <div ref={endRef} />
     </main>
   );
+}
+
+const TOOL_VERBS: Record<string, string> = {
+  web_search: 'searching the web', x_search: 'searching X', x_read_post: 'reading a post', x_read_visible_posts: 'reading the timeline',
+  x_scroll: 'scrolling', x_navigate: 'opening a page', x_get_page_state: 'checking the page', xpilot_search_history: 'searching your likes',
+  xpilot_save_article_pdf: 'saving a PDF', xpilot_list_library: 'listing PDFs', x_compose_post: 'drafting a post', x_submit_post: 'posting', shell: 'running a command',
+};
+
+export function activityLabel(a: NonNullable<State['activity']>): string {
+  if (a.activity === 'thinking') return 'thinking';
+  if (a.activity === 'writing') return 'writing';
+  return TOOL_VERBS[a.detail ?? ''] ?? `running ${a.detail ?? 'a tool'}`;
+}
+
+export function ActivityLine({ activity }: { activity: State['activity'] }) {
+  if (!activity) return null;
+  return <div className="activity" aria-live="polite"><span className="status-dot" />{activityLabel(activity)}…</div>;
 }

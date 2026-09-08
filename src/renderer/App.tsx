@@ -38,7 +38,7 @@ export function App() {
         settings && <SettingsPanel settings={settings} />
       ) : (
         <>
-          <EntryList entries={state.entries} onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)} />
+          <EntryList entries={state.entries} activity={state.activity} onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)} />
           <Composer disabled={state.status !== 'ready' && state.status !== 'running'} running={state.running} focus={focus} onStop={() => void window.xpilot.interrupt()}
             onSend={(text, ctx) => window.xpilot.send(text, ctx).then(() => true, (err) => {
               dispatch({ type: 'turn.completed', turnId: '', status: 'failed', error: err instanceof Error ? err.message : String(err) });
