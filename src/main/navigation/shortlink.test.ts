@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveShortLink, isShortLinkHost, routeShortLink } from './shortlink';
+import { resolveShortLink, isShortLinkHost, routeShortLink, sidebarLinkAction } from './shortlink';
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 
 const fetcher = (hops: Record<string, string | null>) => vi.fn(async (url: string) => {
@@ -37,5 +37,14 @@ describe('routeShortLink', () => {
     expect(routeShortLink('https://example.com/a', DEFAULT_ALLOW_HOSTS)).toBe('external');
     expect(routeShortLink('https://t.co/dead', DEFAULT_ALLOW_HOSTS)).toBe('external');
     expect(routeShortLink('javascript:alert(1)', DEFAULT_ALLOW_HOSTS)).toBe('deny');
+  });
+});
+
+describe('sidebarLinkAction', () => {
+  it('routes short links to resolution, x.com to the view, others to the browser', () => {
+    expect(sidebarLinkAction('https://t.co/abc', DEFAULT_ALLOW_HOSTS)).toBe('short');
+    expect(sidebarLinkAction('https://x.com/a/status/1', DEFAULT_ALLOW_HOSTS)).toBe('view');
+    expect(sidebarLinkAction('https://example.com/x', DEFAULT_ALLOW_HOSTS)).toBe('external');
+    expect(sidebarLinkAction('javascript:alert(1)', DEFAULT_ALLOW_HOSTS)).toBe('deny');
   });
 });

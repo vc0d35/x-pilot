@@ -25,4 +25,5 @@ export const IPC = {
   focusUpdate: 'focus:update',
   sidebarSetCollapsed: 'sidebar:setCollapsed',
   sidebarCollapsed: 'sidebar:collapsed',
+  linkOpen: 'link:open',
 } as const;

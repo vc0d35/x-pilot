@@ -25,6 +25,7 @@ const api: XPilotApi = {
   chooseLibraryDir: () => ipcRenderer.invoke(IPC.libraryChooseDir),
   clearHistory: () => ipcRenderer.invoke(IPC.historyClear),
   setSidebarCollapsed: (collapsed) => ipcRenderer.invoke(IPC.sidebarSetCollapsed, { collapsed }),
+  openLink: (url) => ipcRenderer.invoke(IPC.linkOpen, { url }),
   onEvent: subscribe(IPC.agentEvent),
   onFocus: subscribe(IPC.focusUpdate),
   onSettings: subscribe(IPC.settingsChanged),

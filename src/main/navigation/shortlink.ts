@@ -30,3 +30,9 @@ export function routeShortLink(target: string, allowHosts: string[]): 'view' | '
   const d = decideNavigation(target, allowHosts);
   return d === 'allow' ? 'view' : d;
 }
+
+/** What to do with a link clicked in the sidebar. */
+export function sidebarLinkAction(url: string, allowHosts: string[]): 'short' | 'view' | 'external' | 'deny' {
+  if (isShortLinkHost(url)) return 'short';
+  return routeShortLink(url, allowHosts);
+}

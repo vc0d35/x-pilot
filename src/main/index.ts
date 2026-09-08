@@ -5,7 +5,7 @@ import { createMainWindow } from './window';
 import { pickInitialBounds } from './window-state';
 import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
-import { resolveShortLink, routeShortLink } from './navigation/shortlink';
+import { resolveShortLink, routeShortLink, sidebarLinkAction } from './navigation/shortlink';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { SettingsStore } from './settings';
 import { ToolRegistry } from './tools/registry';
@@ -55,6 +55,16 @@ app.whenReady().then(async () => {
     });
   };
   attachNavigationPolicy(xView.webContents, { allowHosts: () => settings.get().navigation.allowHosts, openExternal, openShortLink });
+  /** Links clicked in the sidebar follow the same rules as links in the page. */
+  const openLink = (url: string) => {
+    const action = sidebarLinkAction(url, settings.get().navigation.allowHosts);
+    if (action === 'short') openShortLink(url);
+    else if (action === 'view') void xView.webContents.loadURL(url);
+    else if (action === 'external') openExternal(url);
+  };
+  // The sidebar is our own renderer: it never navigates and never opens windows.
+  sidebar.webContents.on('will-navigate', (e) => e.preventDefault());
+  sidebar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   xView.webContents.on('did-create-window', (child) => {
     attachNavigationPolicy(child.webContents, { allowHosts: () => [...settings.get().navigation.allowHosts, ...POPUP_ONLY_HOSTS], openExternal });
   });
@@ -95,7 +105,7 @@ app.whenReady().then(async () => {
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
   installAppMenu({ toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()) });
-  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
+  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { win, windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };

@@ -19,6 +19,8 @@ export interface XPilotApi {
   chooseLibraryDir(): Promise<string | null>;
   clearHistory(): Promise<void>;
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
+  /** Opens a link the user clicked in the sidebar: x.com in the main window, anything else in the browser. */
+  openLink(url: string): Promise<void>;
   onSidebarCollapsed(cb: (collapsed: boolean) => void): () => void;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onFocus(cb: (ctx: PageContext | null) => void): () => void;

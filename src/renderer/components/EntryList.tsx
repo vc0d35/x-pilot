@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Entry, State, ToolCall } from '../state';
 import { groupEntries } from '../grouping';
+import { Markdown } from './Markdown';
 
 function ToolRow({ call }: { call: ToolCall }) {
   const [open, setOpen] = useState(false);
@@ -70,7 +71,10 @@ export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; 
   return (
     <main className="entries">
       {groupEntries(entries).map((en, i) => {
-        if (en.kind === 'message') return <div key={en.message.id + i} className={`msg msg-${en.message.role}`}>{en.message.text}{en.message.streaming ? '▍' : ''}</div>;
+        if (en.kind === 'message') {
+          const body = en.message.role === 'agent' ? <Markdown text={en.message.text} /> : en.message.text;
+          return <div key={en.message.id + i} className={`msg msg-${en.message.role}`}>{body}{en.message.streaming ? '▍' : ''}</div>;
+        }
         if (en.kind === 'tools') return <ToolGroup key={en.key} calls={en.calls} />;
         if (en.kind === 'thinking') return <ThinkingRow key={'th-' + en.id} steps={en.steps} />;
         return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} />;
