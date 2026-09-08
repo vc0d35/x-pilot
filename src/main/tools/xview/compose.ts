@@ -44,7 +44,7 @@ export const composePost: ToolModule<XViewToolCtx> = {
 export const submitPost: ToolModule<XViewToolCtx> = {
   spec: {
     name: 'x_submit_post',
-    description: 'Sends the draft created by x_compose_post. In confirm mode the user must click Post in the sidebar first; in autonomous mode it posts immediately. Returns posted=true with the new post URL when available.',
+    description: 'Sends the draft created by x_compose_post. In confirm mode the user must click Post in the sidebar first; in autonomous mode it posts immediately. Returns posted=true with the new post URL when available; posted=false with status cancelled_by_user means the user declined (their decision is final).',
     inputSchema: { type: 'object', properties: { draftId: { type: 'string' } }, required: ['draftId'], additionalProperties: false },
     annotations: { destructiveHint: true },
   },
@@ -66,7 +66,10 @@ export const submitPost: ToolModule<XViewToolCtx> = {
       if (decision !== 'post') {
         ctx.drafts.delete(draft.id);
         await ctx.xview.navigate('https://x.com/home');
-        return ok({ posted: false, url: null, reason: decision === 'timeout' ? 'Confirmation timed out' : 'Cancelled by the user' });
+        // A decline is the user's decision, not an error: say so unambiguously so the agent does not retry.
+        return ok(decision === 'timeout'
+          ? { posted: false, status: 'confirmation_timed_out', url: null, reason: 'The user did not respond to the confirmation within 5 minutes; the draft was discarded.' }
+          : { posted: false, status: 'cancelled_by_user', url: null, reason: 'The user reviewed the draft and chose not to post it; the draft was discarded.' });
       }
       // The decision can arrive minutes later; re-read the composer so we only click Post
       // on the exact text the user approved.

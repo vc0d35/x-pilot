@@ -71,7 +71,7 @@ describe('x_submit_post', () => {
     const p = submitPost.execute({ draftId: draft.id }, c);
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'cancel');
-    expect(await p).toEqual(ok({ posted: false, url: null, reason: 'Cancelled by the user' }));
+    expect(await p).toEqual(ok({ posted: false, status: 'cancelled_by_user', url: null, reason: 'The user reviewed the draft and chose not to post it; the draft was discarded.' }));
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/home');
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything());
   });
