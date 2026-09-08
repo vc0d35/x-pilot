@@ -16,7 +16,7 @@ button { background: transparent; border: 1px solid var(--line); border-radius: 
 button:hover { background: var(--raised); }
 button:disabled { opacity: .45; cursor: default; }
 button.link { border: 0; padding: 0; text-decoration: underline; color: var(--muted); }
-button.icon { border: 0; padding: 2px 6px; color: var(--muted); }
+button.icon { border: 0; padding: 3px 5px; color: var(--muted); display: inline-flex; align-items: center; }
 button.icon:hover, button.icon-active { color: var(--fg); background: var(--raised); }
 a { color: inherit; }
 code { font: inherit; }
