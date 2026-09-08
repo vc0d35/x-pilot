@@ -65,7 +65,7 @@ copy it to `build/embedded.provisionprofile` (git-ignored).
 
 ```bash
 npm run sign-dev            # derives your Team ID, embeds the profile, re-signs node_modules/electron
-XPILOT_TEAM_ID=<printed>  npm run dev
+XPILOT_TEAM_ID=<printed>  npm run dev   # --watch is on: main/preload changes restart the app, renderer changes hot-reload
 ```
 
 The script prints `passkeys ENABLED` or, without a profile, `passkeys DISABLED` and
