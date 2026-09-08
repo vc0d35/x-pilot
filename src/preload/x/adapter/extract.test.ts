@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats, postFromArticleUrl } from './extract';
+import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats, postFromArticleUrl , extractArticle } from './extract';
 import { SEL } from './selectors';
 
 const here = import.meta.url;
@@ -88,5 +88,17 @@ describe('status page extraction', () => {
   it('falls back to the first article when no permalink matches', () => {
     const main = findMainArticle(document, 'https://x.com/i/article/555')!;
     expect(extractPost(main, 'https://x.com/i/article/555')!.id).toBe('111');
+  });
+});
+
+describe('article extraction', () => {
+  it('reads the dedicated title element and only the rich-text body, excluding author chrome', () => {
+    document.body.innerHTML = fixture('x-article.html');
+    const a = extractArticle(document)!;
+    expect(a.title).toBe('On Compilers');
+    expect(a.body).toContain('machine code');
+    expect(a.body).toContain('Heading');
+    expect(a.body).not.toContain('Follow');
+    expect(a.body).not.toContain('11217');
   });
 });

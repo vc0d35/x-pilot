@@ -16,7 +16,9 @@ export const SEL = {
   homeTab: '[role="tab"]',
   // Long-form X Articles. Verify against a captured fixture; both known test ids are tried.
   articleView: '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"]',
-  articleTitle: 'h1',
+  /** The rich-text body only (the read view also contains the author header and follow controls). */
+  articleBody: '[data-testid="twitterArticleRichTextView"]',
+  articleTitle: '[data-testid="twitter-article-title"]',
 } as const;
 
 export const RESERVED_TOP_LEVEL = new Set(['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i', 'compose', 'intent', 'login', 'signup', 'logout', 'bookmarks', 'lists', 'communities', 'jobs', 'premium', 'tos', 'privacy']);

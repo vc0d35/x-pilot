@@ -153,8 +153,9 @@ export function extractThread(root: ParentNode, main: Element, authorHandle: str
 export function extractArticle(root: ParentNode): { title: string; body: string } | null {
   const view = root.querySelector(SEL.articleView);
   if (!view) return null;
-  const title = (root.querySelector(SEL.articleTitle)?.textContent ?? '').trim();
-  return { title, body: textWithEmoji(view) };
+  const title = (root.querySelector(SEL.articleTitle)?.textContent ?? root.querySelector('h1')?.textContent ?? '').trim();
+  const body = root.querySelector(SEL.articleBody) ?? view;
+  return { title, body: textWithEmoji(body) };
 }
 
 export function extractComposer(root: ParentNode): { present: boolean; text: string; canSubmit: boolean } {
