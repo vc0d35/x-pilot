@@ -20,6 +20,8 @@ export const SettingsSchema = z.object({
     }),
   }),
   navigation: z.object({ allowHosts: z.array(z.string()).default(DEFAULT_ALLOW_HOSTS) }),
+  /** One-time first-run card: false until the user dismisses it. */
+  ui: z.object({ onboarded: z.boolean().default(false) }),
   threadId: z.string().nullable().default(null),
   window: z.object({
     bounds: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().default(null),
@@ -51,6 +53,7 @@ export function normalizeSettings(raw: unknown): Settings {
     library: isObj(r.library) ? r.library : {},
     agent: { ...(isObj(r.agent) ? r.agent : {}), codex: isObj(r.agent) && isObj((r.agent as Record<string, unknown>).codex) ? (r.agent as Record<string, unknown>).codex : {} },
     navigation: isObj(r.navigation) ? r.navigation : {},
+    ui: isObj(r.ui) ? r.ui : {},
     threadId: r.threadId ?? null,
     window: isObj(r.window) ? r.window : {},
     threadToolsHash: r.threadToolsHash ?? null,

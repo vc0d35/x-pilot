@@ -6,7 +6,7 @@ import type { ApprovalBroker } from '../../approvals';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
 import { JsonRpcError, JsonRpcStdio } from './jsonrpc';
-import { CODEX_MISSING_MESSAGE, resolveCodexBinary } from './binary';
+import { CODEX_MISSING_MESSAGE, codexSpawnEnv, resolveCodexBinary } from './binary';
 
 export interface CodexProviderDeps {
   callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
@@ -96,7 +96,7 @@ export class CodexProvider implements AgentProvider {
     this.stderrTail = '';
     this.spawnError = null;
     this.emit({ type: 'status', status: 'starting' });
-    const proc = this.deps.spawn ? this.deps.spawn() : nodeSpawn(await this.resolveBinary(opts), ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = this.deps.spawn ? this.deps.spawn() : await this.spawnCodex(opts);
     this.proc = proc;
     // An unread stderr pipe fills at 64 KB and blocks the child forever, so always drain it.
     proc.stderr.setEncoding('utf8');
@@ -165,6 +165,11 @@ export class CodexProvider implements AgentProvider {
     this.emit({ type: 'thread', threadId: this.threadId });
     this.emit({ type: 'status', status: 'ready' });
     return { threadId: this.threadId };
+  }
+
+  private async spawnCodex(opts: StartOptions): Promise<ChildProcessWithoutNullStreams> {
+    const binary = await this.resolveBinary(opts);
+    return nodeSpawn(binary, ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'], env: await codexSpawnEnv(binary) });
   }
 
   private async resolveBinary(opts: StartOptions): Promise<string> {

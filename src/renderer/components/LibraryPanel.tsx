@@ -9,7 +9,7 @@ export function LibraryPanel() {
     setError(null);
     window.xpilot.openPdf(it.path).catch((err: unknown) => setError({ id: it.id, message: err instanceof Error ? err.message : String(err) }));
   };
-  if (items.length === 0) return <div className="panel"><p>No PDFs yet. Ask the agent to "save this as a PDF".</p></div>;
+  if (items.length === 0) return <div className="panel"><p className="hint">No PDFs yet. Open an article on X and ask the agent to &ldquo;save this as a PDF&rdquo;; it lands in your library folder (Settings) and is listed here.</p></div>;
   return (
     <div className="panel">
       {items.map((it) => (

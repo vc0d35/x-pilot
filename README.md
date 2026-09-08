@@ -56,7 +56,16 @@ Some behaviour can only be checked against the real site. [docs/manual-test.md](
 npm run dist
 ```
 
-This builds and runs electron-builder for macOS. Signing and notarization for distribution are tracked in [docs/release-todo.md](docs/release-todo.md).
+Builds, renders the entitlements and runs electron-builder for macOS. It writes a DMG and a ZIP for each architecture into `dist/`:
+
+```
+XPilot-<version>-arm64.dmg   XPilot-<version>-arm64.zip
+XPilot-<version>-x64.dmg     XPilot-<version>-x64.zip
+```
+
+A fresh clone needs no secrets. Without an Apple certificate the build is unsigned, which is fine for personal use: macOS blocks the first launch, so right-click the app in Applications and choose Open, then confirm. Without `XPILOT_TEAM_ID` the passkey entitlement is left out (an app carrying it without a provisioning profile is killed at launch), so Touch ID login is off in that build; password and code login work. See [docs/passkeys.md](docs/passkeys.md) to build with passkeys.
+
+Signed and notarized builds come from the tag workflow (`.github/workflows/release.yml`): pushing a `v*` tag runs typecheck, tests and the build, then publishes a draft GitHub release with the four artifacts attached. It signs and notarizes when these repository secrets exist, and produces unsigned artifacts when they do not: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, and optionally `XPILOT_TEAM_ID`. Remaining release work is tracked in [docs/release-todo.md](docs/release-todo.md).
 
 ## Learn more
 

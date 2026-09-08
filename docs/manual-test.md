@@ -68,3 +68,10 @@ Run `npm run dev`, logged into x.com in the X view.
 Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --list` and
 `node scripts/inspect.mjs x "document.title"` (targets: x, bg, sidebar, or a URL substring;
 `--screenshot file.png` captures the page).
+
+## First run and setup
+- [ ] Fresh profile (`XPILOT_USER_DATA=$(mktemp -d) npm run dev`): the onboarding card shows above the composer; "Got it" dismisses it for good; History, Library and Tasks show their empty states.
+- [ ] Settings → Codex binary → a bogus path, then reconnect: the setup card says Codex was not found, with install and login commands and a Try again button; clearing the path and Try again removes the card.
+- [ ] `codex logout` in a terminal, then send a message: the card says you are logged out and shows `codex login`; log in, Try again, card disappears.
+- [ ] Packaged build (`npm run dist`, open `dist/mac-arm64/XPilot.app`) from Finder: Codex is found without a terminal PATH.
+

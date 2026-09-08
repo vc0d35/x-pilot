@@ -18,9 +18,13 @@ export interface State {
   activity: { activity: 'thinking' | 'tool' | 'writing'; detail?: string } | null;
   /** Id of the turn in progress; thinking events are folded into one entry per turn. */
   turnId: string | null;
+  /** Last thing that went wrong (a failed status or a failed turn); cleared when the agent restarts. */
+  failure: { message: string } | null;
+  /** True once a turn has completed in this session, so a stale failure stops shaping the UI. */
+  everSucceeded: boolean;
 }
 
-export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null, turnId: null };
+export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null, turnId: null, failure: null, everSucceeded: false };
 
 let seq = 0;
 const localId = () => `local-${++seq}`;
@@ -28,9 +32,15 @@ const localId = () => `local-${++seq}`;
 export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
   switch (e.type) {
     case 'reset':
-      return { ...state, entries: [], running: false };
-    case 'status':
-      return { ...state, status: e.status, statusMessage: e.message, running: e.status === 'running' };
+      return { ...state, entries: [], running: false, failure: null };
+    case 'status': {
+      // 'starting' is the one status that means a fresh attempt, so it is what clears a failure:
+      // 'ready' follows a failed turn (Codex reports auth errors there) and must not clear it.
+      const failure = e.status === 'error' || e.status === 'disconnected'
+        ? { message: e.message ?? `Agent ${e.status}` }
+        : e.status === 'starting' ? null : state.failure;
+      return { ...state, status: e.status, statusMessage: e.message, running: e.status === 'running', failure };
+    }
     case 'thread':
       return { ...state, threadId: e.threadId };
     case 'user.message':
@@ -43,10 +53,18 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'activity':
       return { ...state, activity: e.detail ? { activity: e.activity, detail: e.detail } : { activity: e.activity } };
     case 'turn.completed': {
-      const entries = e.status === 'failed'
+      const failed = e.status === 'failed';
+      const entries = failed
         ? [...state.entries, { kind: 'message' as const, message: { id: localId(), role: 'system' as const, text: `Turn failed: ${e.error ?? 'unknown error'}` } }]
         : state.entries;
-      return { ...state, running: false, entries, activity: null };
+      return {
+        ...state,
+        running: false,
+        entries,
+        activity: null,
+        failure: failed ? { message: e.error ?? 'unknown error' } : null,
+        everSucceeded: state.everSucceeded || e.status === 'completed',
+      };
     }
     case 'message.delta': {
       const idx = state.entries.findIndex((en) => en.kind === 'message' && en.message.id === e.itemId);

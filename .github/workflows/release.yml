@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      # Without a certificate electron-builder still searches the keychain and fails the
+      # build, so tell it not to look: a secret-less repo then produces unsigned artifacts.
+      - name: Choose signing mode
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+        run: |
+          if [ -z "$CSC_LINK" ]; then
+            echo "No CSC_LINK secret: building unsigned."
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          else
+            echo "CSC_LINK secret present: signing."
+          fi
+      - name: Build and publish
+        run: npm run build && node scripts/render-entitlements.mjs && npx electron-builder --mac --publish always
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Only set XPILOT_TEAM_ID once build/embedded.provisionprofile ships with the
+          # repo: the passkey entitlement without a profile is SIGKILLed at launch.
+          XPILOT_TEAM_ID: ${{ secrets.XPILOT_TEAM_ID }}

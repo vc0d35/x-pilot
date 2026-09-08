@@ -6,7 +6,7 @@ function TasksTab() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
   const refresh = () => void window.xpilot.listTasks().then(setTasks);
   useEffect(() => { refresh(); const iv = setInterval(refresh, 15_000); return () => clearInterval(iv); }, []);
-  if (tasks.length === 0) return <p className="hint">No scheduled tasks. Ask the agent, e.g. "every hour, post a one-line Amsterdam weather update". Tasks run only while XPilot is open.</p>;
+  if (tasks.length === 0) return <p className="hint">No scheduled tasks yet. Ask for one in the chat, e.g. &ldquo;every morning at 9, summarise what I liked yesterday&rdquo;. Tasks run only while XPilot is open.</p>;
   return (
     <div>
       {tasks.map((t) => (
@@ -31,7 +31,7 @@ function TasksTab() {
 function ConversationsTab(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
   const [items, setItems] = useState<Conversation[]>([]);
   useEffect(() => { void window.xpilot.listConversations().then(setItems); }, []);
-  if (items.length === 0) return <p className="hint">No conversations yet.</p>;
+  if (items.length === 0) return <p className="hint">No conversations yet. Every thread you start in the chat is saved here, newest first.</p>;
   return (
     <div>
       {items.map((c) => (

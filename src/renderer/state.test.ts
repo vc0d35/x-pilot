@@ -45,11 +45,43 @@ describe('sidebar reducer', () => {
     expect(s.entries.at(-1)).toEqual({ kind: 'message', message: { id: expect.any(String), role: 'system', text: 'Turn failed: boom' } });
   });
 
+  it('records a failure from a failed status and clears it on the next attempt', () => {
+    let s = run([{ type: 'status', status: 'error', message: 'Codex CLI not found.' }]);
+    expect(s.failure).toEqual({ message: 'Codex CLI not found.' });
+    s = run([{ type: 'status', status: 'disconnected' }], s);
+    expect(s.failure).toEqual({ message: 'Agent disconnected' });
+    s = run([{ type: 'status', status: 'starting' }], s);
+    expect(s.failure).toBeNull();
+    expect(run([{ type: 'status', status: 'ready' }], s).failure).toBeNull();
+  });
+
+  it('keeps a failed turn\u2019s error as the failure, since the status goes back to ready after it', () => {
+    const s = run([
+      { type: 'turn.started', turnId: 't' },
+      { type: 'turn.completed', turnId: 't', status: 'failed', error: 'not logged in' },
+      { type: 'status', status: 'ready' },
+    ]);
+    expect(s.failure).toEqual({ message: 'not logged in' });
+    expect(s.everSucceeded).toBe(false);
+  });
+
+  it('marks the session as succeeded and clears the failure when a turn completes', () => {
+    const s = run([
+      { type: 'turn.started', turnId: 't1' },
+      { type: 'turn.completed', turnId: 't1', status: 'failed', error: 'boom' },
+      { type: 'turn.started', turnId: 't2' },
+      { type: 'turn.completed', turnId: 't2', status: 'completed' },
+    ]);
+    expect(s.failure).toBeNull();
+    expect(s.everSucceeded).toBe(true);
+  });
+
   it('reset clears entries but keeps status', () => {
     const s = run([{ type: 'status', status: 'ready' }, { type: 'user.message', text: 'x' }]);
     const r = reduce(s, { type: 'reset' });
     expect(r.entries).toEqual([]);
     expect(r.status).toBe('ready');
+    expect(r.failure).toBeNull();
   });
 });
 

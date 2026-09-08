@@ -44,6 +44,8 @@ app.enableSandbox();
 if (!app.requestSingleInstanceLock()) app.quit();
 else void start();
 
+for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => app.quit());
+
 async function start(): Promise<void> {
   try {
     await app.whenReady();
@@ -151,6 +153,7 @@ async function start(): Promise<void> {
       createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals, clientVersion: app.getVersion() }),
     });
     installAppMenu({
+      openExternal,
       toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()),
       focusAgentInput: () => {
         if (isSidebarCollapsed()) setSidebarCollapsed(false);
