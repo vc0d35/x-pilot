@@ -1,7 +1,8 @@
-import { Menu, app } from 'electron';
+import { Menu, app, type MenuItemConstructorOptions } from 'electron';
 
 /** Standard macOS menus plus View → Toggle Sidebar (⌘\\), the way back from a fully collapsed sidebar. */
 export function installAppMenu(deps: { toggleSidebar(): void; focusAgentInput(): void }): void {
+  const devItems: MenuItemConstructorOptions[] = app.isPackaged ? [] : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }];
   const menu = Menu.buildFromTemplate([
     { role: 'appMenu' },
     { role: 'editMenu' },
@@ -10,8 +11,8 @@ export function installAppMenu(deps: { toggleSidebar(): void; focusAgentInput():
       submenu: [
         { label: 'Toggle Sidebar', accelerator: 'CommandOrControl+\\', click: () => deps.toggleSidebar() },
         { label: 'Focus Agent Input', accelerator: 'Ctrl+D', click: () => deps.focusAgentInput() },
-        { type: 'separator' },
-        { role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' }, { role: 'togglefullscreen' },
+        ...devItems,
+        { type: 'separator' }, { role: 'togglefullscreen' },
       ],
     },
     { role: 'windowMenu' },

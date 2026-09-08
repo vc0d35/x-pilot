@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import { fixture } from '../../../../tests/fixtures';
 import { computeFocus, installFocusTracker } from './focus';
 const allVisible = () => true;
-
-const here = import.meta.url;
-const fixture = (n: string) => readFileSync(fileURLToPath(new URL(`../../../../tests/fixtures/${n}`, here)), 'utf8');
 
 describe('computeFocus', () => {
   it('lists the posts on screen, top to bottom, on timelines', () => {
@@ -50,6 +46,7 @@ describe('computeFocus', () => {
 
 describe('installFocusTracker', () => {
   beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
   it('sends only when the focused post changes', () => {
     document.body.innerHTML = fixture('x-status.html');
     let url = 'https://x.com/alice/status/111';
@@ -71,7 +68,6 @@ describe('installFocusTracker', () => {
     off();
     vi.advanceTimersByTime(500);
     expect(send).toHaveBeenCalledTimes(3);
-    vi.useRealTimers();
   });
   it('short-circuits expensive queries when URL and dialog state unchanged', () => {
     document.body.innerHTML = fixture('x-status.html');
@@ -90,6 +86,5 @@ describe('installFocusTracker', () => {
     expect(send.mock.calls[1][0]?.post).toBeNull();
     expect(send.mock.calls[1][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['111', '222']);
     off();
-    vi.useRealTimers();
   });
 });

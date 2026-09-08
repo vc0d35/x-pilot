@@ -1,7 +1,7 @@
 import { NEW_POSTS_LABEL, SEL } from './selectors';
+import type { WidgetItem, WidgetSection } from '../../../shared/widgets';
 
-export interface WidgetItem { title: string; detail: string }
-export interface WidgetSection { heading: string; items: WidgetItem[] }
+export type { WidgetItem, WidgetSection };
 
 const FALLBACK_HEADING = 'Trending';
 const BLOCK_TAGS = new Set(['DIV', 'P', 'LI', 'BR', 'H1', 'H2', 'H3']);

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createPageToolHost } from './page-tools';
+import { createPageToolHost } from './model-context-host';
 
 describe('createPageToolHost', () => {
   it('tracks registrations from the main world', () => {
@@ -7,11 +7,21 @@ describe('createPageToolHost', () => {
     let changes = 0;
     host.onChange(() => changes++);
     host.bridgeApi.registerTool({ name: 'demo-echo', description: 'd', inputSchema: { type: 'object' } });
-    host.bridgeApi.registerTool({ name: 'bad' });                     // ignored: no description
+    expect(() => host.bridgeApi.registerTool({ name: 'bad' })).toThrow(/description/);
     expect(host.list().map((t) => t.name)).toEqual(['demo-echo']);
     host.bridgeApi.unregisterTool('demo-echo');
     expect(host.list()).toEqual([]);
     expect(changes).toBe(2);
+  });
+
+  it('rejects names and descriptions the agent should never see', () => {
+    const host = createPageToolHost();
+    expect(() => host.bridgeApi.registerTool({ name: 'has space', description: 'd' })).toThrow(/name/);
+    expect(() => host.bridgeApi.registerTool({ name: 'a'.repeat(65), description: 'd' })).toThrow(/name/);
+    expect(() => host.bridgeApi.registerTool({ name: 'sneaky', description: 'x'.repeat(501) })).toThrow(/500 characters/);
+    expect(host.list()).toEqual([]);
+    host.bridgeApi.registerTool({ name: 'ok-name_1', description: 'x'.repeat(500) });
+    expect(host.list().map((t) => t.name)).toEqual(['ok-name_1']);
   });
 
   it('routes calls to the main-world callback and resolves on respond', async () => {

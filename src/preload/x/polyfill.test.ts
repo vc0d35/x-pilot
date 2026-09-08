@@ -13,40 +13,51 @@ const source = readFileSync(fileURLToPath(new URL('./polyfill.js', metaUrl)), 'u
 type Bridge = {
   registered: unknown[]; unregistered: string[]; responses: Array<[string, unknown]>;
   onCallCb: ((callId: string, name: string, args: unknown) => void) | null;
+  throwOnRegister: Error | null;
   registerTool(spec: unknown): void; unregisterTool(name: string): void;
   onCall(cb: (callId: string, name: string, args: unknown) => void): void; respond(callId: string, result: unknown): void;
 };
 
-function install(): Bridge {
+type Host = { bridge: Bridge; doc: { modelContext?: any }; nav: { modelContext?: any } };
+
+// The polyfill defines modelContext non-configurably, so each test gets fresh
+// window/document/navigator stand-ins passed in as parameters rather than the
+// shared jsdom globals.
+function install(): Host {
   const bridge: Bridge = {
-    registered: [], unregistered: [], responses: [], onCallCb: null,
-    registerTool(spec) { this.registered.push(spec); },
+    registered: [], unregistered: [], responses: [], onCallCb: null, throwOnRegister: null,
+    registerTool(spec) { if (this.throwOnRegister) throw this.throwOnRegister; this.registered.push(spec); },
     unregisterTool(name) { this.unregistered.push(name); },
     onCall(cb) { this.onCallCb = cb; },
     respond(callId, result) { this.responses.push([callId, result]); },
   };
-  (window as unknown as { __xpilot: Bridge }).__xpilot = bridge;
-  delete (document as unknown as Record<string, unknown>).modelContext;
-  new Function(source)();
-  return bridge;
+  const host: Host = { bridge, doc: {}, nav: {} };
+  new Function('window', 'document', 'navigator', source)({ __xpilot: bridge }, host.doc, host.nav);
+  return host;
 }
 
-const mc = () => (document as unknown as { modelContext: any }).modelContext;
+let host: Host;
+const mc = () => host.doc.modelContext;
 
 describe('modelContext polyfill', () => {
-  beforeEach(() => { install(); });
+  beforeEach(() => { host = install(); });
 
   it('defines document.modelContext and navigator.modelContext as the same object', () => {
     expect(mc()).toBeDefined();
-    expect((navigator as unknown as { modelContext: unknown }).modelContext).toBe(mc());
+    expect(host.nav.modelContext).toBe(mc());
+  });
+
+  it('defines modelContext non-configurably so the page cannot swap it out', () => {
+    expect(() => Object.defineProperty(host.doc, 'modelContext', { value: { evil: true } })).toThrow(TypeError);
+    expect(() => { (host.doc as any).modelContext = { evil: true }; }).toThrow(TypeError);
+    expect(mc().__xpilotPolyfill).toBe(true);
   });
 
   it('registerTool forwards the serialisable spec to the bridge and fires toolchange', async () => {
-    const bridge = (window as unknown as { __xpilot: Bridge }).__xpilot;
     let fired = 0;
     mc().addEventListener('toolchange', () => fired++);
     await mc().registerTool({ name: 'demo-echo', description: 'Echoes', inputSchema: { type: 'object', properties: { s: { type: 'string' } } }, execute: ({ s }: { s: string }) => s });
-    expect(bridge.registered).toEqual([{ name: 'demo-echo', description: 'Echoes', inputSchema: { type: 'object', properties: { s: { type: 'string' } } } }]);
+    expect(host.bridge.registered).toEqual([{ name: 'demo-echo', description: 'Echoes', inputSchema: { type: 'object', properties: { s: { type: 'string' } } } }]);
     expect(fired).toBe(1);
     await expect(mc().getTools()).resolves.toEqual([expect.objectContaining({ name: 'demo-echo' })]);
   });
@@ -58,15 +69,20 @@ describe('modelContext polyfill', () => {
     await expect(mc().registerTool({ name: 'u', description: 'd' })).rejects.toThrow();
   });
 
+  it('surfaces a bridge rejection to the page and keeps the tool unregistered', async () => {
+    host.bridge.throwOnRegister = new TypeError('Rejected tool registration: name');
+    await expect(mc().registerTool({ name: 'bad name', description: 'd', execute: () => 1 })).rejects.toThrow('Rejected tool registration');
+    await expect(mc().getTools()).resolves.toEqual([]);
+  });
+
   it('executes tools on bridge calls and responds with success/failure', async () => {
-    const bridge = (window as unknown as { __xpilot: Bridge }).__xpilot;
     await mc().registerTool({ name: 'add', description: 'adds', execute: ({ a, b }: { a: number; b: number }) => a + b });
     await mc().registerTool({ name: 'boom', description: 'throws', execute: () => { throw new Error('nope'); } });
-    bridge.onCallCb!('c1', 'add', { a: 2, b: 3 });
-    bridge.onCallCb!('c2', 'boom', {});
-    bridge.onCallCb!('c3', 'missing', {});
+    host.bridge.onCallCb!('c1', 'add', { a: 2, b: 3 });
+    host.bridge.onCallCb!('c2', 'boom', {});
+    host.bridge.onCallCb!('c3', 'missing', {});
     await new Promise((r) => setTimeout(r, 0));
-    expect(bridge.responses).toEqual([
+    expect(host.bridge.responses).toEqual([
       ['c1', { success: true, content: 5 }],
       ['c2', { success: false, error: 'nope' }],
       ['c3', { success: false, error: 'Unknown page tool: missing' }],
@@ -74,11 +90,10 @@ describe('modelContext polyfill', () => {
   });
 
   it('executeTool returns a string and unregisterTool notifies the bridge', async () => {
-    const bridge = (window as unknown as { __xpilot: Bridge }).__xpilot;
     await mc().registerTool({ name: 'obj', description: 'd', execute: () => ({ x: 1 }) });
     await expect(mc().executeTool('obj', {})).resolves.toBe('{"x":1}');
     await mc().unregisterTool('obj');
-    expect(bridge.unregistered).toEqual(['obj']);
+    expect(host.bridge.unregistered).toEqual(['obj']);
     await expect(mc().getTools()).resolves.toEqual([]);
   });
 });

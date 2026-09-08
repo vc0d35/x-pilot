@@ -1,6 +1,8 @@
 import { Cron } from 'croner';
 import type { TaskSchedule } from '../../shared/sidebar-api';
 
+export { describeSchedule } from '../../shared/schedule-format';
+
 const DURATION = /^(\d+)\s*(m|h|d)$/i;
 const UNIT_MS = { m: 60_000, h: 3_600_000, d: 86_400_000 } as const;
 const MIN_EVERY_MS = 5 * 60_000;
@@ -30,5 +32,3 @@ export function nextRun(schedule: TaskSchedule, from: Date): Date {
   if (!next) throw new Error(`cron "${schedule.cron}" never runs`);
   return next;
 }
-
-export const describeSchedule = (s: TaskSchedule): string => ('every' in s ? `every ${s.every}` : `cron ${s.cron}`);

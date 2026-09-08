@@ -37,6 +37,15 @@ describe('exportPdf', () => {
     expect(win.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses to write outside the output folder when the page reports a traversing id', async () => {
+    const win = fakeWindow({ executeJavaScript: vi.fn(async () => ({ title: 't', author: 'a', id: '../../../etc/passwd' })) });
+    const dir = outDir();
+    const result = await exportPdf({ url: 'https://x.com/alice/status/111', outDir: dir }, { createWindow: () => win });
+    expect(result.path.startsWith(dir + '/')).toBe(true);
+    expect(readdirSync(dir)).toEqual([result.path.split('/').pop()]);
+    expect(result.path).not.toContain('..');
+  });
+
   it('tolerates an ERR_ABORTED rejection from loadURL', async () => {
     const win = fakeWindow({ loadURL: vi.fn(async () => { throw new Error('ERR_ABORTED (-3)'); }) });
     const dir = outDir();

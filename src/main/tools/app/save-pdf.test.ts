@@ -38,7 +38,7 @@ describe('library tools', () => {
     c.history.addLibraryItem({ postId: null, url: 'u', path: '/lib/a.pdf', title: 'A' });
     expect((await listLibrary.execute({}, c)) as { content: unknown[] }).toMatchObject({ content: [expect.objectContaining({ path: '/lib/a.pdf' })] });
     expect(await openPdf.execute({ path: '/lib/a.pdf' }, c)).toEqual(ok({ opened: true }));
-    expect(await openPdf.execute({ path: '/etc/passwd' }, c)).toEqual(fail('Refusing to open a file outside the library folder'));
+    expect(await openPdf.execute({ path: '/etc/passwd' }, c)).toEqual(fail('Refusing to open a file that is not a PDF in the library'));
     c.openPath.mockResolvedValueOnce('No app');
     expect(await openPdf.execute({ path: '/lib/a.pdf' }, c)).toEqual(fail('Could not open PDF: No app'));
   });
@@ -47,6 +47,6 @@ describe('library tools', () => {
     c.history.addLibraryItem({ postId: null, url: 'u', path: '/old-folder/b.pdf', title: 'B' });
     expect(await openPdf.execute({ path: '/old-folder/b.pdf' }, c)).toEqual(ok({ opened: true }));
     expect(c.openPath).toHaveBeenCalledWith('/old-folder/b.pdf');
-    expect(await openPdf.execute({ path: '/old-folder/c.pdf' }, c)).toEqual(fail('Refusing to open a file outside the library folder'));
+    expect(await openPdf.execute({ path: '/old-folder/c.pdf' }, c)).toEqual(fail('Refusing to open a file that is not a PDF in the library'));
   });
 });

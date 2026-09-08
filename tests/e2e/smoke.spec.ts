@@ -49,15 +49,20 @@ test('external links are routed to the system browser', async () => {
   await expect.poll(() => inMain((t) => t.openExternalCalls)).toContain('https://example.com/outside');
 });
 
-test('the sidebar preload loads and the React header renders', async () => {
-  const built = readFileSync(resolve('out/preload/sidebar.js'), 'utf8');
-  expect(built).not.toMatch(/require\("\.\//); // sandboxed preload must be self-contained
+test('both preloads are self-contained bundles and the React header renders', async () => {
+  for (const name of ['sidebar', 'x']) {
+    const built = readFileSync(resolve(`out/preload/${name}.js`), 'utf8');
+    // A sandboxed preload can require() only electron and node builtins.
+    expect(built, name).not.toMatch(/require\("\.\//);
+    expect(built, name).not.toMatch(/require\("zod"\)/);
+  }
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 }).toBe('object');
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('XPilot');
 });
 
-// Network-dependent: loads x.com search (logged out) in the hidden session window.
+// Network-dependent (set XPILOT_E2E_NETWORK=1 to run): loads x.com search (logged out) in the hidden session window.
 test('x_search runs in the hidden background window without moving the visible view', async () => {
+  test.skip(!process.env.XPILOT_E2E_NETWORK, 'needs network');
   const before = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
   const r = await inMain((t) => t.registry.call('x_search', { query: 'electron' }));
   expect(r.success).toBe(true);
@@ -66,8 +71,9 @@ test('x_search runs in the hidden background window without moving the visible v
   expect(after).toBe(before);
 });
 
-// Network-dependent: resolving the (dead) t.co link makes one HEAD request.
+// Network-dependent (set XPILOT_E2E_NETWORK=1 to run): resolving the (dead) t.co link makes one HEAD request.
 test('a t.co popup opens no window and is routed without touching the visible view', async () => {
+  test.skip(!process.env.XPILOT_E2E_NETWORK, 'needs network');
   const beforeWindows = await inMain((t) => t.windowCount());
   const beforeUrl = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
   await inMain((t) => t.xView.webContents.executeJavaScript("window.open('https://t.co/xpilot-does-not-exist', '_blank')"));

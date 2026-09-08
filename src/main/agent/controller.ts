@@ -8,6 +8,18 @@ import type { HistoryStore } from '../history/store';
 import type { Conversation } from '../../shared/sidebar-api';
 import type { AgentProvider, ModelInfo } from './provider';
 
+/** Tool output beyond this is elided in the stored transcript; a full page read can be megabytes. */
+export const MAX_TRANSCRIPT_OUTPUT = 4000;
+
+/** Events worth keeping in a conversation transcript (deltas and activity are transient). */
+export const RECORDED = new Set<AgentEvent['type']>(['user.message', 'message.completed', 'thinking.completed', 'tool.started', 'tool.completed', 'turn.completed']);
+
+/** The form of an event that goes into a stored transcript. */
+export function transcriptEvent(e: AgentEvent): AgentEvent {
+  if (e.type !== 'tool.completed' || e.output.length <= MAX_TRANSCRIPT_OUTPUT) return e;
+  return { ...e, output: e.output.slice(0, MAX_TRANSCRIPT_OUTPUT) + '… [truncated]' };
+}
+
 /** Stable fingerprint of the dynamic tools a thread was started with. */
 export function toolsFingerprint(tools: ToolSpec[]): string {
   return createHash('sha256').update(JSON.stringify(tools.map((t) => [t.name, t.description, t.inputSchema]))).digest('hex');
@@ -27,6 +39,7 @@ export class AgentController {
   private threadId: string | null = null;
   private unsubscribe: (() => void) | null = null;
   private restartedOnce = false;
+  private restartPending = false;
   private generation = 0;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
@@ -34,15 +47,20 @@ export class AgentController {
 
   onEvent(cb: (e: AgentEvent) => void): () => void { this.listeners.add(cb); return () => this.listeners.delete(cb); }
 
-  /** Events worth keeping in a conversation transcript (deltas and activity are transient). */
-  private static readonly RECORDED = new Set<AgentEvent['type']>(['user.message', 'message.completed', 'thinking.completed', 'tool.started', 'tool.completed', 'turn.completed']);
+  /** Restarts the provider now, or after the turn in flight so a running answer is not cut off. */
+  restartWhenIdle(): void {
+    if (this.provider?.isRunning()) { this.restartPending = true; return; }
+    this.restartPending = false;
+    void this.start({ resume: true });
+  }
 
   async start(opts: { resume: boolean; threadId?: string | null }): Promise<void> {
     const gen = ++this.generation;
     await this.stop();
     if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
     if (!opts.resume) this.deps.settings.update({ threadId: null, threadToolsHash: null });
-    else if (opts.threadId) this.deps.settings.update({ threadId: opts.threadId, threadToolsHash: this.deps.history?.getConversation(opts.threadId) ? toolsFingerprint(this.deps.registry.list()) : null });
+    // Resuming a stored conversation compares the hash the thread was started with, not the current one.
+    else if (opts.threadId) this.deps.settings.update({ threadId: opts.threadId, threadToolsHash: this.deps.history?.getConversation(opts.threadId)?.toolsHash ?? null });
     this.threadId = null;
     const tools = this.deps.registry.list();
     const toolsHash = toolsFingerprint(tools);
@@ -50,13 +68,16 @@ export class AgentController {
     let resumeThreadId: string | null = null;
     if (opts.resume && stored.threadId) {
       if (stored.threadToolsHash === toolsHash) resumeThreadId = stored.threadId;
-      else console.log('[xpilot] tool list changed since the stored thread; starting a fresh thread');
+      else this.emit({ type: 'status', status: 'starting', message: 'XPilot\u2019s tools changed since that conversation, so it cannot be resumed; starting a fresh thread.' });
     }
     const provider = this.deps.createProvider();
     const unsubscribe = provider.onEvent((e) => {
       this.emit(e);
-      if (this.threadId && AgentController.RECORDED.has(e.type)) this.deps.history?.appendEvent(this.threadId, e);
-      if (e.type === 'turn.completed') this.restartedOnce = false;
+      if (this.threadId && RECORDED.has(e.type)) this.deps.history?.appendEvent(this.threadId, transcriptEvent(e));
+      if (e.type === 'turn.completed') {
+        this.restartedOnce = false;
+        if (this.restartPending && this.provider === provider) { this.restartPending = false; void this.start({ resume: true }); }
+      }
       if (e.type === 'status' && e.status === 'disconnected' && this.provider === provider && !this.restartedOnce) {
         this.restartedOnce = true;
         this.emit({ type: 'status', status: 'starting', message: 'Codex exited; restarting once' });

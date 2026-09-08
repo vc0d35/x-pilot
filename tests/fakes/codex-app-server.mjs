@@ -1,6 +1,7 @@
 // Fake `codex app-server` used by provider tests. Reads JSONL on stdin, writes JSONL on stdout.
 import { createInterface } from 'node:readline';
 const out = (m) => process.stdout.write(JSON.stringify(m) + '\n');
+if (process.argv.includes('ignore-sigterm')) process.on('SIGTERM', () => {});
 const rl = createInterface({ input: process.stdin });
 let threadId = 'thread-1';
 rl.on('line', async (line) => {
@@ -37,6 +38,14 @@ rl.on('line', async (line) => {
       out({ jsonrpc: '2.0', id: 'req-die-ack', method: 'item/tool/requestUserInput', params: { threadId, turnId, itemId: 'cmd-die', questions: [] } });
       return;
     }
+    if (userText.includes('PANIC_EXIT')) {
+      process.stderr.write('Error: codex panicked at src/main.rs:42\n  stack frame one\n', () => process.exit(9));
+      return;
+    }
+    if (userText.includes('ASK_INPUT')) {
+      out({ jsonrpc: '2.0', id: 'req-input', method: 'item/tool/requestUserInput', params: { threadId, turnId, itemId: 'ask-1', questions: [{ id: 'q1', prompt: 'Which account?' }] } });
+      return;
+    }
     if (userText.includes('APPROVE')) {
       out({ jsonrpc: '2.0', id: 'req-approve', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-1', command: 'ls', cwd: '/tmp' } });
       return; // continues in the response branch below
@@ -58,6 +67,11 @@ rl.on('line', async (line) => {
   }
   // responses to our server requests
   if (id === 'req-die-ack') return process.exit(3);
+  if (id === 'req-input') {
+    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'agentMessage', id: 'msg-3', text: 'input-reply=' + JSON.stringify(msg.error ?? msg.result ?? null), phase: null, memoryCitation: null, delivery: null, questions: null } } });
+    out({ jsonrpc: '2.0', method: 'turn/completed', params: { threadId, turn: { id: 'turn-1', items: [], status: 'completed', error: null } } });
+    return;
+  }
   if (id === 'req-1') {
     const text = msg.result.contentItems[0].text;
     out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'dynamicToolCall', id: 'call-1', namespace: null, tool: 'x_get_page_state', arguments: {}, status: 'completed', contentItems: msg.result.contentItems, success: msg.result.success, durationMs: 1 } } });

@@ -29,8 +29,8 @@
       if (tools.has(tool.name)) throw new DOMException(`Tool already registered: ${tool.name}`, 'InvalidStateError');
       const spec = { name: tool.name, description: tool.description, inputSchema: toPlain(tool.inputSchema) || { type: 'object', properties: {} } };
       if (tool.annotations) spec.annotations = toPlain(tool.annotations);
-      tools.set(tool.name, { spec, execute: tool.execute });
       bridge.registerTool(spec);
+      tools.set(tool.name, { spec, execute: tool.execute });
       fireChange();
       if (native && typeof native.registerTool === 'function') { try { await native.registerTool(tool, options); } catch (_) { /* native is optional */ } }
     },
@@ -75,7 +75,7 @@
     }
   });
 
-  const desc = { value: api, configurable: true, writable: false, enumerable: false };
+  const desc = { value: api, configurable: false, writable: false, enumerable: false };
   Object.defineProperty(document, 'modelContext', desc);
   Object.defineProperty(navigator, 'modelContext', desc);
 })();

@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../../tests/fixtures';
 import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats, postFromArticleUrl , extractArticle } from './extract';
 import { SEL } from './selectors';
-
-const here = import.meta.url;
-const fixture = (name: string) => readFileSync(fileURLToPath(new URL(`../../../../tests/fixtures/${name}`, here)), 'utf8');
 
 describe('pageKindFromUrl', () => {
   it.each([

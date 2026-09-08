@@ -2,7 +2,7 @@ import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'elec
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema } from '../shared/page';
-import { isInsideDir } from './library/paths';
+import { isOpenablePdf } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
@@ -64,7 +64,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
   ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {
     const { path } = z.object({ path: z.string() }).parse(raw);
-    if (!isInsideDir(path, libraryDir()) && !history.hasLibraryPath(path)) throw new Error('outside library');
+    if (!isOpenablePdf(path, libraryDir(), (p) => history.hasLibraryPath(p))) throw new Error('not a library PDF');
     await openPath(path);
   }));
   ipcMain.handle(IPC.libraryChooseDir, guarded(async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; }));

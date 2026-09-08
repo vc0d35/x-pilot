@@ -6,7 +6,11 @@ import type { AgentEvent } from '../../shared/agent';
 export interface HistoryQuery { query: string; author?: string; since?: string; until?: string; limit?: number }
 export interface HistoryHit { id: string; url: string; authorHandle: string; authorName: string; kind: string; snippet: string; likedAt: string; unlikedAt: string | null }
 
-const SCHEMA = `
+/**
+ * Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a
+ * released entry: add a new one, so installs at any older version reach the same schema.
+ */
+const MIGRATIONS: string[] = [`
 CREATE TABLE IF NOT EXISTS posts(
   id TEXT PRIMARY KEY, url TEXT NOT NULL, author_handle TEXT NOT NULL, author_name TEXT NOT NULL,
   text TEXT NOT NULL, extra TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, posted_at TEXT,
@@ -38,7 +42,35 @@ CREATE TABLE IF NOT EXISTS tasks(
   thread_mode TEXT NOT NULL DEFAULT 'resume', thread_id TEXT, enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL, last_run_at TEXT, last_status TEXT, next_run_at TEXT
 );
-`;
+`];
+
+const V1_TABLES = ['posts', 'posts_fts', 'library', 'conversations', 'conversation_events', 'tasks'];
+
+function tableExists(db: DatabaseSync, name: string): boolean {
+  return db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(name) !== undefined;
+}
+
+/** Brings the database up to the current schema version, atomically. */
+export function migrate(db: DatabaseSync): number {
+  let version = Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
+  // Databases created before migrations existed carry version 0 with the v1 schema already in place.
+  if (version === 0 && V1_TABLES.every((t) => tableExists(db, t))) {
+    db.exec('PRAGMA user_version = 1');
+    version = 1;
+  }
+  if (version >= MIGRATIONS.length) return version;
+  const target = MIGRATIONS.length;
+  try {
+    db.exec('BEGIN');
+    for (let v = version; v < target; v++) db.exec(MIGRATIONS[v]);
+    db.exec(`PRAGMA user_version = ${target}`);
+    db.exec('COMMIT');
+  } catch (err) {
+    try { db.exec('ROLLBACK'); } catch { /* the failed statement may have aborted the transaction already */ }
+    throw new Error(`XPilot could not upgrade its history database from version ${version} to ${target}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  return target;
+}
 
 const TITLE_MAX = 60;
 /** ISO timestamps that never repeat within one process, so ordering by updated_at is deterministic. */
@@ -58,7 +90,7 @@ export class HistoryStore {
   constructor(path: string) {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL');
-    this.db.exec(SCHEMA);
+    migrate(this.db);
   }
 
   recordLike(post: Post, likedAt = new Date().toISOString()): void {
@@ -192,7 +224,7 @@ export class HistoryStore {
 }
 
 function rowToConversation(r: Record<string, unknown>): Conversation {
-  return { threadId: r.thread_id as string, title: r.title as string, kind: r.kind as 'chat' | 'task', taskId: (r.task_id as number | null) ?? null, createdAt: r.created_at as string, updatedAt: r.updated_at as string };
+  return { threadId: r.thread_id as string, title: r.title as string, kind: r.kind as 'chat' | 'task', taskId: (r.task_id as number | null) ?? null, createdAt: r.created_at as string, updatedAt: r.updated_at as string, toolsHash: (r.tools_hash as string | null) ?? null };
 }
 
 function rowToTask(r: Record<string, unknown>): ScheduledTask {

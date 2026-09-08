@@ -1,8 +1,10 @@
 import { ok, type ToolModule } from '../../../shared/tools';
+import type { WidgetSection } from '../../../shared/widgets';
 import type { XViewToolCtx } from './context';
 import { VIEW_ARG, isToolResult, parseView, pickView } from './target';
 
-export interface WidgetSection { heading: string; items: Array<{ title: string; detail: string }> }
+export type { WidgetSection };
+
 interface WidgetsPayload { url: string; sections: WidgetSection[] }
 
 /** Explore shows both widgets regardless of which Home tab the user is on. */

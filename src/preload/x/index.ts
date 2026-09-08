@@ -2,7 +2,7 @@ import { contextBridge, ipcRenderer, webFrame } from 'electron';
 import polyfillSource from './polyfill.js?raw';
 import { fail, type ToolModule, type ToolResult } from '../../shared/tools';
 import { IPC } from '../../shared/ipc';
-import { createPageToolHost } from './page-tools';
+import { createPageToolHost } from './model-context-host';
 import type { PreloadCtx } from './context';
 import { adapterTools } from './adapter/tools';
 import { installLikeCapture } from './adapter/capture';

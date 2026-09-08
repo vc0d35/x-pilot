@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { fail, ToolResultSchema, type ToolResult, type ToolSpec } from '../../shared/tools';
 
 const PageSpecSchema = z.object({
-  name: z.string().min(1),
-  description: z.string().min(1),
+  name: z.string().regex(/^[a-zA-Z0-9_-]{1,64}$/, 'name must be 1-64 characters of a-z, A-Z, 0-9, _ or -'),
+  description: z.string().min(1).max(500, 'description must be at most 500 characters'),
   inputSchema: z.record(z.string(), z.unknown()).default({ type: 'object', properties: {} }),
   annotations: z.record(z.string(), z.unknown()).optional(),
 });
@@ -35,7 +35,7 @@ export function createPageToolHost(): PageToolHost {
     bridgeApi: {
       registerTool(spec) {
         const parsed = PageSpecSchema.safeParse(spec);
-        if (!parsed.success) return;
+        if (!parsed.success) throw new TypeError(`Rejected tool registration: ${parsed.error.issues.map((i) => `${i.path.join('.') || 'spec'}: ${i.message}`).join('; ')}`);
         specs.set(parsed.data.name, parsed.data as ToolSpec);
         emit();
       },

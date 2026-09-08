@@ -1,7 +1,6 @@
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 import { isShortLinkHost } from './shortlink';
 
-export { DEFAULT_ALLOW_HOSTS };
 export const POPUP_ONLY_HOSTS = ['accounts.google.com', 'appleid.apple.com'];
 
 export type NavigationDecision = 'allow' | 'external' | 'deny';
@@ -19,8 +18,12 @@ export function decideNavigation(url: string, allowHosts: string[], opts: { isPo
   try { parsed = new URL(url); } catch { return 'deny'; }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return 'deny';
   const host = parsed.hostname.toLowerCase();
-  if (allowHosts.some((p) => hostMatches(host, p))) return 'allow';
-  if (opts.isPopup && POPUP_ONLY_HOSTS.some((p) => hostMatches(host, p))) return 'allow';
+  // Only https loads in-app: a downgraded link to an allowlisted host goes to the browser
+  // rather than putting the X session on a connection anyone can rewrite.
+  if (parsed.protocol === 'https:') {
+    if (allowHosts.some((p) => hostMatches(host, p))) return 'allow';
+    if (opts.isPopup && POPUP_ONLY_HOSTS.some((p) => hostMatches(host, p))) return 'allow';
+  }
   return 'external';
 }
 

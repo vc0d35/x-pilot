@@ -19,7 +19,7 @@ export class BackgroundXView {
     if (this.controller && this.win && !this.win.isDestroyed()) return this.controller;
     const win = new BrowserWindow({
       show: false, width: 1100, height: 1400,
-      webPreferences: { partition: 'persist:x', preload: this.opts.preload, contextIsolation: true, nodeIntegration: false, sandbox: false },
+      webPreferences: { partition: 'persist:x', preload: this.opts.preload, contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     const contents: WebContents = win.webContents;
     attachNavigationPolicy(contents, { allowHosts: this.opts.allowHosts, openExternal: () => { /* background reads never open external pages */ } });

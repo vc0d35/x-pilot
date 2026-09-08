@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reduce, initialState, type State } from './state';
+import { reduce, initialState, reportsBrokenAdapter, type State } from './state';
 import type { AgentEvent } from '../shared/agent';
 
 const run = (events: AgentEvent[], s: State = initialState) => events.reduce(reduce, s);
@@ -78,4 +78,20 @@ it('folds all thinking in a turn into one entry, even around tool calls', () => 
   expect(s.entries.map((e) => e.kind)).toEqual(['thinking', 'tool', 'message', 'thinking']);
   expect(s.entries[0]).toEqual({ kind: 'thinking', id: 't1', steps: [{ id: 'r1', text: 'Need state.' }, { id: 'c2', text: 'Now answer.' }] });
   expect(s.entries[3]).toEqual({ kind: 'thinking', id: 't2', steps: [{ id: 'r9', text: 'Second turn' }] });
+});
+
+describe('reportsBrokenAdapter', () => {
+  it('finds adapterHealthy: false wherever the tool output puts it', () => {
+    expect(reportsBrokenAdapter('{"url":"https://x.com/home","adapterHealthy":false}')).toBe(true);
+    expect(reportsBrokenAdapter('{"source":"visible","state":{"adapterHealthy":false}}')).toBe(true);
+    expect(reportsBrokenAdapter('{"content":[{"type":"text","text":"{\\"adapterHealthy\\":false}"}]}')).toBe(true);
+  });
+
+  it('is false for healthy, unrelated, malformed and missing output', () => {
+    expect(reportsBrokenAdapter('{"adapterHealthy":true}')).toBe(false);
+    expect(reportsBrokenAdapter('{"note":"adapterHealthy false"}')).toBe(false);
+    expect(reportsBrokenAdapter('not json at all')).toBe(false);
+    expect(reportsBrokenAdapter(undefined)).toBe(false);
+    expect(reportsBrokenAdapter('')).toBe(false);
+  });
 });

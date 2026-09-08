@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import prepareSource from './prepare-page.js?raw';
 import { pdfFileName } from './naming';
+import { isInsideDir } from './paths';
 
 export interface PdfWindow {
   loadURL(url: string): Promise<void>;
@@ -29,6 +30,7 @@ export async function exportPdf(opts: { url: string; outDir: string; timeoutMs?:
     const data = await withTimeout(win.printToPDF({ printBackground: true, pageSize: 'A4', margins: { marginType: 'default' } }), remaining(), 'printToPDF');
     mkdirSync(opts.outDir, { recursive: true });
     const path = join(opts.outDir, pdfFileName({ date: new Date(), author: meta.author, title: meta.title, id: meta.id || String(Date.now()) }));
+    if (!isInsideDir(path, opts.outDir)) throw new Error(`Refusing to write outside the library folder: ${path}`);
     writeFileSync(path, data);
     return { path, title: meta.title };
   } finally {

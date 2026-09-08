@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../../tests/fixtures';
 import { extractWidgets, findNewPostsButton, textLines, widgetItem } from './widgets';
-
-const here = import.meta.url;
-const fixture = (name: string) => readFileSync(fileURLToPath(new URL(`../../../../tests/fixtures/${name}`, here)), 'utf8');
 
 const el = (html: string) => { const d = document.createElement('div'); d.innerHTML = html; return d.firstElementChild!; };
 

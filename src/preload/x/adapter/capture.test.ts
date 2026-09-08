@@ -1,11 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../../tests/fixtures';
 import { installLikeCapture } from './capture';
-
-const here = import.meta.url;
-const fixture = (n: string) => readFileSync(fileURLToPath(new URL(`../../../../tests/fixtures/${n}`, here)), 'utf8');
 
 describe('installLikeCapture', () => {
   beforeEach(() => { document.body.innerHTML = fixture('x-timeline.html'); });

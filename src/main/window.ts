@@ -35,7 +35,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
       preload: opts.preloadX,
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
   const sidebar = new WebContentsView({

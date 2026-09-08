@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Conversation, ScheduledTask } from '../../shared/sidebar-api';
-
-function describe(t: ScheduledTask): string { return 'every' in t.schedule ? `every ${t.schedule.every}` : `cron ${t.schedule.cron}`; }
+import { describeSchedule } from '../../shared/schedule-format';
 
 function TasksTab() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -12,7 +11,7 @@ function TasksTab() {
     <div>
       {tasks.map((t) => (
         <div key={t.id} className={`task${t.enabled ? '' : ' task-off'}`}>
-          <div className="task-title">{t.title} <span className="badge">{describe(t)}</span>{!t.enabled && <span className="badge">paused</span>}</div>
+          <div className="task-title">{t.title} <span className="badge">{describeSchedule(t.schedule)}</span>{!t.enabled && <span className="badge">paused</span>}</div>
           <div className="task-prompt">{t.prompt}</div>
           <div className="conv-meta">
             {t.lastRunAt ? `last ${new Date(t.lastRunAt).toLocaleString()} · ${t.lastStatus ?? ''}` : 'never run'}

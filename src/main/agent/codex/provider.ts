@@ -5,15 +5,32 @@ import type { ToolResult, ToolSpec } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
-import { JsonRpcStdio } from './jsonrpc';
+import { JsonRpcError, JsonRpcStdio } from './jsonrpc';
+import { CODEX_MISSING_MESSAGE, resolveCodexBinary } from './binary';
 
 export interface CodexProviderDeps {
   callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
   approvals: ApprovalBroker;
   spawn?: () => ChildProcessWithoutNullStreams;
+  /** Resolves the `codex` executable; defaults to the settings path plus auto-detection. */
+  binary?: (explicit: string | null) => Promise<string | null>;
+  clientVersion?: string;
 }
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
+const STDERR_KEEP = 8 * 1024;
+const STDERR_IN_MESSAGE = 400;
+const SIGKILL_AFTER_MS = 2000;
+const EXIT_WAIT_MS = 4000;
+
+/** Escapes the delimiters that fence untrusted text, so page content cannot close its own fence. */
+export function fence(text: string): string {
+  return text.replace(/<\/(page-content|tool-output)/gi, '<\\/$1');
+}
+
+export function wrapToolOutput(text: string): string {
+  return `<tool-output untrusted source="x.com">\n${fence(text)}\n</tool-output>`;
+}
 
 /** Identity of a page context for "still the same view" dedupe across turns. */
 export function contextKey(ctx: PageContext | null | undefined): string | null {
@@ -27,9 +44,9 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
   if (p) {
     if (lastKey === contextKey(ctx)) return `Current page: still the ${p.kind} by @${p.authorHandle} at ${p.url}\n\n${text}`;
     const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`, '<page-content untrusted>'];
-    if (p.articleTitle) lines.push(`Title: ${p.articleTitle}`);
-    lines.push(p.text);
-    if (p.articleBody) lines.push('', p.articleBody.slice(0, 4000));
+    if (p.articleTitle) lines.push(`Title: ${fence(p.articleTitle)}`);
+    lines.push(fence(p.text));
+    if (p.articleBody) lines.push('', fence(p.articleBody.slice(0, 4000)));
     lines.push('</page-content>');
     return `${lines.join('\n')}\n\n${text}`;
   }
@@ -37,7 +54,7 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
   if (visible.length === 0) return text;
   if (lastKey === contextKey(ctx)) return `Current page: still the same view of ${ctx.url}\n\n${text}`;
   const lines = [`Current page: ${ctx.kind} at ${ctx.url}. Posts on screen, top to bottom:`];
-  visible.forEach((v, i) => lines.push(`${i + 1}. @${v.authorHandle} — ${v.url}`, `<page-content untrusted>${v.text}</page-content>`));
+  visible.forEach((v, i) => lines.push(`${i + 1}. @${v.authorHandle} — ${v.url}`, `<page-content untrusted>${fence(v.text)}</page-content>`));
   return `${lines.join('\n')}\n\n${text}`;
 }
 
@@ -49,6 +66,10 @@ export class CodexProvider implements AgentProvider {
   private turnId: string | null = null;
   private running = false;
   private disconnected = false;
+  private stopping = false;
+  private stderrTail = '';
+  /** Message from `proc.on('error')`, kept so the death that follows reports the useful cause. */
+  private spawnError: string | null = null;
   private lastContextKey: string | null = null;
   private writingItemId: string | null = null;
   /** agentMessage items with phase 'commentary' are the model's narration, shown as thinking. */
@@ -65,11 +86,23 @@ export class CodexProvider implements AgentProvider {
 
   isRunning(): boolean { return this.running; }
 
+  /** The tail of the child's stderr, collapsed to one line for a status message. */
+  stderrSummary(limit = STDERR_IN_MESSAGE): string {
+    return this.stderrTail.replace(/\s+/g, ' ').trim().slice(-limit);
+  }
+
   async start(opts: StartOptions): Promise<{ threadId: string }> {
     this.disconnected = false;
+    this.stopping = false;
+    this.stderrTail = '';
+    this.spawnError = null;
     this.emit({ type: 'status', status: 'starting' });
-    const proc = this.deps.spawn ? this.deps.spawn() : nodeSpawn('codex', ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
+    const proc = this.deps.spawn ? this.deps.spawn() : nodeSpawn(await this.resolveBinary(opts), ['app-server'], { stdio: ['pipe', 'pipe', 'pipe'] });
     this.proc = proc;
+    // An unread stderr pipe fills at 64 KB and blocks the child forever, so always drain it.
+    proc.stderr.setEncoding('utf8');
+    proc.stderr.on('data', (chunk: string) => { this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_KEEP); });
+    proc.stderr.on('error', () => {});
     const rpc = new JsonRpcStdio(proc.stdin, proc.stdout);
     this.rpc = rpc;
     // 'exit' and 'close' both fire for a normal death, and a spawn failure ('error', e.g. no
@@ -78,14 +111,20 @@ export class CodexProvider implements AgentProvider {
     const die = (code: number | null) => {
       if (died) return;
       died = true;
-      rpc.rejectAll(new Error(`codex exited with code ${code}`));
+      const tail = this.stderrSummary();
+      const message = this.spawnError ?? `codex exited (${code})${tail ? `: ${tail}` : ''}`;
+      rpc.rejectAll(new Error(message));
       this.disconnected = true;
-      this.finishTurn('failed', `codex exited (${code})`);
-      this.deps.approvals.cancelAll('cancel');
-      this.emit({ type: 'status', status: 'disconnected', message: `codex exited (${code})` });
+      this.finishTurn('failed', message);
+      if (!this.stopping) {
+        console.error(`[xpilot] ${message}`);
+        this.deps.approvals.cancelAll('cancel');
+      }
+      this.emit({ type: 'status', status: 'disconnected', message });
     };
     proc.on('error', (err) => {
-      this.emit({ type: 'status', status: 'error', message: `Could not start codex: ${err.message}. Install Codex CLI and run \`codex login\`.` });
+      this.spawnError = `Could not start codex: ${err.message}. Install Codex CLI and run \`codex login\`.`;
+      this.emit({ type: 'status', status: 'error', message: this.spawnError });
       rpc.rejectAll(err); // so a pending initialize (and therefore start()) settles instead of hanging
     });
     proc.stdin.on('error', () => {});
@@ -95,7 +134,7 @@ export class CodexProvider implements AgentProvider {
     rpc.onRequest((m, p) => this.onServerRequest(m, p));
 
     await rpc.request('initialize', {
-      clientInfo: { name: 'x-pilot', title: 'X Pilot', version: '0.1.0' },
+      clientInfo: { name: 'x-pilot', title: 'X Pilot', version: this.deps.clientVersion ?? '0.0.0-dev' },
       capabilities: { experimentalApi: true, requestAttestation: false },
     });
     rpc.notify('initialized');
@@ -129,6 +168,14 @@ export class CodexProvider implements AgentProvider {
     return { threadId: this.threadId };
   }
 
+  private async resolveBinary(opts: StartOptions): Promise<string> {
+    const explicit = opts.settings.binPath ?? null;
+    const found = await (this.deps.binary ? this.deps.binary(explicit) : resolveCodexBinary(explicit));
+    if (found) return found;
+    this.emit({ type: 'status', status: 'error', message: CODEX_MISSING_MESSAGE });
+    throw new Error(CODEX_MISSING_MESSAGE);
+  }
+
   async send(text: string, pageContext?: PageContext | null): Promise<void> {
     if (!this.rpc || !this.threadId) throw new Error('provider not started');
     const full = buildTurnText(text, pageContext, this.lastContextKey);
@@ -157,10 +204,15 @@ export class CodexProvider implements AgentProvider {
   }
 
   async stop(): Promise<void> {
+    this.stopping = true;
     const proc = this.proc;
     if (proc && proc.exitCode === null) {
       // Wait for the process to actually exit so a following thread/resume never races its rollout writes.
-      const exited = new Promise<void>((resolve) => { proc.once('exit', () => resolve()); setTimeout(resolve, 2000); });
+      const exited = new Promise<void>((resolve) => {
+        const kill = setTimeout(() => { if (proc.exitCode === null) proc.kill('SIGKILL'); }, SIGKILL_AFTER_MS);
+        const giveUp = setTimeout(() => { clearTimeout(kill); resolve(); }, EXIT_WAIT_MS);
+        proc.once('exit', () => { clearTimeout(kill); clearTimeout(giveUp); resolve(); });
+      });
       proc.kill();
       await exited;
     }
@@ -258,10 +310,10 @@ export class CodexProvider implements AgentProvider {
         try {
           const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {});
           const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
-          return { contentItems: [{ type: 'inputText', text }], success: result.success };
+          return { contentItems: [{ type: 'inputText', text: wrapToolOutput(text) }], success: result.success };
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-          return { contentItems: [{ type: 'inputText', text: `Error: ${message}` }], success: false };
+          return { contentItems: [{ type: 'inputText', text: wrapToolOutput(`Error: ${message}`) }], success: false };
         }
       }
       case 'item/commandExecution/requestApproval': {
@@ -283,7 +335,8 @@ export class CodexProvider implements AgentProvider {
         return { decision: decision === 'timeout' ? 'decline' : decision };
       }
       case 'item/tool/requestUserInput':
-        return { answers: {} };
+        // An empty answer set reads as "the user said nothing"; an error tells the model the channel is closed.
+        throw new JsonRpcError(-32601, 'requestUserInput is not supported by XPilot yet');
       default:
         throw new Error(`Unsupported server request: ${method}`);
     }

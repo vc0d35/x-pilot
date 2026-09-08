@@ -77,6 +77,30 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
   }
 }
 
+/**
+ * A tool reports a broken X adapter with `adapterHealthy: false` in its JSON output. The shape
+ * around it varies by tool and by provider (a bare object, an MCP result, a JSON string inside a
+ * text block), so search the parsed output instead of assuming a fixed position.
+ */
+export function reportsBrokenAdapter(output: string | undefined): boolean {
+  return hasBrokenAdapter(parseJson(output));
+}
+
+function parseJson(text: string | undefined): unknown {
+  if (typeof text !== 'string' || text === '') return undefined;
+  try { return JSON.parse(text) as unknown; } catch { return undefined; }
+}
+
+function hasBrokenAdapter(value: unknown, depth = 0): boolean {
+  if (depth > 6) return false;
+  if (typeof value === 'string') return value.includes('adapterHealthy') && hasBrokenAdapter(parseJson(value), depth + 1);
+  if (Array.isArray(value)) return value.some((v) => hasBrokenAdapter(v, depth + 1));
+  if (value === null || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (record.adapterHealthy === false) return true;
+  return Object.values(record).some((v) => hasBrokenAdapter(v, depth + 1));
+}
+
 /** Appends to (or creates) the single thinking entry of the current turn and updates the matching step. */
 function applyThinking(entries: Entry[], turnId: string, e: Extract<AgentEvent, { type: 'thinking.delta' | 'thinking.completed' }>): Entry[] {
   const idx = entries.findIndex((en) => en.kind === 'thinking' && en.id === turnId);

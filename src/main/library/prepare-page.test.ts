@@ -2,10 +2,10 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../tests/fixtures';
 
 const metaUrl = import.meta.url;
 const source = readFileSync(fileURLToPath(new URL('./prepare-page.js', metaUrl)), 'utf8');
-const fixture = (n: string) => readFileSync(fileURLToPath(new URL(`../../../tests/fixtures/${n}`, metaUrl)), 'utf8');
 
 describe('prepare-page script', () => {
   it('waits for the article, expands show-more, injects print css and returns metadata', async () => {

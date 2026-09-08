@@ -41,6 +41,19 @@ describe('TaskRunner', () => {
     await r.run({ ...task, threadId: 'old', threadMode: 'new' });
     expect(p.starts[1].threadId).toBeNull();
   });
+  it('truncates long tool output before recording it in the task transcript', async () => {
+    const store = new HistoryStore(':memory:');
+    const p = fakeProvider('t-long', [
+      { type: 'tool.completed', itemId: 'c1', name: 'x_read_post', success: true, output: 'z'.repeat(20_000) },
+      { type: 'turn.completed', turnId: 't', status: 'completed' },
+    ]);
+    const r = new TaskRunner({ createProvider: () => p, tools: () => [], settings: () => DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp', store, timeoutMs: 2000 });
+    expect(await r.run(task)).toBe('completed');
+    const recorded = store.listEvents('t-long').find((e) => e.type === 'tool.completed') as { output: string };
+    expect(recorded.output.length).toBeLessThan(5000);
+    expect(recorded.output.endsWith('… [truncated]')).toBe(true);
+  });
+
   it('reports failed turns and times out hung runs', async () => {
     const store = new HistoryStore(':memory:');
     const failing = fakeProvider('t2', [{ type: 'turn.completed', turnId: 't', status: 'failed', error: 'boom' }]);

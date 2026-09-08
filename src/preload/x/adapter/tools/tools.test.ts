@@ -1,15 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../../../tests/fixtures';
 import { pageState } from './page-state';
 import { readVisiblePosts } from './read-visible';
 import { readCurrentPost } from './read-current-post';
 import { showNewPosts } from './widgets';
-import { createPageToolHost } from '../../page-tools';
+import { createPageToolHost } from '../../model-context-host';
 
-const here = import.meta.url;
-const fixture = (name: string) => readFileSync(fileURLToPath(new URL(`../../../../../tests/fixtures/${name}`, here)), 'utf8');
 const ctx = { pageTools: createPageToolHost() };
 
 describe('preload tools', () => {

@@ -1,11 +1,13 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { SettingsStore } from './settings';
 import { AUTONOMOUS_WARNING, confirmPostingMode } from '../shared/settings';
 
 const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'xpilot-')), 'settings.json');
+
+afterEach(() => { vi.restoreAllMocks(); });
 
 describe('SettingsStore', () => {
   it('returns defaults when no file exists', () => {
@@ -26,15 +28,38 @@ describe('SettingsStore', () => {
     expect(again.get().agent.codex.approvalPolicy).toBe('on-request'); // untouched sibling keeps default
   });
 
-  it('ignores corrupt files and notifies listeners', () => {
+  it('moves a corrupt file aside, reports it, and starts from defaults', () => {
     const file = tmpFile();
     writeFileSync(file, '{not json');
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
     const s = new SettingsStore(file);
     expect(s.get().posting.mode).toBe('confirm');
+    expect(err).toHaveBeenCalledWith(expect.stringContaining('could not be read'));
+    const kept = readdirSync(dirname(file)).filter((f) => f.startsWith('settings.json.corrupt-'));
+    expect(kept).toHaveLength(1);
+    expect(readFileSync(join(dirname(file), kept[0]), 'utf8')).toBe('{not json');
+    expect(existsSync(file)).toBe(false);
     const seen: string[] = [];
     s.onChange((st) => seen.push(st.posting.mode));
     s.update({ posting: { mode: 'autonomous' } });
     expect(seen).toEqual(['autonomous']);
+  });
+
+  it('moves a valid-JSON-but-invalid-settings file aside too', () => {
+    const file = tmpFile();
+    writeFileSync(file, JSON.stringify({ posting: { mode: 'nonsense' } }));
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(new SettingsStore(file).get().posting.mode).toBe('confirm');
+    expect(err).toHaveBeenCalled();
+    expect(readdirSync(dirname(file)).filter((f) => f.includes('.corrupt-'))).toHaveLength(1);
+  });
+
+  it('writes through a temp file and leaves no temp behind', () => {
+    const file = tmpFile();
+    const s = new SettingsStore(file);
+    s.update({ posting: { mode: 'autonomous' } });
+    expect(readdirSync(dirname(file))).toEqual(['settings.json']);
+    expect(JSON.parse(readFileSync(file, 'utf8')).posting.mode).toBe('autonomous');
   });
 });
 

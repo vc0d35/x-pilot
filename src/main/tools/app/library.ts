@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 import { fail, ok, type ToolModule } from '../../../shared/tools';
-import { isInsideDir } from '../../library/paths';
+import { isOpenablePdf } from '../../library/paths';
 import type { AppToolCtx } from './context';
 
 export const listLibrary: ToolModule<AppToolCtx> = {
@@ -12,8 +12,7 @@ export const openPdf: ToolModule<AppToolCtx> = {
   spec: { name: 'xpilot_open_pdf', description: 'Opens a saved PDF from the library in the system viewer.', inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false } },
   execute: async (args, ctx) => {
     const path = resolve(String(args.path ?? ''));
-    // The library folder can change after items were saved, so a recorded path stays openable.
-    if (!isInsideDir(path, ctx.libraryDir()) && !ctx.history.hasLibraryPath(path)) return fail('Refusing to open a file outside the library folder');
+    if (!isOpenablePdf(path, ctx.libraryDir(), (p) => ctx.history.hasLibraryPath(p))) return fail('Refusing to open a file that is not a PDF in the library');
     const err = await ctx.openPath(path);
     return err ? fail(`Could not open PDF: ${err}`) : ok({ opened: true });
   },

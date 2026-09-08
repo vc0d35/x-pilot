@@ -48,8 +48,17 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
         <select value={codex.approvalPolicy} onChange={(e) => set({ agent: { codex: { approvalPolicy: e.target.value as Settings['agent']['codex']['approvalPolicy'] } } })}>
           <option value="on-request">Ask when Codex requests</option>
           <option value="untrusted">Ask for anything untrusted</option>
-          <option value="never">Never ask</option>
         </select>
+      </label>
+      <label>Codex binary
+        <input
+          key={codex.binPath ?? ''}
+          type="text"
+          spellCheck={false}
+          placeholder="auto-detect"
+          defaultValue={codex.binPath ?? ''}
+          onBlur={(e) => { const v = e.target.value.trim(); if (v !== (codex.binPath ?? '')) set({ agent: { codex: { binPath: v || null } } }); }}
+        />
       </label>
       <label>Library folder
         <div className="row"><code>{settings.library.dir ?? '~/Documents/X Pilot'}</code><button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button></div>

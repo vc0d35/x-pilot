@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fixture } from '../../../../../tests/fixtures';
 import { likeInPage, selectHomeTab } from './engage';
-import { createPageToolHost } from '../../page-tools';
+import { createPageToolHost } from '../../model-context-host';
 
-const here = import.meta.url;
-const fixture = (n: string) => readFileSync(fileURLToPath(new URL(`../../../../../tests/fixtures/${n}`, here)), 'utf8');
 const ctx = { pageTools: createPageToolHost() };
 
 describe('x_like_in_page', () => {

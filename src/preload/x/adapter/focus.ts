@@ -1,5 +1,6 @@
 import type { PageContext, VisiblePost } from '../../../shared/page';
 import { extractArticle, extractPost, findMainArticle, pageKindFromUrl, postFromArticleUrl } from './extract';
+import { SEL } from './selectors';
 
 export type InViewport = (el: Element) => boolean;
 const VISIBLE_LIMIT = 8;
@@ -21,7 +22,6 @@ export function visiblePosts(doc: Document, isVisible: InViewport): VisiblePost[
   }
   return out;
 }
-import { SEL } from './selectors';
 
 export function computeFocus(doc: Document, url: string, isVisible: InViewport = inViewport): PageContext | null {
   const kind = pageKindFromUrl(url);

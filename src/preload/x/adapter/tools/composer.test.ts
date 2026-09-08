@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
-import { createPageToolHost } from '../../page-tools';
+import { createPageToolHost } from '../../model-context-host';
 
 const ctx = { pageTools: createPageToolHost() };
 const openComposer = (text = '') => {

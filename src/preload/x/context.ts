@@ -1,2 +1,2 @@
-import type { PageToolHost } from './page-tools';
+import type { PageToolHost } from './model-context-host';
 export interface PreloadCtx { pageTools: PageToolHost }

@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { reduce, initialState } from './state';
+import { reduce, initialState, reportsBrokenAdapter } from './state';
 import { Header, ExpandHandle, type Panel } from './components/Header';
 import { EntryList } from './components/EntryList';
 import { Composer } from './components/Composer';
@@ -21,7 +21,7 @@ export function App() {
   useEffect(() => window.xpilot.onFocus(setFocus), []);
   useEffect(() => { void window.xpilot.getSettings().then(setSettings); return window.xpilot.onSettings(setSettings); }, []);
 
-  const adapterBroken = state.entries.some((en) => en.kind === 'tool' && en.call.status === 'done' && (en.call.output ?? '').includes('"adapterHealthy":false'));
+  const adapterBroken = state.entries.some((en) => en.kind === 'tool' && en.call.status === 'done' && reportsBrokenAdapter(en.call.output));
 
   if (collapsed) return <ExpandHandle status={state.status} onExpand={() => void window.xpilot.setSidebarCollapsed(false)} />;
 

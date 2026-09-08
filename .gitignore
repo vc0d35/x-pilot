@@ -6,6 +6,6 @@ playwright-report
 *.local
 *.tsbuildinfo
 build/entitlements.mac.plist
-dist
 build/embedded.provisionprofile
 .superpowers/
+.DS_Store

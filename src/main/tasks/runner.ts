@@ -3,12 +3,10 @@ import type { ScheduledTask } from '../../shared/sidebar-api';
 import type { Settings } from '../../shared/settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { AgentProvider } from '../agent/provider';
-import { toolsFingerprint } from '../agent/controller';
+import { RECORDED, toolsFingerprint, transcriptEvent } from '../agent/controller';
 import type { HistoryStore } from '../history/store';
 import { describeSchedule } from './schedule';
 import type { RunStatus } from './manager';
-
-const RECORDED = new Set<AgentEvent['type']>(['user.message', 'message.completed', 'thinking.completed', 'tool.started', 'tool.completed', 'turn.completed']);
 
 export function buildRunPrompt(task: ScheduledTask, lastRunAt: string | null): string {
   const when = lastRunAt ? `last run ${lastRunAt}` : 'first run';
@@ -35,7 +33,7 @@ export class TaskRunner {
     let threadId: string | null = null;
     const done = new Promise<RunStatus>((resolve) => {
       provider.onEvent((e) => {
-        if (threadId && RECORDED.has(e.type)) this.deps.store.appendEvent(threadId, e);
+        if (threadId && RECORDED.has(e.type)) this.deps.store.appendEvent(threadId, transcriptEvent(e));
         if (e.type === 'turn.completed') resolve(e.status === 'completed' ? 'completed' : e.status === 'interrupted' ? 'interrupted' : 'failed');
         if (e.type === 'status' && (e.status === 'disconnected' || e.status === 'error')) resolve('failed');
       });

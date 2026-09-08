@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { decideNavigation, attachNavigationPolicy, DEFAULT_ALLOW_HOSTS, type WindowOpenResponse } from './policy';
+import { decideNavigation, attachNavigationPolicy, type WindowOpenResponse } from './policy';
+import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 
 describe('decideNavigation', () => {
   it('allows x.com and subdomains', () => {
@@ -18,6 +19,11 @@ describe('decideNavigation', () => {
   it('allows login providers only in popups', () => {
     expect(decideNavigation('https://accounts.google.com/o/oauth2', DEFAULT_ALLOW_HOSTS)).toBe('external');
     expect(decideNavigation('https://accounts.google.com/o/oauth2', DEFAULT_ALLOW_HOSTS, { isPopup: true })).toBe('allow');
+  });
+  it('sends http to an allowlisted host to the browser instead of loading it in-app', () => {
+    expect(decideNavigation('http://x.com/home', DEFAULT_ALLOW_HOSTS)).toBe('external');
+    expect(decideNavigation('http://t.co/abc', DEFAULT_ALLOW_HOSTS)).toBe('external');
+    expect(decideNavigation('http://accounts.google.com/o/oauth2', DEFAULT_ALLOW_HOSTS, { isPopup: true })).toBe('external');
   });
   it('does not treat notx.com as a subdomain of x.com', () => {
     expect(decideNavigation('https://notx.com', DEFAULT_ALLOW_HOSTS)).toBe('external');

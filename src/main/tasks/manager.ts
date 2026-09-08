@@ -8,6 +8,8 @@ export type RunTask = (task: ScheduledTask) => Promise<RunStatus>;
 /** Owns the task table and decides when tasks run; the actual run is delegated to `run`. */
 export class TaskManager {
   private queue: Promise<void> = Promise.resolve();
+  /** Tasks queued or running right now, so a tick during a long run cannot enqueue them twice. */
+  private readonly active = new Map<number, Promise<void>>();
   constructor(private readonly deps: { store: HistoryStore; now?: () => Date; run?: RunTask }) {}
 
   private now(): Date { return this.deps.now ? this.deps.now() : new Date(); }
@@ -42,22 +44,31 @@ export class TaskManager {
     return this.enqueue(task);
   }
 
-  /** Called by the scheduler: runs every due task, one at a time. */
+  /** Called by the scheduler: queues every due task. Runs happen one at a time, in the background. */
   async tick(): Promise<void> {
-    for (const task of this.deps.store.dueTasks(this.now().toISOString())) await this.enqueue(task);
+    for (const task of this.deps.store.dueTasks(this.now().toISOString())) void this.enqueue(task).catch(() => undefined);
+  }
+
+  /** Resolves once nothing is queued or running. */
+  async idle(): Promise<void> {
+    while (this.active.size > 0) await this.queue;
   }
 
   private enqueue(task: ScheduledTask): Promise<void> {
+    const queued = this.active.get(task.id);
+    if (queued) return queued;
+    // Reschedule at queue time, not at start: a long run must not leave the task due on every tick.
+    this.deps.store.updateTask(task.id, { nextRunAt: nextRun(task.schedule, this.now()).toISOString() });
     const job = this.queue.then(async () => {
-      const startedAt = this.now();
-      // Reschedule first so a crash mid-run cannot make the task fire again immediately.
-      this.deps.store.updateTask(task.id, { lastRunAt: startedAt.toISOString(), lastStatus: 'running', nextRunAt: nextRun(task.schedule, startedAt).toISOString() });
+      this.deps.store.updateTask(task.id, { lastRunAt: this.now().toISOString(), lastStatus: 'running' });
       let status: RunStatus = 'completed';
       try { status = this.deps.run ? await this.deps.run(task) : 'completed'; }
       catch { status = 'failed'; }
       this.deps.store.updateTask(task.id, { lastStatus: status });
     });
-    this.queue = job.catch(() => undefined);
+    const tracked = job.finally(() => { this.active.delete(task.id); });
+    this.active.set(task.id, tracked.catch(() => undefined));
+    this.queue = tracked.catch(() => undefined);
     return job;
   }
 }
