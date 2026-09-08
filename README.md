@@ -2,7 +2,7 @@
 
 XPilot is a macOS desktop app that wraps [x.com](https://x.com) and puts an AI agent next to it. The agent runs on your own [Codex CLI](https://github.com/openai/codex) and can read what you are looking at, verify claims with web search, search the posts you liked, save posts and X Articles as PDFs, post on your behalf, drive your timeline, and run scheduled tasks while the app is open.
 
-X offers nothing for agents, so XPilot injects its own adapter into the X page: a small, reviewable set of tools, shaped the way [WebMCP](https://webmcp.dev) tools are shaped, that read and drive the page. The agent talks to X through that surface instead of raw browser automation.
+X offers nothing for agents, so XPilot injects its own adapter into the X page: a small, reviewable set of tools that read and drive the page, each with a name, a description and a JSON schema the model can reason about. The agent talks to X only through that surface, never through raw browser automation, and every tool that writes to your account can be set to ask first.
 
 ## Requirements
 
