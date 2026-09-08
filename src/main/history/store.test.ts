@@ -70,10 +70,17 @@ describe('conversations', () => {
     s.upsertConversation({ threadId: 't2', kind: 'task', taskId: 7, toolsHash: 'h' });
     s.appendEvent('t1', { type: 'user.message', text: 'Is this true? A very long question that keeps going on and on and on' });
     s.appendEvent('t1', { type: 'message.completed', itemId: 'm1', text: 'Yes' });
+    expect(s.listConversations().map((c) => c.threadId)).toEqual(['t1']); // t2 has no events yet: hidden
+    s.appendEvent('t2', { type: 'message.completed', itemId: 'x', text: 'ran' });
     const list = s.listConversations();
-    expect(list.map((c) => c.threadId)).toEqual(['t1', 't2']); // t1 updated last by its events
-    expect(list[0].title).toBe('Is this true? A very long question that keeps going on and o…');
-    expect(list[1]).toMatchObject({ kind: 'task', taskId: 7, title: 'Task run' });
+    expect(list.map((c) => c.threadId)).toEqual(['t2', 't1']);
+    expect(list[1].title).toBe('Is this true? A very long question that keeps going on and o…');
+    expect(list[0]).toMatchObject({ kind: 'task', taskId: 7, title: 'Task run' });
+    s.upsertConversation({ threadId: 't3', kind: 'chat', toolsHash: 'h' });
+    s.upsertConversation({ threadId: 't4', kind: 'chat', toolsHash: 'h' });
+    s.pruneEmptyConversations('t4');
+    expect(s.getConversation('t3')).toBeNull();
+    expect(s.getConversation('t4')).not.toBeNull();
     expect(s.listEvents('t1').map((e) => e.type)).toEqual(['user.message', 'message.completed']);
     expect(s.getConversation('nope')).toBeNull();
   });

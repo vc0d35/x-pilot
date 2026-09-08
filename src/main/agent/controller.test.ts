@@ -146,8 +146,11 @@ describe('conversations', () => {
     providers[0].emitEvent({ type: 'user.message', text: 'hello there' });
     providers[0].emitEvent({ type: 'message.completed', itemId: 'm1', text: 'hi' });
     providers[0].emitEvent({ type: 'message.delta', itemId: 'm2', delta: 'not stored' });
-    await ctl.start({ resume: false }); // second conversation, thread T2
-    expect(history.listConversations().map((c) => [c.threadId, c.title])).toEqual([['T2', ''], ['T', 'hello there']]);
+    await ctl.start({ resume: false }); // second conversation, thread T2 (empty: not listed)
+    expect(history.listConversations().map((c) => [c.threadId, c.title])).toEqual([['T', 'hello there']]);
+    const before = i;
+    await ctl.openConversation('T2'); // reopening the live thread does not restart the provider
+    expect(i).toBe(before);
     expect(history.listEvents('T').map((e) => e.type)).toEqual(['user.message', 'message.completed']);
     const events = await ctl.openConversation('T');
     expect(providers[2].starts[0].threadId).toBe('T');

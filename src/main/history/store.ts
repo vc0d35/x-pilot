@@ -137,8 +137,15 @@ export class HistoryStore {
     return (this.db.prepare('SELECT event_json FROM conversation_events WHERE thread_id = ? ORDER BY seq').all(threadId) as Array<{ event_json: string }>).map((r) => JSON.parse(r.event_json) as AgentEvent);
   }
 
+  /** Conversations that have at least one recorded event; empty (never used) threads are not shown. */
   listConversations(limit = 200): Conversation[] {
-    return (this.db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC, rowid DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>).map(rowToConversation);
+    return (this.db.prepare(`SELECT c.* FROM conversations c WHERE EXISTS (SELECT 1 FROM conversation_events e WHERE e.thread_id = c.thread_id)
+      ORDER BY c.updated_at DESC, c.rowid DESC LIMIT ?`).all(limit) as Array<Record<string, unknown>>).map(rowToConversation);
+  }
+
+  /** Removes conversations that never received an event, except the one given (the live thread). */
+  pruneEmptyConversations(exceptThreadId: string | null): void {
+    this.db.prepare(`DELETE FROM conversations WHERE (? IS NULL OR thread_id <> ?) AND NOT EXISTS (SELECT 1 FROM conversation_events e WHERE e.thread_id = conversations.thread_id)`).run(exceptThreadId, exceptThreadId);
   }
 
   getConversation(threadId: string): Conversation | null {

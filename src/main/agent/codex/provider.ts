@@ -116,7 +116,8 @@ export class CodexProvider implements AgentProvider {
     if (opts.threadId) {
       try {
         res = await rpc.request('thread/resume', { threadId: opts.threadId, ...common });
-      } catch {
+      } catch (err) {
+        console.warn(`[xpilot] thread/resume ${opts.threadId} failed, starting a new thread: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
         res = await rpc.request('thread/start', { ...common, dynamicTools });
       }
     } else {
@@ -156,7 +157,13 @@ export class CodexProvider implements AgentProvider {
   }
 
   async stop(): Promise<void> {
-    this.proc?.kill();
+    const proc = this.proc;
+    if (proc && proc.exitCode === null) {
+      // Wait for the process to actually exit so a following thread/resume never races its rollout writes.
+      const exited = new Promise<void>((resolve) => { proc.once('exit', () => resolve()); setTimeout(resolve, 2000); });
+      proc.kill();
+      await exited;
+    }
     this.proc = null;
     this.rpc = null;
   }

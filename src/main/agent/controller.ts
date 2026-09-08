@@ -75,6 +75,7 @@ export class AgentController {
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.threadId = threadId;
       this.deps.history?.upsertConversation({ threadId, kind: 'chat', toolsHash });
+      this.deps.history?.pruneEmptyConversations(threadId);
       this.deps.settings.update({ threadId, threadToolsHash: toolsHash });
     } catch (err) {
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
@@ -84,7 +85,8 @@ export class AgentController {
 
   /** Resumes a stored conversation and returns its transcript for the UI to replay. */
   async openConversation(threadId: string): Promise<AgentEvent[]> {
-    await this.start({ resume: true, threadId });
+    // Already in it: nothing to restart (an empty thread cannot even be resumed by Codex yet).
+    if (threadId !== this.threadId || !this.provider) await this.start({ resume: true, threadId });
     return this.deps.history?.listEvents(threadId) ?? [];
   }
 
