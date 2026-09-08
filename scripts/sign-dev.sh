@@ -35,8 +35,10 @@ PROFILE=""
 for f in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/*.provisionprofile ~/Library/MobileDevice/Provisioning\ Profiles/*.provisionprofile; do
   [ -f "$f" ] || continue
   plist=$(security cms -D -i "$f" 2>/dev/null || true)
-  echo "$plist" | grep -q "<string>$XPILOT_TEAM_ID.$BUNDLE_ID</string>" || continue
-  echo "$plist" | grep -q "<string>$GROUP</string>" || continue
+  # Personal-team ("Mac Team") profiles are wildcards: application-identifier and
+  # keychain-access-groups are "<TEAM>.*", which authorises our bundle id and group.
+  echo "$plist" | grep -qE "<string>$XPILOT_TEAM_ID\.(\*|$BUNDLE_ID)</string>" || continue
+  echo "$plist" | grep -qE "<string>($GROUP|$XPILOT_TEAM_ID\.\*)</string>" || continue
   PROFILE="$f"; break
 done
 

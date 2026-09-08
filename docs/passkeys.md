@@ -55,7 +55,10 @@ profile once:
    `~/Library/Developer/Xcode/UserData/Provisioning Profiles/*.provisionprofile`.
    The throwaway project can be deleted afterwards; the profile stays.
 
-`npm run sign-dev` finds the profile by team, bundle id and group. For packaged builds
+`npm run sign-dev` finds the profile by team, bundle id and group (personal-team profiles
+are wildcards, `TEAM.*`, which is accepted). Personal-team profiles expire after seven
+days; when `sign-dev` reports no profile again, open the Xcode project and build once
+more to regenerate it, then re-run `sign-dev`. For packaged builds
 copy it to `build/embedded.provisionprofile` (git-ignored).
 
 ## 3. Development (`npm run dev`)
