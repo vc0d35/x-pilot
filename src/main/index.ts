@@ -124,7 +124,7 @@ app.whenReady().then(async () => {
   registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink, tasks, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
-  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { win, windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
+  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { win, tasks, history, windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
 
   await xView.webContents.loadURL(START_URL);
   if (!E2E) {
