@@ -18,6 +18,7 @@ export interface XPilotApi {
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;
   clearHistory(): Promise<void>;
+  setSidebarCollapsed(collapsed: boolean): Promise<void>;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   onFocus(cb: (ctx: PageContext | null) => void): () => void;
   onSettings(cb: (s: Settings) => void): () => void;

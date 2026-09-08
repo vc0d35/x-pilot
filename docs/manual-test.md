@@ -44,5 +44,5 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Passkeys (needs XPILOT_TEAM_ID + `npm run sign-dev`, see docs/passkeys.md)
 - [ ] Startup log shows `passkeys enabled with keychain group …`.
-- [ ] Adding a security key/passkey in X settings triggers a Touch ID prompt titled "X Pilot".
+- [ ] Adding a security key/passkey in X settings triggers a Touch ID prompt titled "XPilot".
 - [ ] Sign out, sign in with the passkey: Touch ID prompt appears and login completes.

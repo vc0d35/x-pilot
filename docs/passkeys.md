@@ -1,4 +1,4 @@
-# Touch ID passkeys in X Pilot
+# Touch ID passkeys in XPilot
 
 X's passkey login uses the browser's WebAuthn platform authenticator. Electron only
 services those requests after `app.configureWebAuthn` is called, and its authenticator
@@ -8,7 +8,7 @@ be granted by a code-signing entitlement. Two consequences:
 - The app (even the dev binary) must be signed with an Apple-issued certificate whose
   Team ID matches the group `<TEAM_ID>.com.vicnicius.xpilot.webauthn`.
 - Passkeys created here are device-bound and never synced. Your existing iCloud
-  Keychain passkey cannot be used inside X Pilot; you register a new one from the app.
+  Keychain passkey cannot be used inside XPilot; you register a new one from the app.
 
 ## 1. Get a Team ID and a signing certificate
 
@@ -80,7 +80,7 @@ cp ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/<the-profile>.provi
 XPILOT_TEAM_ID=<your team id> npm run dist
 ```
 
-electron-builder signs `dist/mac*/X Pilot.app` with your identity, the rendered
+electron-builder signs `dist/mac*/XPilot.app` with your identity, the rendered
 `build/entitlements.mac.plist` (app) and `build/entitlements.mac.inherit.plist`
 (helpers), and embeds the profile.
 
@@ -89,9 +89,9 @@ electron-builder signs `dist/mac*/X Pilot.app` with your identity, the rendered
 1. Sign in to X once with another second factor (authenticator app, SMS, or a backup
    code). The session persists in the app.
 2. In X: Settings → Security and account access → Security → Two-factor authentication
-   → Security key (or Passkeys) → add. macOS shows `"X Pilot" is trying to sign in to
+   → Security key (or Passkeys) → add. macOS shows `"XPilot" is trying to sign in to
    x.com` with Touch ID; approve it.
-3. From now on, passkey prompts inside X Pilot are answered with Touch ID.
+3. From now on, passkey prompts inside XPilot are answered with Touch ID.
 
 If macOS refuses the keychain group on a Personal Team, the Touch ID prompt never
 appears and the log shows a keychain error; a paid team is the fallback.

@@ -1,6 +1,5 @@
 import { BaseWindow, WebContentsView } from 'electron';
-
-export const SIDEBAR_WIDTH = 420;
+import { computeLayout } from './layout';
 
 export interface MainWindowOptions {
   preloadX: string;
@@ -13,10 +12,11 @@ export interface MainWindow {
   win: BaseWindow;
   xView: WebContentsView;
   sidebar: WebContentsView;
+  setSidebarCollapsed(collapsed: boolean): void;
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
-  const win = new BaseWindow({ width: 1500, height: 950, minWidth: 1000, minHeight: 600, title: 'X Pilot' });
+  const win = new BaseWindow({ width: 1500, height: 950, minWidth: 1000, minHeight: 600, title: 'XPilot' });
 
   const xView = new WebContentsView({
     webPreferences: {
@@ -39,10 +39,12 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   win.contentView.addChildView(xView);
   win.contentView.addChildView(sidebar);
 
+  let collapsed = false;
   const layout = () => {
     const { width, height } = win.getContentBounds();
-    xView.setBounds({ x: 0, y: 0, width: Math.max(0, width - SIDEBAR_WIDTH), height });
-    sidebar.setBounds({ x: Math.max(0, width - SIDEBAR_WIDTH), y: 0, width: SIDEBAR_WIDTH, height });
+    const l = computeLayout(width, height, collapsed);
+    xView.setBounds(l.xView);
+    sidebar.setBounds(l.sidebar);
   };
   layout();
   win.on('resize', layout);
@@ -50,5 +52,5 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   if (opts.rendererUrl) void sidebar.webContents.loadURL(opts.rendererUrl);
   else if (opts.rendererFile) void sidebar.webContents.loadFile(opts.rendererFile);
 
-  return { win, xView, sidebar };
+  return { win, xView, sidebar, setSidebarCollapsed: (c) => { collapsed = c; layout(); } };
 }

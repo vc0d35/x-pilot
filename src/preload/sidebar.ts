@@ -24,6 +24,7 @@ const api: XPilotApi = {
   openPdf: (path) => ipcRenderer.invoke(IPC.libraryOpen, { path }),
   chooseLibraryDir: () => ipcRenderer.invoke(IPC.libraryChooseDir),
   clearHistory: () => ipcRenderer.invoke(IPC.historyClear),
+  setSidebarCollapsed: (collapsed) => ipcRenderer.invoke(IPC.sidebarSetCollapsed, { collapsed }),
   onEvent: subscribe(IPC.agentEvent),
   onFocus: subscribe(IPC.focusUpdate),
   onSettings: subscribe(IPC.settingsChanged),

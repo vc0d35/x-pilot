@@ -1,26 +1,44 @@
 import type { AgentStatus } from '../../shared/agent';
-import { confirmPostingMode } from '../../shared/settings';
 
 export type Panel = 'chat' | 'library' | 'settings';
 
-export function Header(props: { status: AgentStatus; statusMessage?: string; running: boolean; onStop: () => void; onNewThread: () => void; onReconnect: () => void; postingMode: 'confirm' | 'autonomous'; onTogglePosting: () => void; panel: Panel; onPanel: (p: Panel) => void }) {
+const LABELS: Record<AgentStatus, string | null> = { ready: null, running: null, starting: 'starting', disconnected: 'disconnected', error: 'error' };
+
+export function StatusDot(props: { status: AgentStatus; message?: string; onReconnect: () => void }) {
+  const label = LABELS[props.status];
+  const canReconnect = props.status === 'disconnected' || props.status === 'error';
+  return (
+    <span className={`status status-${props.status}`} title={props.message ?? props.status}>
+      <span className="status-dot" aria-label={props.status} />
+      {label && (canReconnect
+        ? <button className="link" onClick={props.onReconnect}>{label} · reconnect</button>
+        : <span className="status-label">{label}</span>)}
+    </span>
+  );
+}
+
+export function Header(props: { status: AgentStatus; statusMessage?: string; onNewThread: () => void; onReconnect: () => void; panel: Panel; onPanel: (p: Panel) => void; onCollapse: () => void }) {
+  const toggle = (p: Panel) => props.onPanel(props.panel === p ? 'chat' : p);
   return (
     <header className="header">
-      <div className="brand">X Pilot</div>
-      <div className={`status status-${props.status}`} title={props.statusMessage ?? ''}>{props.status}</div>
-      <nav className="tabs">
-        <button className={props.panel === 'chat' ? 'tab tab-active' : 'tab'} onClick={() => props.onPanel('chat')}>Chat</button>
-        <button className={props.panel === 'library' ? 'tab tab-active' : 'tab'} onClick={() => props.onPanel('library')}>Library</button>
-        <button className={props.panel === 'settings' ? 'tab tab-active' : 'tab'} onClick={() => props.onPanel('settings')}>Settings</button>
-      </nav>
+      <div className="brand">XPilot</div>
+      <StatusDot status={props.status} message={props.statusMessage} onReconnect={props.onReconnect} />
       <div className="spacer" />
-      <button className={`toggle toggle-${props.postingMode}`} onClick={() => { if (confirmPostingMode(props.postingMode === 'confirm' ? 'autonomous' : 'confirm', confirm)) props.onTogglePosting(); }} title="Click to switch posting mode">
-        {props.postingMode === 'confirm' ? 'Posts: confirm' : 'Posts: autonomous ⚠︎'}
-      </button>
-      {props.running && <button onClick={props.onStop}>Stop</button>}
-      <button onClick={props.onNewThread}>New thread</button>
-      {(props.status === 'disconnected' || props.status === 'error') && <button onClick={props.onReconnect}>Reconnect</button>}
-      {props.status === 'error' && <div className="banner">{props.statusMessage}</div>}
+      <button className={`icon${props.panel === 'library' ? ' icon-active' : ''}`} onClick={() => toggle('library')} title="Saved PDFs">PDFs</button>
+      <button className="icon" onClick={props.onNewThread} title="New thread" aria-label="New thread">+</button>
+      <button className={`icon${props.panel === 'settings' ? ' icon-active' : ''}`} onClick={() => toggle('settings')} title="Settings" aria-label="Settings">⚙</button>
+      <button className="icon" onClick={props.onCollapse} title="Collapse sidebar" aria-label="Collapse sidebar">›</button>
     </header>
+  );
+}
+
+/** The slim strip shown while the sidebar is collapsed. */
+export function CollapsedStrip(props: { status: AgentStatus; onExpand: () => void }) {
+  return (
+    <div className="strip" onClick={props.onExpand} title="Expand XPilot">
+      <button className="icon" aria-label="Expand sidebar">‹</button>
+      <span className={`status status-${props.status}`}><span className="status-dot" /></span>
+      <span className="strip-brand">XPilot</span>
+    </div>
   );
 }

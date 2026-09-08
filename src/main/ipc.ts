@@ -13,6 +13,7 @@ import type { BridgeIpc } from './webmcp/bridge';
 
 export interface SidebarIpcDeps {
   sidebar: WebContents;
+  setSidebarCollapsed(collapsed: boolean): void;
   agent: AgentController;
   approvals: ApprovalBroker;
   settings: SettingsStore;
@@ -25,7 +26,7 @@ const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextS
 const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, agent, approvals, settings, history, libraryDir, openPath } = deps;
+  const { sidebar, setSidebarCollapsed, agent, approvals, settings, history, libraryDir, openPath } = deps;
   const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
@@ -48,6 +49,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.settingsGet, guarded(() => settings.get()));
   ipcMain.handle(IPC.settingsSet, guarded((_e, patch) => settings.update(patch as DeepPartial<Settings>)));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
+  ipcMain.handle(IPC.sidebarSetCollapsed, guarded((_e, raw) => { setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed); }));
   ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
   ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
   ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {

@@ -29,7 +29,7 @@ if (process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USE
 
 app.whenReady().then(async () => {
   const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
-  const { xView, sidebar } = createMainWindow({
+  const { xView, sidebar, setSidebarCollapsed } = createMainWindow({
     preloadX: join(__dirname, '../preload/x.js'),
     preloadSidebar: join(__dirname, '../preload/sidebar.js'),
     rendererUrl: process.env.ELECTRON_RENDERER_URL,
@@ -90,7 +90,7 @@ app.whenReady().then(async () => {
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
-  registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
+  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };

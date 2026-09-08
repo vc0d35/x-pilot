@@ -23,4 +23,5 @@ export const IPC = {
   libraryChooseDir: 'library:chooseDir',
   historyClear: 'history:clear',
   focusUpdate: 'focus:update',
+  sidebarSetCollapsed: 'sidebar:setCollapsed',
 } as const;

@@ -53,7 +53,7 @@ test('the sidebar preload loads and the React header renders', async () => {
   const built = readFileSync(resolve('out/preload/sidebar.js'), 'utf8');
   expect(built).not.toMatch(/require\("\.\//); // sandboxed preload must be self-contained
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 }).toBe('object');
-  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('X Pilot');
+  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('XPilot');
 });
 
 // Network-dependent: loads x.com search (logged out) in the hidden session window.

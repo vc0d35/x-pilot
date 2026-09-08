@@ -1,5 +1,5 @@
 appId: com.vicnicius.xpilot
-productName: X Pilot
+productName: XPilot
 directories:
   buildResources: build
   output: dist
