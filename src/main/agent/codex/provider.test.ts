@@ -89,6 +89,21 @@ describe('CodexProvider', () => {
     await provider.stop();
   });
 
+  it('routes reasoning summaries and commentary into thinking events, not messages', async () => {
+    const { provider, events } = makeProvider();
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitFor(events, 'turn.completed');
+    const thinking = events.filter((e) => e.type === 'thinking.completed') as { itemId: string; text: string }[];
+    expect(thinking.map((t) => [t.itemId, t.text])).toEqual([['r-1', 'Need the page state first.'], ['c-1', "I'll check the page."]]);
+    const deltas = events.filter((e) => e.type === 'thinking.delta').map((e) => (e as { delta: string }).delta).join('');
+    expect(deltas).toBe("Need the page state first.I'll check the page.");
+    const messages = events.filter((e) => e.type === 'message.completed') as { itemId: string }[];
+    expect(messages.map((m) => m.itemId)).toEqual(['msg-1']);
+    expect(events.filter((e) => e.type === 'message.delta').every((e) => (e as { itemId: string }).itemId === 'msg-1')).toBe(true);
+    await provider.stop();
+  });
+
   it('lists models', async () => {
     const { provider } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });

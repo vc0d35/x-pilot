@@ -15,6 +15,8 @@ export type AgentEvent =
   | { type: 'user.message'; text: string }
   | { type: 'turn.started'; turnId: string }
   | { type: 'turn.completed'; turnId: string; status: 'completed' | 'interrupted' | 'failed'; error?: string }
+  | { type: 'thinking.delta'; itemId: string; delta: string }
+  | { type: 'thinking.completed'; itemId: string; text: string }
   | { type: 'message.delta'; itemId: string; delta: string }
   | { type: 'message.completed'; itemId: string; text: string }
   | { type: 'activity'; activity: 'thinking' | 'tool' | 'writing'; detail?: string }

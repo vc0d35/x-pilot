@@ -37,6 +37,9 @@ export class CodexProvider implements AgentProvider {
   private disconnected = false;
   private lastPostId: string | null = null;
   private writingItemId: string | null = null;
+  /** agentMessage items with phase 'commentary' are the model's narration, shown as thinking. */
+  private readonly commentaryIds = new Set<string>();
+  private lastActivity: string | null = null;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
   constructor(private readonly deps: CodexProviderDeps) {}
@@ -144,7 +147,14 @@ export class CodexProvider implements AgentProvider {
     this.rpc = null;
   }
 
-  private emit(e: AgentEvent): void { for (const cb of this.listeners) cb(e); }
+  private emit(e: AgentEvent): void {
+    if (e.type === 'activity') {
+      const key = `${e.activity}:${e.detail ?? ''}`;
+      if (key === this.lastActivity) return; // consecutive duplicates carry no information
+      this.lastActivity = key;
+    } else if (e.type === 'turn.started' || e.type === 'turn.completed') this.lastActivity = null;
+    for (const cb of this.listeners) cb(e);
+  }
 
   /** Idempotent: no-ops unless a turn is actually running, so a racing exit/notification/send-catch cannot double-fire. */
   private finishTurn(status: 'completed' | 'interrupted' | 'failed', error?: string, turnId?: string): void {
@@ -169,12 +179,20 @@ export class CodexProvider implements AgentProvider {
         return;
       }
       case 'item/agentMessage/delta':
+        if (this.commentaryIds.has(p.itemId as string)) { this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: p.delta as string }); return; }
         if (this.writingItemId !== p.itemId) { this.writingItemId = p.itemId as string; this.emit({ type: 'activity', activity: 'writing' }); }
         this.emit({ type: 'message.delta', itemId: p.itemId as string, delta: p.delta as string });
+        return;
+      case 'item/reasoning/summaryTextDelta':
+        this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: p.delta as string });
+        return;
+      case 'item/reasoning/summaryPartAdded':
+        if ((p.summaryIndex as number) > 0) this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: '\n\n' });
         return;
       case 'item/started': {
         const item = p.item as Record<string, unknown>;
         if (item.type === 'reasoning') this.emit({ type: 'activity', activity: 'thinking' });
+        if (item.type === 'agentMessage' && item.phase === 'commentary') { this.commentaryIds.add(item.id as string); this.emit({ type: 'activity', activity: 'thinking' }); }
         if (item.type === 'dynamicToolCall') this.emit({ type: 'activity', activity: 'tool', detail: item.tool as string });
         if (item.type === 'webSearch') this.emit({ type: 'activity', activity: 'tool', detail: 'web_search' });
         if (item.type === 'commandExecution') this.emit({ type: 'activity', activity: 'tool', detail: 'shell' });
@@ -187,7 +205,14 @@ export class CodexProvider implements AgentProvider {
       }
       case 'item/completed': {
         const item = p.item as Record<string, unknown>;
-        if (item.type === 'agentMessage') this.emit({ type: 'message.completed', itemId: item.id as string, text: item.text as string });
+        if (item.type === 'reasoning') {
+          const text = ((item.summary as string[] | null) ?? []).join('\n\n');
+          if (text) this.emit({ type: 'thinking.completed', itemId: item.id as string, text });
+        }
+        if (item.type === 'agentMessage' && (item.phase === 'commentary' || this.commentaryIds.has(item.id as string))) {
+          this.commentaryIds.delete(item.id as string);
+          this.emit({ type: 'thinking.completed', itemId: item.id as string, text: item.text as string });
+        } else if (item.type === 'agentMessage') this.emit({ type: 'message.completed', itemId: item.id as string, text: item.text as string });
         if (item.type === 'dynamicToolCall') {
           const content = (item.contentItems as Array<{ type: string; text?: string }> | null) ?? [];
           this.emit({ type: 'tool.completed', itemId: item.id as string, name: item.tool as string, success: item.success !== false, output: content.map((c) => c.text ?? '').join('\n') });

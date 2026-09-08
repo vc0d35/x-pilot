@@ -2,8 +2,10 @@ import type { AgentEvent, AgentStatus, ApprovalRequest } from '../shared/agent';
 
 export interface Message { id: string; role: 'user' | 'agent' | 'system'; text: string; streaming?: boolean }
 export interface ToolCall { id: string; name: string; args: unknown; status: 'running' | 'done' | 'failed'; output?: string }
+export interface ThinkingStep { id: string; text: string }
 export type Entry =
   | { kind: 'message'; message: Message }
+  | { kind: 'thinking'; id: string; steps: ThinkingStep[] }
   | { kind: 'tool'; call: ToolCall }
   | { kind: 'approval'; request: ApprovalRequest; decision?: string };
 
@@ -15,9 +17,11 @@ export interface State {
   entries: Entry[];
   /** What the agent is doing right now, while a turn runs. */
   activity: { activity: 'thinking' | 'tool' | 'writing'; detail?: string } | null;
+  /** Id of the turn in progress; thinking events are folded into one entry per turn. */
+  turnId: string | null;
 }
 
-export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null };
+export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null, turnId: null };
 
 let seq = 0;
 const localId = () => `local-${++seq}`;
@@ -33,7 +37,10 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'user.message':
       return { ...state, entries: [...state.entries, { kind: 'message', message: { id: localId(), role: 'user', text: e.text } }] };
     case 'turn.started':
-      return { ...state, running: true, activity: null };
+      return { ...state, running: true, activity: null, turnId: e.turnId };
+    case 'thinking.delta':
+    case 'thinking.completed':
+      return { ...state, entries: applyThinking(state.entries, state.turnId ?? 'turn', e) };
     case 'activity':
       return { ...state, activity: e.detail ? { activity: e.activity, detail: e.detail } : { activity: e.activity } };
     case 'turn.completed': {
@@ -68,4 +75,16 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     default:
       return state;
   }
+}
+
+/** Appends to (or creates) the single thinking entry of the current turn and updates the matching step. */
+function applyThinking(entries: Entry[], turnId: string, e: Extract<AgentEvent, { type: 'thinking.delta' | 'thinking.completed' }>): Entry[] {
+  const idx = entries.findIndex((en) => en.kind === 'thinking' && en.id === turnId);
+  const entry: Extract<Entry, { kind: 'thinking' }> = idx >= 0 ? (entries[idx] as Extract<Entry, { kind: 'thinking' }>) : { kind: 'thinking', id: turnId, steps: [] };
+  const steps = entry.steps.slice();
+  const si = steps.findIndex((st) => st.id === e.itemId);
+  const text = e.type === 'thinking.completed' ? e.text : (si >= 0 ? steps[si].text : '') + e.delta;
+  if (si >= 0) steps[si] = { id: e.itemId, text }; else steps.push({ id: e.itemId, text });
+  const updated = { ...entry, steps };
+  return idx >= 0 ? entries.map((en, i) => (i === idx ? updated : en)) : [...entries, updated];
 }

@@ -87,3 +87,7 @@ code { font: inherit; }
 
 .activity { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 2px 4px; }
 .activity .status-dot { background: var(--muted); animation: breathe 1.4s ease-in-out infinite; }
+
+.thinking { font-size: 12px; color: var(--muted); }
+.thinking-body { margin: 4px 0 0 12px; display: flex; flex-direction: column; gap: 6px; border-left: 1px solid var(--line); padding-left: 8px; }
+.thinking-step { white-space: pre-wrap; }

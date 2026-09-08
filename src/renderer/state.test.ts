@@ -61,3 +61,21 @@ it('tracks activity while running and clears it when the turn ends', () => {
   s = run([{ type: 'turn.completed', turnId: 't', status: 'completed' }], s);
   expect(s.activity).toBeNull();
 });
+
+it('folds all thinking in a turn into one entry, even around tool calls', () => {
+  const s = run([
+    { type: 'turn.started', turnId: 't1' },
+    { type: 'thinking.delta', itemId: 'r1', delta: 'Need ' },
+    { type: 'thinking.delta', itemId: 'r1', delta: 'state.' },
+    { type: 'tool.started', itemId: 'c1', name: 'x_get_page_state', args: {} },
+    { type: 'thinking.completed', itemId: 'r1', text: 'Need state.' },
+    { type: 'thinking.completed', itemId: 'c2', text: 'Now answer.' },
+    { type: 'message.completed', itemId: 'm1', text: 'Done' },
+    { type: 'turn.completed', turnId: 't1', status: 'completed' },
+    { type: 'turn.started', turnId: 't2' },
+    { type: 'thinking.completed', itemId: 'r9', text: 'Second turn' },
+  ]);
+  expect(s.entries.map((e) => e.kind)).toEqual(['thinking', 'tool', 'message', 'thinking']);
+  expect(s.entries[0]).toEqual({ kind: 'thinking', id: 't1', steps: [{ id: 'r1', text: 'Need state.' }, { id: 'c2', text: 'Now answer.' }] });
+  expect(s.entries[3]).toEqual({ kind: 'thinking', id: 't2', steps: [{ id: 'r9', text: 'Second turn' }] });
+});

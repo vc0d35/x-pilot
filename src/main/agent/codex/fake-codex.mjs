@@ -42,6 +42,12 @@ rl.on('line', async (line) => {
       return; // continues in the response branch below
     }
     out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: { type: 'reasoning', id: 'r-1', summary: [], content: [] } } });
+    out({ jsonrpc: '2.0', method: 'item/reasoning/summaryTextDelta', params: { threadId, turnId, itemId: 'r-1', delta: 'Need the page ', summaryIndex: 0 } });
+    out({ jsonrpc: '2.0', method: 'item/reasoning/summaryTextDelta', params: { threadId, turnId, itemId: 'r-1', delta: 'state first.', summaryIndex: 0 } });
+    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId, completedAtMs: 0, item: { type: 'reasoning', id: 'r-1', summary: ['Need the page state first.'], content: [] } } });
+    out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: { type: 'agentMessage', id: 'c-1', text: '', phase: 'commentary', memoryCitation: null, delivery: null, questions: null } } });
+    out({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { threadId, turnId, itemId: 'c-1', delta: "I'll check the page." } });
+    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId, completedAtMs: 0, item: { type: 'agentMessage', id: 'c-1', text: "I'll check the page.", phase: 'commentary', memoryCitation: null, delivery: null, questions: null } } });
     // A built-in web search the model ran before calling our tool.
     const ws = { type: 'webSearch', id: 'ws-1', query: 'electron latest version', action: { type: 'search', query: null, queries: ['electron latest version', 'electron releases'] } };
     out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId, startedAtMs: 0, item: ws } });
@@ -55,10 +61,10 @@ rl.on('line', async (line) => {
   if (id === 'req-1') {
     const text = msg.result.contentItems[0].text;
     out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'dynamicToolCall', id: 'call-1', namespace: null, tool: 'x_get_page_state', arguments: {}, status: 'completed', contentItems: msg.result.contentItems, success: msg.result.success, durationMs: 1 } } });
-    out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId: 'turn-1', startedAtMs: 0, item: { type: 'agentMessage', id: 'msg-1', text: '', phase: null, memoryCitation: null, delivery: null, questions: null } } });
+    out({ jsonrpc: '2.0', method: 'item/started', params: { threadId, turnId: 'turn-1', startedAtMs: 0, item: { type: 'agentMessage', id: 'msg-1', text: '', phase: 'final_answer', memoryCitation: null, delivery: null, questions: null } } });
     out({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { threadId, turnId: 'turn-1', itemId: 'msg-1', delta: 'You are on: ' } });
     out({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { threadId, turnId: 'turn-1', itemId: 'msg-1', delta: text } });
-    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'agentMessage', id: 'msg-1', text: 'You are on: ' + text, phase: null, memoryCitation: null, delivery: null, questions: null } } });
+    out({ jsonrpc: '2.0', method: 'item/completed', params: { threadId, turnId: 'turn-1', completedAtMs: 0, item: { type: 'agentMessage', id: 'msg-1', text: 'You are on: ' + text, phase: 'final_answer', memoryCitation: null, delivery: null, questions: null } } });
     out({ jsonrpc: '2.0', method: 'turn/completed', params: { threadId, turn: { id: 'turn-1', items: [], status: 'completed', error: null } } });
     return;
   }

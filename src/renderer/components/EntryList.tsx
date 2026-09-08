@@ -51,6 +51,19 @@ function ToolGroup({ calls }: { calls: ToolCall[] }) {
   );
 }
 
+function ThinkingRow({ steps }: { steps: { id: string; text: string }[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="thinking">
+      <button className="tool-group-head" onClick={() => setOpen(!open)} aria-expanded={open}>
+        <span>{open ? '▾' : '▸'} thinking</span>
+        <span className="tool-group-names">{steps.length} step{steps.length === 1 ? '' : 's'}</span>
+      </button>
+      {open && <div className="thinking-body">{steps.map((st) => <div key={st.id} className="thinking-step">{st.text}</div>)}</div>}
+    </div>
+  );
+}
+
 export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; activity: State['activity']; onResolve: (id: string, d: string) => void }) {
   const endRef = useRef<HTMLDivElement>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [entries, activity]);
@@ -59,6 +72,7 @@ export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; 
       {groupEntries(entries).map((en, i) => {
         if (en.kind === 'message') return <div key={en.message.id + i} className={`msg msg-${en.message.role}`}>{en.message.text}{en.message.streaming ? '▍' : ''}</div>;
         if (en.kind === 'tools') return <ToolGroup key={en.key} calls={en.calls} />;
+        if (en.kind === 'thinking') return <ThinkingRow key={'th-' + en.id} steps={en.steps} />;
         return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} />;
       })}
       <ActivityLine activity={activity} />
