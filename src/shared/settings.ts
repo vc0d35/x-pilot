@@ -4,6 +4,8 @@ export const DEFAULT_ALLOW_HOSTS = ['x.com', '*.x.com', 'twitter.com', '*.twitte
 
 export const SettingsSchema = z.object({
   posting: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
+  /** Agent-made likes: autonomous by default (reversible, low stakes); 'confirm' asks in the sidebar. */
+  likes: z.object({ mode: z.enum(['auto', 'confirm']).default('auto') }),
   library: z.object({ dir: z.string().nullable().default(null) }),
   agent: z.object({
     provider: z.literal('codex').default('codex'),
@@ -45,6 +47,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const r = isObj(raw) ? raw : {};
   const shaped = {
     posting: isObj(r.posting) ? r.posting : {},
+    likes: isObj(r.likes) ? r.likes : {},
     library: isObj(r.library) ? r.library : {},
     agent: { ...(isObj(r.agent) ? r.agent : {}), codex: isObj(r.agent) && isObj((r.agent as Record<string, unknown>).codex) ? (r.agent as Record<string, unknown>).codex : {} },
     navigation: isObj(r.navigation) ? r.navigation : {},

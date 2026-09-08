@@ -17,5 +17,6 @@ export interface XViewToolCtx {
   allowHosts(): string[];
   approvals: ApprovalBroker;
   postingMode(): 'confirm' | 'autonomous';
+  likesMode(): 'auto' | 'confirm';
   drafts: DraftStore;
 }

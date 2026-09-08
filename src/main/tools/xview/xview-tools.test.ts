@@ -24,7 +24,7 @@ function ctx(current = 'https://x.com/home') {
     callPreload: vi.fn(async (name: string) => name === 'x_get_page_state' ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true }) : ok({ post: { id: '1' }, thread: [], article: null })),
   };
   const bg = fakeView('about:blank');
-  return { xview, bg, background: async () => bg, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm' as const, drafts: new DraftStore() };
+  return { xview, bg, background: async () => bg, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm' as const, likesMode: () => 'auto' as const, drafts: new DraftStore() };
 }
 
 describe('normalizePostUrl', () => {

@@ -52,3 +52,9 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
 - [ ] Pause/Resume/Delete work; a paused task has no next run.
+
+## Liking and timeline reading
+- [ ] "Like the first post" → the post on screen gets liked without navigation; it appears in liked history.
+- [ ] "Like <url of a post not on screen>" → liked via the hidden window; the visible window does not move.
+- [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
+- [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.

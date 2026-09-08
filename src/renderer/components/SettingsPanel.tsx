@@ -31,6 +31,12 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           </select>
         </label>
       )}
+      <label>Agent likes
+        <select value={settings.likes.mode} onChange={(e) => set({ likes: { mode: e.target.value as 'auto' | 'confirm' } })}>
+          <option value="auto">Autonomous (needed for scheduled liking)</option>
+          <option value="confirm">Confirm each like in the sidebar</option>
+        </select>
+      </label>
       <label>Web search
         <select value={codex.webSearch} onChange={(e) => set({ agent: { codex: { webSearch: e.target.value as Settings['agent']['codex']['webSearch'] } } })}>
           <option value="live">Live (fact-check against the web)</option>

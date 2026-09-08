@@ -13,6 +13,7 @@ export const SEL = {
   postButton: '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]',
   dialog: '[role="dialog"]',
   toast: '[data-testid="toast"]',
+  homeTab: '[role="tab"]',
   // Long-form X Articles. Verify against a captured fixture; both known test ids are tried.
   articleView: '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"]',
   articleTitle: 'h1',

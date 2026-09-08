@@ -6,14 +6,14 @@ import { XViewController } from './xview';
 /**
  * A hidden window on the `persist:x` session running the same X preload as the visible
  * view. Read tools use it so research never moves the user's screen. Its like/focus IPC
- * is ignored by main (sender-id checks), and its tools are not registered with the agent;
+ * is relayed only where main opts in (likes made here count as the user's), and its tools are not registered with the agent;
  * it is only reachable through the controller returned by `get()`.
  */
 export class BackgroundXView {
   private win: BrowserWindow | null = null;
   private controller: XViewController | null = null;
 
-  constructor(private readonly opts: { preload: string; allowHosts(): string[]; openExternal(url: string): void }) {}
+  constructor(private readonly opts: { preload: string; allowHosts(): string[]; openExternal(url: string): void; onContents?(contents: WebContents): void }) {}
 
   async get(): Promise<XViewController> {
     if (this.controller && this.win && !this.win.isDestroyed()) return this.controller;
@@ -24,6 +24,7 @@ export class BackgroundXView {
     const contents: WebContents = win.webContents;
     attachNavigationPolicy(contents, { allowHosts: this.opts.allowHosts, openExternal: () => { /* background reads never open external pages */ } });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    this.opts.onContents?.(contents);
     const bridge = new WebMcpBridge(ipcMain, contents);
     this.win = win;
     this.controller = new XViewController(contents, bridge);
