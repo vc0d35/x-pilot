@@ -26,7 +26,7 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await app.close(); });
 
-type Harness = { sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } }; registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> }; openExternalCalls: string[]; xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } } };
+type Harness = { windowCount(): number; sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } }; registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> }; openExternalCalls: string[]; xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } } };
 const inMain = <T,>(fn: (t: Harness) => T | Promise<T>) => app.evaluate(async (_electron, fnSrc: string) => {
   const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
   return (new Function('t', `return (${fnSrc})(t)`))(t);
@@ -64,4 +64,14 @@ test('x_search runs in the hidden background window without moving the visible v
   expect(Array.isArray(r.content)).toBe(true);
   const after = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
   expect(after).toBe(before);
+});
+
+// Network-dependent: resolving the (dead) t.co link makes one HEAD request.
+test('a t.co popup opens no window and is routed without touching the visible view', async () => {
+  const beforeWindows = await inMain((t) => t.windowCount());
+  const beforeUrl = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
+  await inMain((t) => t.xView.webContents.executeJavaScript("window.open('https://t.co/xpilot-does-not-exist', '_blank')"));
+  await expect.poll(() => inMain((t) => t.openExternalCalls.at(-1)), { timeout: 15_000 }).toBe('https://t.co/xpilot-does-not-exist');
+  expect(await inMain((t) => t.windowCount())).toBe(beforeWindows);
+  expect(await inMain((t) => t.xView.webContents.executeJavaScript('location.href'))).toBe(beforeUrl);
 });

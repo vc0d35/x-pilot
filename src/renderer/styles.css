@@ -36,3 +36,11 @@ button:disabled { opacity: .5; cursor: default; }
 .lib-item { border: 1px solid #2f3336; border-radius: 8px; padding: 8px; margin-bottom: 8px; }
 .lib-meta { font-size: 12px; color: #8b98a5; margin: 4px 0 8px; }
 .settings label { display: block; margin-bottom: 12px; } .settings select { display: block; width: 100%; margin-top: 4px; background: #16181c; color: inherit; border: 1px solid #2f3336; border-radius: 6px; padding: 6px; } .row { display: flex; gap: 8px; align-items: center; margin-top: 4px; } .danger { background: #f4212e; } .hint { color: #8b98a5; font-size: 12px; }
+
+.tool-group { font-size: 12px; color: #8b98a5; }
+.tool-group-head { width: 100%; display: flex; gap: 8px; align-items: baseline; background: transparent; color: #8b98a5; padding: 2px 4px; border-radius: 6px; text-align: left; }
+.tool-group-head:hover { background: #16181c; }
+.tool-group-names { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-group-running .tool-status { color: #ffd400; }
+.tool-status-failed { color: #f4212e; }
+.tool-group-body { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0 12px; }

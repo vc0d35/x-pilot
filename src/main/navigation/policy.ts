@@ -1,4 +1,5 @@
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
+import { isShortLinkHost } from './shortlink';
 
 export { DEFAULT_ALLOW_HOSTS };
 export const POPUP_ONLY_HOSTS = ['accounts.google.com', 'appleid.apple.com'];
@@ -39,7 +40,7 @@ export interface NavigationContents {
 
 export function attachNavigationPolicy(
   contents: NavigationContents,
-  deps: { allowHosts: () => string[]; openExternal: (url: string) => void },
+  deps: { allowHosts: () => string[]; openExternal: (url: string) => void; openShortLink?: (url: string) => void },
 ): void {
   const guard = (e: { preventDefault(): void }, url: string) => {
     const decision = decideNavigation(url, deps.allowHosts());
@@ -50,6 +51,9 @@ export function attachNavigationPolicy(
   contents.on('will-navigate', guard);
   contents.on('will-redirect', guard);
   contents.setWindowOpenHandler(({ url }) => {
+    // Outbound links are t.co redirects opened in a new tab: resolve them in main instead of
+    // creating a window that would be left blank once the redirect is cancelled.
+    if (deps.openShortLink && isShortLinkHost(url)) { deps.openShortLink(url); return { action: 'deny' }; }
     const decision = decideNavigation(url, deps.allowHosts(), { isPopup: true });
     if (decision === 'allow') return { action: 'allow', overrideBrowserWindowOptions: popupWindowOptions() };
     if (decision === 'external') deps.openExternal(url);

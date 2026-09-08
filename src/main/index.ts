@@ -1,8 +1,9 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron';
+import { app, net, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
+import { resolveShortLink, routeShortLink } from './navigation/shortlink';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { SettingsStore } from './settings';
 import { ToolRegistry } from './tools/registry';
@@ -38,7 +39,18 @@ app.whenReady().then(async () => {
 
   const openExternalCalls: string[] = [];
   const openExternal = (url: string) => { openExternalCalls.push(url); if (!E2E) void shell.openExternal(url); };
-  attachNavigationPolicy(xView.webContents, { allowHosts: () => settings.get().navigation.allowHosts, openExternal });
+  const headFetch = async (url: string) => {
+    const res = await net.fetch(url, { method: 'HEAD', redirect: 'manual' });
+    return { status: res.status, location: res.headers.get('location') };
+  };
+  const openShortLink = (url: string) => {
+    void resolveShortLink(url, headFetch).then((target) => {
+      const route = routeShortLink(target, settings.get().navigation.allowHosts);
+      if (route === 'view') void xView.webContents.loadURL(target);
+      else if (route === 'external') openExternal(target);
+    });
+  };
+  attachNavigationPolicy(xView.webContents, { allowHosts: () => settings.get().navigation.allowHosts, openExternal, openShortLink });
   xView.webContents.on('did-create-window', (child) => {
     attachNavigationPolicy(child.webContents, { allowHosts: () => [...settings.get().navigation.allowHosts, ...POPUP_ONLY_HOSTS], openExternal });
   });
@@ -81,7 +93,7 @@ app.whenReady().then(async () => {
   registerSidebarIpc({ sidebar: sidebar.webContents, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
-  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
+  if (E2E) (globalThis as Record<string, unknown>).__xpilotTest = { windowCount: () => BrowserWindow.getAllWindows().length, registry, xview, bridge, openExternalCalls, settings, xView, sidebar, agent };
 
   await xView.webContents.loadURL(START_URL);
   if (!E2E) {

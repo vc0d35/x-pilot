@@ -57,3 +57,19 @@ describe('attachNavigationPolicy', () => {
     expect(popup).toEqual({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } } });
   });
 });
+
+describe('short links in popups', () => {
+  it('never opens a window for t.co; hands the url to the short-link resolver instead', () => {
+    const c = (function fakeContents() {
+      let handler: ((d: { url: string }) => { action: string }) | null = null;
+      return { on: () => {}, setWindowOpenHandler: (h: typeof handler) => { handler = h; }, open: (url: string) => handler!({ url }) };
+    })();
+    const openExternal = vi.fn();
+    const openShortLink = vi.fn();
+    attachNavigationPolicy(c as never, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal, openShortLink });
+    expect(c.open('https://t.co/abc').action).toBe('deny');
+    expect(openShortLink).toHaveBeenCalledWith('https://t.co/abc');
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(c.open('https://x.com/i/flow').action).toBe('allow');
+  });
+});
