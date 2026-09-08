@@ -5,7 +5,7 @@ import type { XViewToolCtx } from './context';
 export const navigate: ToolModule<XViewToolCtx> = {
   spec: {
     name: 'x_navigate',
-    description: 'Navigates the x.com view to a URL on x.com (home, a profile, a post, search, likes…) and returns the resulting page state.',
+    description: 'Navigates the window the USER is looking at to a URL on x.com (home, a profile, a post, search, likes…) and returns the page state. Only use when the user asked to open, show, or go somewhere; for reading use x_read_post or x_search instead.',
     inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'], additionalProperties: false },
   },
   execute: async (args, ctx) => {

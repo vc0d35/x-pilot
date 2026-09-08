@@ -21,7 +21,9 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Reading
 - [ ] "Summarise the visible posts" on Home.
-- [ ] "Read <post url>" navigates and returns the thread text.
+- [ ] "Read <post url>" returns the thread text WITHOUT moving the visible window (it runs in the hidden session window).
+- [ ] "Search X for electron and show me" → the visible window navigates to the results (view: visible).
+- [ ] "Roll my timeline until you find a post by @dhh" → the visible window scrolls (x_scroll + x_read_visible_posts).
 - [ ] Open an X Article; "summarise this article" returns title + body.
 - [ ] Open an X Article directly by URL (not from the timeline): "summarise this article" works and the chip shows the article title.
 

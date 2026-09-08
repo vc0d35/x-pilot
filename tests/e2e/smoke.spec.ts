@@ -55,3 +55,13 @@ test('the sidebar preload loads and the React header renders', async () => {
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 }).toBe('object');
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('X Pilot');
 });
+
+// Network-dependent: loads x.com search (logged out) in the hidden session window.
+test('x_search runs in the hidden background window without moving the visible view', async () => {
+  const before = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
+  const r = await inMain((t) => t.registry.call('x_search', { query: 'electron' }));
+  expect(r.success).toBe(true);
+  expect(Array.isArray(r.content)).toBe(true);
+  const after = await inMain((t) => t.xView.webContents.executeJavaScript('location.href'));
+  expect(after).toBe(before);
+});

@@ -9,6 +9,7 @@ import { ToolRegistry } from './tools/registry';
 import { AppToolSource } from './tools/registry';
 import { WebMcpBridge } from './webmcp/bridge';
 import { XViewController } from './xview';
+import { BackgroundXView } from './background-view';
 import { ApprovalBroker } from './approvals';
 import { AgentController } from './agent/controller';
 import { CodexProvider } from './agent/codex/provider';
@@ -47,8 +48,10 @@ app.whenReady().then(async () => {
   const bridge = new WebMcpBridge(ipcMain, xView.webContents);
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
+  const background = new BackgroundXView({ preload: join(__dirname, '../preload/x.js'), allowHosts: () => settings.get().navigation.allowHosts, openExternal });
+  app.on('will-quit', () => background.destroy());
   registry.addSource(new AppToolSource('xview', xviewTools, {
-    xview, allowHosts: () => settings.get().navigation.allowHosts,
+    xview, background: () => background.get(), allowHosts: () => settings.get().navigation.allowHosts,
     approvals, postingMode: () => settings.get().posting.mode, drafts: new DraftStore(),
   }));
   registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));

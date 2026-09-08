@@ -20,7 +20,7 @@ function ctx(mode: 'confirm' | 'autonomous', composerText = 'hello world') {
       return fail('unexpected ' + name);
     }),
   };
-  return { c: { xview, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals, postingMode: () => mode, drafts: new DraftStore() }, events, approvals };
+  return { c: { xview, background: async () => xview, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals, postingMode: () => mode, drafts: new DraftStore() }, events, approvals };
 }
 
 describe('buildIntentUrl', () => {
