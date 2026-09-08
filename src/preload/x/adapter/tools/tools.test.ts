@@ -22,7 +22,18 @@ describe('preload tools', () => {
     const r = await pageState.execute({}, ctx);
     expect(r).toEqual({ success: true, content: { url: 'http://localhost:3000/alice/status/111', kind: 'post', title: 'Alice on X', adapterHealthy: true } });
     document.body.innerHTML = '<div>blank</div>';
-    expect((await pageState.execute({}, ctx)) as { content: { adapterHealthy: boolean } }).toMatchObject({ content: { adapterHealthy: false } });
+    expect((await pageState.execute({ timeoutMs: 0 }, ctx)) as { content: { adapterHealthy: boolean } }).toMatchObject({ content: { adapterHealthy: false } });
+  });
+
+  it('x_get_page_state waits for the layout to render after a navigation before judging health', async () => {
+    window.history.pushState({}, '', '/alice/status/111');
+    document.body.innerHTML = '<div>still loading</div>';
+    setTimeout(() => { document.body.innerHTML = fixture('x-status.html'); }, 50);
+    const r = (await pageState.execute({ timeoutMs: 2000 }, ctx)) as { content: { adapterHealthy: boolean } };
+    expect(r.content.adapterHealthy).toBe(true);
+    document.body.innerHTML = '<div>never renders</div>';
+    const r2 = (await pageState.execute({ timeoutMs: 150 }, ctx)) as { content: { adapterHealthy: boolean } };
+    expect(r2.content.adapterHealthy).toBe(false);
   });
 
   it('x_get_page_state reports the new-posts pill and x_show_new_posts clicks it', async () => {
