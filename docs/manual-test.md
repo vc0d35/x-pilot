@@ -11,6 +11,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Which page am I on?" → `x_get_page_state` tool row, correct answer.
 - [ ] Stop button interrupts a long answer.
 - [ ] Open a post with a factual claim and ask "is this true?" → a `web_search` tool row appears and the answer cites non-X sources; Settings → Web search → Off makes the agent stop searching the web.
+- [ ] Header chevron hides the sidebar entirely (x.com fills the window); View → Toggle Sidebar or ⌘\ brings it back with the conversation intact.
 - [ ] New thread clears the list; a settings change (model) restarts and resumes the thread.
 - [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 

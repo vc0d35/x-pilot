@@ -2,6 +2,7 @@ import { app, net, BrowserWindow, dialog, ipcMain, shell } from 'electron';
 import { join } from 'node:path';
 import { mkdirSync } from 'node:fs';
 import { createMainWindow } from './window';
+import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { resolveShortLink, routeShortLink } from './navigation/shortlink';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
@@ -29,7 +30,7 @@ if (process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USE
 
 app.whenReady().then(async () => {
   const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
-  const { xView, sidebar, setSidebarCollapsed } = createMainWindow({
+  const { xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
     preloadX: join(__dirname, '../preload/x.js'),
     preloadSidebar: join(__dirname, '../preload/sidebar.js'),
     rendererUrl: process.env.ELECTRON_RENDERER_URL,
@@ -90,6 +91,7 @@ app.whenReady().then(async () => {
     registry, settings, workspaceDir,
     createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals }),
   });
+  installAppMenu({ toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()) });
   registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 

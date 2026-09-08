@@ -7,7 +7,7 @@ describe('computeLayout', () => {
     expect(l.sidebar).toEqual({ x: 1500 - SIDEBAR_WIDTH, y: 0, width: SIDEBAR_WIDTH, height: 950 });
     expect(l.xView.width).toBe(1500 - SIDEBAR_WIDTH);
   });
-  it('shrinks the sidebar to a strip when collapsed', () => {
+  it('gives the whole window to the X view when collapsed', () => {
     const l = computeLayout(1500, 950, true);
     expect(l.sidebar.width).toBe(SIDEBAR_COLLAPSED_WIDTH);
     expect(l.xView.width).toBe(1500 - SIDEBAR_COLLAPSED_WIDTH);

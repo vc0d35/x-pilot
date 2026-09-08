@@ -13,6 +13,7 @@ export interface MainWindow {
   xView: WebContentsView;
   sidebar: WebContentsView;
   setSidebarCollapsed(collapsed: boolean): void;
+  isSidebarCollapsed(): boolean;
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
@@ -45,6 +46,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
     const l = computeLayout(width, height, collapsed);
     xView.setBounds(l.xView);
     sidebar.setBounds(l.sidebar);
+    sidebar.setVisible(!collapsed);
   };
   layout();
   win.on('resize', layout);
@@ -52,5 +54,5 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   if (opts.rendererUrl) void sidebar.webContents.loadURL(opts.rendererUrl);
   else if (opts.rendererFile) void sidebar.webContents.loadFile(opts.rendererFile);
 
-  return { win, xView, sidebar, setSidebarCollapsed: (c) => { collapsed = c; layout(); } };
+  return { win, xView, sidebar, setSidebarCollapsed: (c) => { collapsed = c; layout(); }, isSidebarCollapsed: () => collapsed };
 }

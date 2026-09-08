@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useState } from 'react';
 import { reduce, initialState } from './state';
-import { Header, CollapsedStrip, type Panel } from './components/Header';
+import { Header, type Panel } from './components/Header';
 import { EntryList } from './components/EntryList';
 import { Composer } from './components/Composer';
 import { LibraryPanel } from './components/LibraryPanel';
@@ -13,8 +13,6 @@ export function App() {
   const [focus, setFocus] = useState<PageContext | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [panel, setPanel] = useState<Panel>('chat');
-  const [collapsed, setCollapsed] = useState(false);
-  const setSidebar = (c: boolean) => { setCollapsed(c); void window.xpilot.setSidebarCollapsed(c); };
 
   useEffect(() => window.xpilot.onEvent(dispatch), []);
   useEffect(() => window.xpilot.onFocus(setFocus), []);
@@ -22,14 +20,12 @@ export function App() {
 
   const adapterBroken = state.entries.some((en) => en.kind === 'tool' && en.call.status === 'done' && (en.call.output ?? '').includes('"adapterHealthy":false'));
 
-  if (collapsed) return <CollapsedStrip status={state.status} onExpand={() => setSidebar(false)} />;
-
   return (
     <div className="app">
       <Header status={state.status} statusMessage={state.statusMessage}
         onNewThread={() => { dispatch({ type: 'reset' }); void window.xpilot.newThread(); }}
         onReconnect={() => void window.xpilot.reconnect()}
-        panel={panel} onPanel={setPanel} onCollapse={() => setSidebar(true)} />
+        panel={panel} onPanel={setPanel} onCollapse={() => void window.xpilot.setSidebarCollapsed(true)} />
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
       {settings?.posting.mode === 'autonomous' && <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>}
       {panel === 'library' ? (
