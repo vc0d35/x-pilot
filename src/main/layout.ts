@@ -3,6 +3,8 @@ export const SIDEBAR_WIDTH = 420;
 export const HANDLE_WIDTH = 104;
 export const HANDLE_HEIGHT = 32;
 export const HANDLE_INSET = 8;
+/** Horizontal offset from the right edge, keeping the handle clear of x.com's own top-right controls. */
+export const HANDLE_RIGHT_OFFSET = 120;
 
 export interface Bounds { x: number; y: number; width: number; height: number }
 
@@ -11,7 +13,7 @@ export function computeLayout(width: number, height: number, collapsed: boolean)
   if (collapsed) {
     return {
       xView: { x: 0, y: 0, width: Math.max(0, width), height },
-      sidebar: { x: Math.max(0, width - HANDLE_WIDTH - HANDLE_INSET), y: HANDLE_INSET, width: HANDLE_WIDTH, height: HANDLE_HEIGHT },
+      sidebar: { x: Math.max(0, width - HANDLE_WIDTH - HANDLE_INSET - HANDLE_RIGHT_OFFSET), y: HANDLE_INSET, width: HANDLE_WIDTH, height: HANDLE_HEIGHT },
     };
   }
   const side = Math.min(SIDEBAR_WIDTH, Math.max(0, width));
