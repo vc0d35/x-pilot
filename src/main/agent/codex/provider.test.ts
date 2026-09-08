@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CodexProvider, buildTurnText } from './provider';
+import { CodexProvider, buildTurnText, contextKey } from './provider';
 import { ApprovalBroker } from '../../approvals';
 import { ok, type ToolResult } from '../../../shared/tools';
 import type { AgentEvent } from '../../../shared/agent';
@@ -195,6 +195,23 @@ describe('CodexProvider', () => {
   });
 });
 
+describe('buildTurnText on a timeline', () => {
+  const tl = { url: 'https://x.com/home', post: null, visible: [
+    { id: '1', url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'First post text' },
+    { id: '2', url: 'https://x.com/b/status/2', authorHandle: 'b', text: 'Second' },
+  ] };
+  it('lists the posts on screen with a fence', () => {
+    const t = buildTurnText('what is the first post about?', tl, null);
+    expect(t).toContain('Current page: home at https://x.com/home. Posts on screen, top to bottom:');
+    expect(t).toContain('1. @a — https://x.com/a/status/1\n<page-content untrusted>First post text</page-content>');
+    expect(t).toContain('2. @b — https://x.com/b/status/2');
+    expect(t.endsWith('what is the first post about?')).toBe(true);
+  });
+  it('sends a one-liner when the same posts are still on screen', () => {
+    expect(buildTurnText('and the second?', tl, contextKey(tl))).toBe('Current page: still the same view of https://x.com/home\n\nand the second?');
+  });
+});
+
 describe('buildTurnText', () => {
   const ctx = { url: 'https://x.com/a/status/1', post: { id: '1', url: 'https://x.com/a/status/1', authorHandle: 'a', authorName: 'A', text: 'hello world', postedAt: null, kind: 'post' as const } };
   it('includes the full post, fenced as untrusted page content, when the focus changed', () => {
@@ -209,7 +226,7 @@ describe('buildTurnText', () => {
     expect(t.endsWith('</page-content>\n\nsummarise')).toBe(true);
   });
   it('sends a one-line reference when the focus is unchanged', () => {
-    const t = buildTurnText('and this?', ctx, '1');
+    const t = buildTurnText('and this?', ctx, contextKey(ctx));
     expect(t).toBe('Current page: still the post by @a at https://x.com/a/status/1\n\nand this?');
   });
   it('passes text through without context', () => {

@@ -15,15 +15,31 @@ export interface CodexProviderDeps {
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
-export function buildTurnText(text: string, ctx: PageContext | null | undefined, lastPostId: string | null): string {
+/** Identity of a page context for "still the same view" dedupe across turns. */
+export function contextKey(ctx: PageContext | null | undefined): string | null {
+  if (!ctx) return null;
+  return ctx.post ? `post:${ctx.post.id}` : `visible:${(ctx.visible ?? []).map((v) => v.id).join(',')}`;
+}
+
+export function buildTurnText(text: string, ctx: PageContext | null | undefined, lastKey: string | null): string {
   if (!ctx) return text;
   const p = ctx.post;
-  if (lastPostId === p.id) return `Current page: still the ${p.kind} by @${p.authorHandle} at ${p.url}\n\n${text}`;
-  const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`, '<page-content untrusted>'];
-  if (p.articleTitle) lines.push(`Title: ${p.articleTitle}`);
-  lines.push(p.text);
-  if (p.articleBody) lines.push('', p.articleBody.slice(0, 4000));
-  lines.push('</page-content>');
+  if (p) {
+    if (lastKey === contextKey(ctx)) return `Current page: still the ${p.kind} by @${p.authorHandle} at ${p.url}\n\n${text}`;
+    const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`, '<page-content untrusted>'];
+    if (p.articleTitle) lines.push(`Title: ${p.articleTitle}`);
+    lines.push(p.text);
+    if (p.articleBody) lines.push('', p.articleBody.slice(0, 4000));
+    lines.push('</page-content>');
+    return `${lines.join('\n')}\n\n${text}`;
+  }
+  const visible = ctx.visible ?? [];
+  if (visible.length === 0) return text;
+  if (lastKey === contextKey(ctx)) return `Current page: still the same view of ${ctx.url}\n\n${text}`;
+  let kind = 'page';
+  try { const path = new URL(ctx.url).pathname; kind = path === '/' || path === '/home' ? 'home' : path.startsWith('/search') ? 'search' : path.endsWith('/likes') ? 'likes' : 'timeline'; } catch { /* keep 'page' */ }
+  const lines = [`Current page: ${kind} at ${ctx.url}. Posts on screen, top to bottom:`];
+  visible.forEach((v, i) => lines.push(`${i + 1}. @${v.authorHandle} — ${v.url}`, `<page-content untrusted>${v.text}</page-content>`));
   return `${lines.join('\n')}\n\n${text}`;
 }
 
@@ -35,7 +51,7 @@ export class CodexProvider implements AgentProvider {
   private turnId: string | null = null;
   private running = false;
   private disconnected = false;
-  private lastPostId: string | null = null;
+  private lastContextKey: string | null = null;
   private writingItemId: string | null = null;
   /** agentMessage items with phase 'commentary' are the model's narration, shown as thinking. */
   private readonly commentaryIds = new Set<string>();
@@ -116,8 +132,8 @@ export class CodexProvider implements AgentProvider {
 
   async send(text: string, pageContext?: PageContext | null): Promise<void> {
     if (!this.rpc || !this.threadId) throw new Error('provider not started');
-    const full = buildTurnText(text, pageContext, this.lastPostId);
-    this.lastPostId = pageContext?.post.id ?? this.lastPostId;
+    const full = buildTurnText(text, pageContext, this.lastContextKey);
+    this.lastContextKey = contextKey(pageContext) ?? this.lastContextKey;
     this.emit({ type: 'user.message', text });
     this.running = true;
     this.emit({ type: 'status', status: 'running' });
