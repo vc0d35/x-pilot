@@ -9,3 +9,4 @@ build/entitlements.mac.plist
 build/embedded.provisionprofile
 .superpowers/
 .DS_Store
+.claude/
