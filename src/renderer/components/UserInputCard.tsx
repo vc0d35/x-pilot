@@ -39,7 +39,16 @@ export function UserInputCard({
     Object.fromEntries(request.questions.map((q) => [q.id, q.options?.[0] ?? ''])),
   );
   return (
-    <div className="approval approval-input" ref={cardRef}>
+    <div
+      className="approval approval-input"
+      ref={cardRef}
+      onKeyDown={(e) => {
+        if (!resolved && (e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+          e.preventDefault();
+          onResolve(request.id, values);
+        }
+      }}
+    >
       <div className="approval-title">The agent has a question</div>
       {request.questions.map((q) =>
         resolved ? (

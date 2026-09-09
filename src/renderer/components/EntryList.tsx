@@ -68,8 +68,14 @@ export function ApprovalCard({
                 value={text}
                 autoFocus
                 rows={3}
-                placeholder="What should change?"
+                placeholder="What should change? (⌘↩ to send)"
                 onChange={(e) => setText(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+                    e.preventDefault();
+                    onResolve(request.id, noting, text);
+                  }
+                }}
                 maxLength={2000}
               />
               <button onClick={() => onResolve(request.id, noting, text)}>Send</button>
