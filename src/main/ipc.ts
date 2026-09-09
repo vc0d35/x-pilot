@@ -37,7 +37,8 @@ export interface SidebarIpcDeps {
 }
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
-const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
+/** The note is what the user typed on an option that asked for one; capped so it cannot fill a turn. */
+const ResolveSchema = z.object({ id: z.string(), decision: z.string(), note: z.string().max(2000).optional() });
 /** Answers by question id; null is a skip. The caps keep a wedged renderer from filling the turn. */
 const ResolveInputSchema = z.object({
   id: z.string().max(200),
@@ -107,8 +108,8 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(
     IPC.agentResolveApproval,
     guarded((_e, raw) => {
-      const { id, decision } = ResolveSchema.parse(raw);
-      approvals.resolve(id, decision);
+      const { id, decision, note } = ResolveSchema.parse(raw);
+      approvals.resolve(id, decision, note);
     }),
   );
   ipcMain.handle(

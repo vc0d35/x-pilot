@@ -72,7 +72,7 @@ export const submitPost = defineTool({
       if (!state.canSubmit) return fail('Post button is disabled (empty draft or over the length limit)');
       if (ctx.postingMode() === 'confirm') {
         const approvedText = state.text;
-        const decision = await ctx.approvals.request(
+        const { decision } = await ctx.approvals.request(
           {
             kind: 'post',
             title: `Post this ${draft.target}?`,

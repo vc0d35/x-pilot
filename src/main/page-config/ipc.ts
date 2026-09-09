@@ -1,4 +1,4 @@
-import { IPC, type PageConfig } from '../../shared/ipc';
+import { IPC, type PageConfig, type PageStylesPreview } from '../../shared/ipc';
 
 /** The sync half of `ipcMain`: the reply is the value assigned to `returnValue`. */
 export interface PageConfigIpcEvent {
@@ -13,6 +13,8 @@ export interface PageConfigIpc {
 export interface PageConfigStyles {
   get(): string;
   onChange(cb: (css: string) => void): () => void;
+  /** A sheet the user is being shown before it is written, or null when there is none. */
+  onPreview(cb: (css: string | null) => void): () => void;
 }
 
 /** The selector overrides, as the same pair: what to apply now, and a way to hear it change. */
@@ -32,7 +34,7 @@ export interface PageConfigIpcDeps {
   /** Every live X view, visible and hidden, in the order a push should reach them. */
   xContentsIds(): number[];
   /** Sends to one X view; a function so the wiring is testable without a WebContents. */
-  send(id: number, channel: string, payload: PageConfig): void;
+  send(id: number, channel: string, payload: PageConfig | PageStylesPreview): void;
 }
 
 /**
@@ -71,4 +73,11 @@ export function registerPageConfigIpc(deps: PageConfigIpcDeps): void {
   };
   deps.styles.onChange(push);
   deps.selectors.onChange(push);
+  // A preview is what the user is deciding about, so it goes to the view they are looking at and
+  // nowhere else; the hidden readers must keep seeing the page as X ships it.
+  deps.styles.onPreview((css) => {
+    for (const id of deps.xContentsIds()) {
+      if (deps.isVisibleContents(id)) deps.send(id, IPC.pageConfigPreview, { css });
+    }
+  });
 }

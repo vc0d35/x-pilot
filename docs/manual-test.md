@@ -52,7 +52,9 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Page styles
 
-- [ ] "Make the timeline text bigger" → a confirmation card appears showing the whole stylesheet; Cancel leaves the page as it was and the agent reports the decision rather than retrying; Apply restyles the visible page at once.
+- [ ] "Make the timeline text bigger" → the visible page changes at once as a preview and a card appears showing the whole stylesheet with Keep / Adjust… / Revert. Revert puts the page back and the agent reports the decision rather than retrying; Adjust… opens a box ("make it bigger still"), and Send takes the preview off and comes back with a new proposal built on the note; Keep leaves the styles on the page and writes the file (Settings → Page styles → Open file shows the CSS).
+- [ ] With a card up, "Remove every page style" is asked without a preview (a layered sheet cannot show rules going away), with Keep / Revert only.
+- [ ] Navigate the X view while a preview card is up → the preview goes with the old document; answering Keep still writes the file and the styles come back.
 - [ ] Settings → Page config → Page styles → Open file shows the CSS and editing it in an editor re-applies on save; Reset puts the page back with no card, and a hidden-window read ("read <post url>") is unaffected either way.
 - [ ] Paste `body { background: url(https://example.com/x.png) }` into the file by hand and save → the page does not change and the Page styles row says "Not applied: …". Delete the line and it applies again.
 - [ ] Settings → Page styles → Autonomous warns first; after switching, "make the links green" applies with no card.

@@ -66,7 +66,8 @@ export interface XPilotApi {
   interrupt(): Promise<void>;
   newThread(): Promise<void>;
   reconnect(): Promise<void>;
-  resolveApproval(id: string, decision: string): Promise<void>;
+  /** `note` is what the user typed on an option that asked for one; the transcript shows it. */
+  resolveApproval(id: string, decision: string, note?: string): Promise<void>;
   /** Answers a clarifying question from the agent; null answers mean the user skipped it. */
   resolveInput(id: string, answers: UserInputAnswers): Promise<void>;
   listModels(): Promise<ModelInfo[]>;

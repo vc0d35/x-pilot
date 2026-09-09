@@ -5,6 +5,7 @@ import { registerPageConfigIpc, type PageConfigIpcEvent } from './ipc';
 function harness(opts: { css?: string; overrides?: Record<string, string>; throws?: boolean } = {}) {
   const handlers = new Map<string, (event: PageConfigIpcEvent, payload: unknown) => void>();
   const styleListeners = new Set<(css: string) => void>();
+  const previewListeners = new Set<(css: string | null) => void>();
   const selectorListeners = new Set<() => void>();
   let css = opts.css ?? 'a { color: red }';
   let overrides: Record<string, string> = opts.overrides ?? {};
@@ -21,6 +22,10 @@ function harness(opts: { css?: string; overrides?: Record<string, string>; throw
       onChange: (cb) => {
         styleListeners.add(cb);
         return () => styleListeners.delete(cb);
+      },
+      onPreview: (cb) => {
+        previewListeners.add(cb);
+        return () => previewListeners.delete(cb);
       },
     },
     selectors: {
@@ -43,6 +48,9 @@ function harness(opts: { css?: string; overrides?: Record<string, string>; throw
     changeStyles(next: string) {
       css = next;
       for (const cb of styleListeners) cb(next);
+    },
+    preview(css: string | null) {
+      for (const cb of previewListeners) cb(css);
     },
     changeSelectors(next: Record<string, string>) {
       overrides = next;
@@ -70,6 +78,15 @@ describe('registerPageConfigIpc', () => {
     h.changeStyles('b { color: blue }');
     expect(h.send).toHaveBeenCalledWith(1, IPC.pageConfigUpdate, { styles: 'b { color: blue }', selectors: {} });
     expect(h.send).toHaveBeenCalledWith(2, IPC.pageConfigUpdate, { styles: null, selectors: {} });
+  });
+
+  it('sends a preview to the visible view alone, and takes it off the same way', () => {
+    const h = harness();
+    h.preview('b { color: blue }');
+    expect(h.send).toHaveBeenCalledTimes(1);
+    expect(h.send).toHaveBeenCalledWith(1, IPC.pageConfigPreview, { css: 'b { color: blue }' });
+    h.preview(null);
+    expect(h.send).toHaveBeenLastCalledWith(1, IPC.pageConfigPreview, { css: null });
   });
 
   it('answers with no config rather than throwing when a store cannot read its file', () => {

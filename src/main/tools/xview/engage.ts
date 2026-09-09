@@ -49,7 +49,7 @@ export const likePost = defineTool({
     if (stopped) return stopped;
     if (ctx.likesMode() === 'confirm') {
       const detail = await likeDetail(ctx, target);
-      const decision = await ctx.approvals.request(
+      const { decision } = await ctx.approvals.request(
         {
           kind: 'post',
           title: `${action === 'like' ? 'Like' : 'Unlike'} this post?`,

@@ -32,6 +32,12 @@ const push = (payload: unknown) => {
   listener({}, payload);
 };
 
+/** The preview half of the same wiring: the sheet a tool shows while it waits on the user. */
+const preview = (css: string | null) => {
+  const listener = on.mock.calls.find((c) => c[0] === IPC.pageConfigPreview)?.[1] as (e: unknown, p: unknown) => void;
+  listener({}, { css });
+};
+
 beforeEach(() => {
   vi.clearAllMocks();
   insertCSS.mockImplementation((css: string) => `key:${css.length}`);
@@ -103,6 +109,45 @@ describe('installPageConfig', () => {
     });
     push({ styles: 'a {}', selectors: { article: '.post' } });
     expect(SEL.article).toBe('.post');
+    warn.mockRestore();
+  });
+
+  it('inserts a preview under its own key, replaces it, and takes it back off', () => {
+    sendSync.mockReturnValue({ styles: 'a {}', selectors: {} });
+    installPageConfig();
+    insertCSS.mockClear();
+    removeInsertedCSS.mockClear();
+    preview('p { color: pink }');
+    expect(insertCSS).toHaveBeenLastCalledWith('p { color: pink }');
+    // The file sheet is left where it is: the preview is a second sheet over it, not a swap.
+    expect(removeInsertedCSS).not.toHaveBeenCalled();
+    preview('p { color: rebeccapurple }');
+    expect(removeInsertedCSS).toHaveBeenCalledWith('key:17');
+    expect(insertCSS).toHaveBeenLastCalledWith('p { color: rebeccapurple }');
+    insertCSS.mockClear();
+    preview(null);
+    expect(removeInsertedCSS).toHaveBeenLastCalledWith('key:26');
+    expect(insertCSS).not.toHaveBeenCalled();
+  });
+
+  it('re-inserts the preview after a file-style change, so it keeps winning', () => {
+    sendSync.mockReturnValue({ styles: 'a {}', selectors: {} });
+    installPageConfig();
+    preview('p { color: pink }');
+    insertCSS.mockClear();
+    push({ styles: 'b { color: blue }', selectors: {} });
+    expect(insertCSS.mock.calls.map((c) => c[0])).toEqual(['b { color: blue }', 'p { color: pink }']);
+  });
+
+  it('keeps the file styles when a preview cannot be inserted', () => {
+    sendSync.mockReturnValue({ styles: 'a {}', selectors: {} });
+    installPageConfig();
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    insertCSS.mockImplementation(() => {
+      throw new Error('bad sheet');
+    });
+    expect(() => preview('p { color: pink }')).not.toThrow();
+    expect(warn).toHaveBeenCalled();
     warn.mockRestore();
   });
 

@@ -21,7 +21,7 @@ export type Entry =
   | { kind: 'message'; message: Message }
   | { kind: 'thinking'; id: string; steps: ThinkingStep[] }
   | { kind: 'tool'; call: ToolCall }
-  | { kind: 'approval'; request: ApprovalRequest; decision?: string }
+  | { kind: 'approval'; request: ApprovalRequest; decision?: string; note?: string }
   | { kind: 'input'; request: UserInputRequest; resolved?: { answers: UserInputAnswers } };
 
 export interface State {
@@ -140,7 +140,9 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'approval.resolved':
       return {
         ...state,
-        entries: state.entries.map((en) => (en.kind === 'approval' && en.request.id === e.id ? { ...en, decision: e.decision } : en)),
+        entries: state.entries.map((en) =>
+          en.kind === 'approval' && en.request.id === e.id ? { ...en, decision: e.decision, note: e.note } : en,
+        ),
       };
     case 'input.requested':
       return { ...state, entries: [...state.entries, { kind: 'input', request: e.request }] };

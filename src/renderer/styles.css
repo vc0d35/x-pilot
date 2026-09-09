@@ -91,6 +91,10 @@ code { font: inherit; }
 .approval-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; max-height: 17.4em; overflow: auto; }
 .approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .approval-decision { color: var(--muted); font-size: 12px; }
+.approval-option-noting { font-weight: 700; }
+.approval-note { display: flex; flex-direction: column; gap: 6px; }
+.approval-note textarea { font: inherit; font-size: 12px; resize: vertical; }
+.approval-note button { align-self: flex-start; }
 .input-question { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
 .input-prompt { overflow-wrap: anywhere; }
 

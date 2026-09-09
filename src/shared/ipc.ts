@@ -8,6 +8,7 @@ export const IPC = {
   // main -> X preload
   adapterCall: 'adapter:call',
   pageConfigUpdate: 'page-config:update',
+  pageConfigPreview: 'page-config:preview',
   // X preload -> main, synchronously, before the page renders
   pageConfigGet: 'page-config:get',
   // sidebar <-> main
@@ -52,4 +53,13 @@ export interface PageConfig {
   styles: string | null;
   /** The user's selector overrides only; the adapter's shipped defaults stand for every other key. */
   selectors: Partial<Record<string, string>>;
+}
+
+/**
+ * A stylesheet the user is being shown before it is written, layered over the file styles in the
+ * visible view alone; `null` takes it back off. It is inserted per document, so a navigation drops
+ * it and nothing has to be undone.
+ */
+export interface PageStylesPreview {
+  css: string | null;
 }

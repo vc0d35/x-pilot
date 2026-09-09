@@ -79,7 +79,7 @@ export function App() {
           <EntryList
             entries={state.entries}
             activity={state.activity}
-            onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)}
+            onResolve={(id, d, note) => void window.xpilot.resolveApproval(id, d, note)}
             onResolveInput={(id, answers) => void window.xpilot.resolveInput(id, answers)}
           />
           <Composer

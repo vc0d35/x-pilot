@@ -1,8 +1,8 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MAX_CSS_BYTES, PAGE_STYLES_HEADER, PageStyles, validateCss } from './styles';
+import { MAX_CSS_BYTES, PAGE_STYLES_HEADER, PageStyles, PREVIEW_MAX_MS, validateCss } from './styles';
 
 const open: PageStyles[] = [];
 const styles = (dir = mkdtempSync(join(tmpdir(), 'xpilot-'))): PageStyles => {
@@ -153,6 +153,33 @@ describe('PageStyles', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     expect(styles(dir).get()).toBe(PAGE_STYLES_HEADER);
     warn.mockRestore();
+  });
+
+  it('pushes a preview without touching the file, and again to take it off', () => {
+    const s = styles();
+    const seen: (string | null)[] = [];
+    s.onPreview((css) => seen.push(css));
+    const changes: string[] = [];
+    s.onChange((css) => changes.push(css));
+    s.preview('a { color: red }');
+    s.preview('a { color: red }');
+    s.preview(null);
+    expect(seen).toEqual(['a { color: red }', null]);
+    expect(changes).toEqual([]);
+    // Not even created: a preview is shown, never stored.
+    expect(existsSync(s.path)).toBe(false);
+  });
+
+  it('takes a preview off by itself if the answer never comes', () => {
+    vi.useFakeTimers();
+    const s = styles();
+    const seen: (string | null)[] = [];
+    s.onPreview((css) => seen.push(css));
+    s.preview('a { color: red }');
+    vi.advanceTimersByTime(PREVIEW_MAX_MS + 1);
+    expect(seen).toEqual(['a { color: red }', null]);
+    expect(s.previewing).toBeNull();
+    vi.useRealTimers();
   });
 
   it('stops notifying once unsubscribed', () => {

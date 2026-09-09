@@ -3,6 +3,8 @@ export type AgentStatus = 'starting' | 'ready' | 'running' | 'disconnected' | 'e
 export interface ApprovalOption {
   id: string;
   label: string;
+  /** Reveals a note field on the card; the decision comes back with what the user typed. */
+  note?: boolean;
 }
 export interface ApprovalRequest {
   id: string;
@@ -40,6 +42,6 @@ export type AgentEvent =
   | { type: 'tool.started'; itemId: string; name: string; args: unknown }
   | { type: 'tool.completed'; itemId: string; name: string; success: boolean; output: string }
   | { type: 'approval.requested'; request: ApprovalRequest }
-  | { type: 'approval.resolved'; id: string; decision: string }
+  | { type: 'approval.resolved'; id: string; decision: string; note?: string }
   | { type: 'input.requested'; request: UserInputRequest }
   | { type: 'input.resolved'; id: string; answers: UserInputAnswers };

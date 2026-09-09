@@ -20,8 +20,30 @@ describe('ApprovalBroker', () => {
     );
     const req = (events[0] as { request: { id: string } }).request;
     expect(broker.resolve(req.id, 'post')).toBe(true);
-    await expect(p).resolves.toBe('post');
+    await expect(p).resolves.toEqual({ decision: 'post' });
     expect(events[1]).toEqual({ type: 'approval.resolved', id: req.id, decision: 'post' });
+  });
+
+  it('carries the note the user typed to the waiting tool and into the transcript', async () => {
+    const broker = new ApprovalBroker();
+    const events: unknown[] = [];
+    broker.onEvent((e) => events.push(e));
+    const p = broker.request(
+      {
+        kind: 'post',
+        title: 'Keep these page styles?',
+        detail: 'a { color: red }',
+        options: [
+          { id: 'keep', label: 'Keep' },
+          { id: 'adjust', label: 'Adjust…', note: true },
+        ],
+      },
+      1000,
+    );
+    const req = (events[0] as { request: { id: string } }).request;
+    expect(broker.resolve(req.id, 'adjust', 'make it blue instead')).toBe(true);
+    await expect(p).resolves.toEqual({ decision: 'adjust', note: 'make it blue instead' });
+    expect(events[1]).toEqual({ type: 'approval.resolved', id: req.id, decision: 'adjust', note: 'make it blue instead' });
   });
 
   it('resolves "timeout" after the timeout and ignores late resolves', async () => {
@@ -29,7 +51,7 @@ describe('ApprovalBroker', () => {
     const broker = new ApprovalBroker();
     const p = broker.request({ kind: 'command', title: 't', detail: 'd', options: [] }, 50);
     vi.advanceTimersByTime(60);
-    await expect(p).resolves.toBe('timeout');
+    await expect(p).resolves.toEqual({ decision: 'timeout' });
     expect(broker.resolve('whatever', 'accept')).toBe(false);
     vi.useRealTimers();
   });
@@ -41,8 +63,8 @@ describe('ApprovalBroker', () => {
     const p1 = broker.request({ kind: 'command', title: 't1', detail: 'd1', options: [] }, 5000);
     const p2 = broker.request({ kind: 'fileChange', title: 't2', detail: 'd2', options: [] }, 5000);
     broker.cancelAll('cancel');
-    await expect(p1).resolves.toBe('cancel');
-    await expect(p2).resolves.toBe('cancel');
+    await expect(p1).resolves.toEqual({ decision: 'cancel' });
+    await expect(p2).resolves.toEqual({ decision: 'cancel' });
     const resolvedEvents = events.filter((e) => (e as { type: string }).type === 'approval.resolved');
     expect(resolvedEvents).toHaveLength(2);
     expect(resolvedEvents.every((e) => (e as { decision: string }).decision === 'cancel')).toBe(true);

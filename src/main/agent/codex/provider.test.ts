@@ -250,7 +250,7 @@ describe('CodexProvider', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(events.some((e) => e.type === 'approval.resolved')).toBe(false);
     approvals.resolve((events.find((e) => e.type === 'approval.requested') as { request: { id: string } }).request.id, 'accept');
-    await expect(pending).resolves.toBe('accept');
+    await expect(pending).resolves.toEqual({ decision: 'accept' });
   });
 
   it('answers requestUserInput with a JSON-RPC error instead of empty answers', async () => {

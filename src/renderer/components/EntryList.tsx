@@ -24,30 +24,58 @@ function ToolRow({ call }: { call: ToolCall }) {
   );
 }
 
-function ApprovalCard({
+/**
+ * An option marked `note` does not decide anything on its own: it opens a field on the card, and
+ * Send is what resolves it, so the agent gets the decision and what the user wants changed together.
+ */
+export function ApprovalCard({
   entry,
   onResolve,
   cardRef,
 }: {
   entry: Extract<Entry, { kind: 'approval' }>;
-  onResolve: (id: string, d: string) => void;
+  onResolve: (id: string, d: string, note?: string) => void;
   cardRef?: RefObject<HTMLDivElement | null>;
 }) {
-  const { request, decision } = entry;
+  const { request, decision, note } = entry;
+  const [noting, setNoting] = useState<string | null>(null);
+  const [text, setText] = useState('');
   return (
     <div className={`approval approval-${request.kind}`} ref={cardRef}>
       <div className="approval-title">{request.title}</div>
       <pre className="approval-detail">{collapseBlankLines(request.detail)}</pre>
       {decision ? (
-        <div className="approval-decision">Decision: {decision}</div>
-      ) : (
-        <div className="approval-actions">
-          {request.options.map((o) => (
-            <button key={o.id} onClick={() => onResolve(request.id, o.id)}>
-              {o.label}
-            </button>
-          ))}
+        <div className="approval-decision">
+          Decision: {decision}
+          {note ? ` — “${note}”` : ''}
         </div>
+      ) : (
+        <>
+          <div className="approval-actions">
+            {request.options.map((o) => (
+              <button
+                key={o.id}
+                className={noting === o.id ? 'approval-option-noting' : undefined}
+                onClick={() => (o.note ? setNoting(noting === o.id ? null : o.id) : onResolve(request.id, o.id))}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+          {noting !== null && (
+            <div className="approval-note">
+              <textarea
+                value={text}
+                autoFocus
+                rows={3}
+                placeholder="What should change?"
+                onChange={(e) => setText(e.target.value)}
+                maxLength={2000}
+              />
+              <button onClick={() => onResolve(request.id, noting, text)}>Send</button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -110,7 +138,7 @@ export function EntryList({
 }: {
   entries: Entry[];
   activity: State['activity'];
-  onResolve: (id: string, d: string) => void;
+  onResolve: (id: string, d: string, note?: string) => void;
   onResolveInput: (id: string, answers: UserInputAnswers) => void;
 }) {
   const endRef = useRef<HTMLDivElement>(null);

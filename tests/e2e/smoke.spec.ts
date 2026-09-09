@@ -50,7 +50,9 @@ type Harness = {
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
   settings: { update(patch: object): unknown };
   approvals: {
-    onEvent(cb: (e: { type: string; request?: { id: string; title: string; detail: string } }) => void): () => void;
+    onEvent(
+      cb: (e: { type: string; request?: { id: string; title: string; detail: string; options: { id: string; label: string }[] } }) => void,
+    ): () => void;
     resolve(id: string, decision: string): boolean;
   };
 };
@@ -119,23 +121,43 @@ test('a selector that drives an action cannot be moved by a tool', async () => {
   expect(postButton).toMatchObject({ locked: true, effective: '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]' });
 });
 
-test('a stylesheet the tool writes is confirmed, and the file is untouched when it is declined', async () => {
+test('a stylesheet the tool writes is previewed on the page, and reverting leaves the file alone', async () => {
   const styles = () => inMain((t) => t.registry.call('xpilot_read_page_styles', {}));
+  const colour = () => inMain((t) => t.xView.webContents.executeJavaScript("getComputedStyle(document.getElementById('ext')).color"));
   const before = (await styles()) as { content: { css: string } };
-  const declined = await inMain(async (t) => {
+  const plain = await colour();
+  type Pending = { __pendingStyles?: Promise<unknown>; __pendingStylesId?: string };
+  const asked = await inMain(async (t) => {
     t.settings.update({ styles: { mode: 'confirm' } });
     // The card is raised synchronously inside the tool call, so the listener goes on first.
-    const asked: { id: string; title: string; detail: string }[] = [];
-    const off = t.approvals.onEvent((e: { type: string; request?: { id: string; title: string; detail: string } }) => {
-      if (e.type === 'approval.requested' && e.request) asked.push(e.request);
+    const seen: { id: string; title: string; detail: string; options: { id: string; label: string }[] }[] = [];
+    const off = t.approvals.onEvent((e: { type: string; request?: (typeof seen)[number] }) => {
+      if (e.type === 'approval.requested' && e.request) seen.push(e.request);
     });
-    const pending = t.registry.call('xpilot_write_page_styles', { css: '#ext { color: rgb(9, 9, 9) }' });
+    // Left pending on purpose: the preview is on the page for exactly as long as the card is up.
+    (globalThis as Pending).__pendingStyles = t.registry.call('xpilot_write_page_styles', { css: '#ext { color: rgb(9, 9, 9) }' });
     off();
-    for (const request of asked) t.approvals.resolve(request.id, 'cancel');
-    return { asked, result: await pending };
+    (globalThis as Pending).__pendingStylesId = seen[0]?.id;
+    return seen;
   });
-  expect(declined.asked).toEqual([expect.objectContaining({ title: 'Apply these page styles?', detail: '#ext { color: rgb(9, 9, 9) }' })]);
-  expect(declined.result).toMatchObject({ success: true, content: { applied: false, status: 'cancelled_by_user' } });
+  expect(asked).toEqual([
+    expect.objectContaining({
+      title: 'Keep these page styles?',
+      detail: '#ext { color: rgb(9, 9, 9) }',
+      options: [
+        { id: 'keep', label: 'Keep' },
+        { id: 'adjust', label: 'Adjust…', note: true },
+        { id: 'revert', label: 'Revert' },
+      ],
+    }),
+  ]);
+  await expect.poll(colour, { timeout: 15_000 }).toBe('rgb(9, 9, 9)');
+  const result = await inMain(async (t) => {
+    t.approvals.resolve((globalThis as Pending).__pendingStylesId!, 'revert');
+    return (globalThis as Pending).__pendingStyles;
+  });
+  expect(result).toMatchObject({ success: true, content: { status: 'cancelled_by_user' } });
+  await expect.poll(colour, { timeout: 15_000 }).toBe(plain);
   expect(((await styles()) as { content: { css: string } }).content.css).toBe(before.content.css);
   await inMain((t) => t.settings.update({ styles: { mode: 'autonomous' } }));
 });

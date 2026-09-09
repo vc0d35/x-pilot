@@ -38,6 +38,26 @@ describe('sidebar reducer', () => {
     expect(s.entries[1]).toEqual({ kind: 'approval', request: expect.objectContaining({ id: 'a1' }), decision: 'post' });
   });
 
+  it('keeps the note the user typed on the resolved card, so the transcript shows it', () => {
+    const s = run([
+      {
+        type: 'approval.requested',
+        request: {
+          id: 'a2',
+          kind: 'post',
+          title: 'Keep these page styles?',
+          detail: 'a { color: red }',
+          options: [
+            { id: 'keep', label: 'Keep' },
+            { id: 'adjust', label: 'Adjust…', note: true },
+          ],
+        },
+      },
+      { type: 'approval.resolved', id: 'a2', decision: 'adjust', note: 'blue, not red' },
+    ]);
+    expect(s.entries[0]).toMatchObject({ kind: 'approval', decision: 'adjust', note: 'blue, not red' });
+  });
+
   it('shows a question from the agent and marks it once it is answered or skipped', () => {
     const request = { id: 'in-1', questions: [{ id: 'q1', prompt: 'Which account?' }] };
     const asked = run([{ type: 'input.requested', request }]);

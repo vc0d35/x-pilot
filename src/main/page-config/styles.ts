@@ -15,6 +15,13 @@ export const PAGE_STYLES_HEADER = `/* XPilot page styles.
 
 export const MAX_CSS_BYTES = 64 * 1024;
 
+/**
+ * A preview is only ever shown while a tool waits on the user's answer, and the answer is what
+ * takes it off. If the visible view never answers — it was closed, the turn died mid-flight — this
+ * is the backstop that stops the page from wearing a sheet nobody kept.
+ */
+export const PREVIEW_MAX_MS = 10 * 60 * 1000;
+
 /** Function-shaped ways CSS names a resource, none of which a page-restyling sheet needs. */
 const BANNED_TOKENS = ['@import', '@namespace', '@font-face', 'image-set(', '-webkit-image-set(', 'element(', 'cross-fade(', '://', '//'];
 
@@ -65,12 +72,18 @@ export type StylesWriteResult = { ok: true; bytes: number } | { ok: false; reaso
  * The applied sheet is held in memory and only ever replaced by text that passed `validateCss`, so
  * the synchronous startup reply is a field read and a hand-edited file that would not be accepted
  * from the agent is not applied either — the reason is kept in `lastError` for Settings to show.
+ *
+ * A preview is the second, temporary half: a sheet the user is being shown before it is written,
+ * layered over the applied one in the visible view alone and never touching the file.
  */
 export class PageStyles {
   private readonly file: WatchedFile;
   private readonly listeners = new Set<(css: string) => void>();
+  private readonly previewListeners = new Set<(css: string | null) => void>();
   private applied: string | null = null;
   private error: string | null = null;
+  private previewCss: string | null = null;
+  private previewTimer: NodeJS.Timeout | null = null;
 
   constructor(path: string, opts: { debounceMs?: number } = {}) {
     this.file = new WatchedFile(path, { header: PAGE_STYLES_HEADER, debounceMs: opts.debounceMs });
@@ -109,14 +122,45 @@ export class PageStyles {
     this.emit();
   }
 
+  /**
+   * Shows `css` on the visible view without writing anything, or takes the preview off with null.
+   * The sheet is inserted per document, so a navigation drops it on its own.
+   */
+  preview(css: string | null): void {
+    if (this.previewTimer) {
+      clearTimeout(this.previewTimer);
+      this.previewTimer = null;
+    }
+    if (css !== null) {
+      this.previewTimer = setTimeout(() => this.preview(null), PREVIEW_MAX_MS);
+      this.previewTimer.unref?.();
+    }
+    if (this.previewCss === css) return;
+    this.previewCss = css;
+    for (const cb of [...this.previewListeners]) cb(css);
+  }
+
+  /** The preview in effect, or null when the page is wearing only what is on disk. */
+  get previewing(): string | null {
+    return this.previewCss;
+  }
+
   onChange(cb: (css: string) => void): () => void {
     this.listeners.add(cb);
     return () => this.listeners.delete(cb);
   }
 
+  onPreview(cb: (css: string | null) => void): () => void {
+    this.previewListeners.add(cb);
+    return () => this.previewListeners.delete(cb);
+  }
+
   close(): void {
+    if (this.previewTimer) clearTimeout(this.previewTimer);
+    this.previewTimer = null;
     this.file.close();
     this.listeners.clear();
+    this.previewListeners.clear();
   }
 
   /** A change on disk only reaches the page once it passes the same check the agent's writes do. */

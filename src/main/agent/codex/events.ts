@@ -181,7 +181,7 @@ export async function handleServerRequest(method: string, params: unknown, deps:
       }
     }
     case 'item/commandExecution/requestApproval': {
-      const decision = await deps.approvals.request(
+      const { decision } = await deps.approvals.request(
         {
           kind: 'command',
           title: 'Codex wants to run a command',
@@ -197,7 +197,7 @@ export async function handleServerRequest(method: string, params: unknown, deps:
       return { decision: decision === 'timeout' ? 'decline' : decision };
     }
     case 'item/fileChange/requestApproval': {
-      const decision = await deps.approvals.request(
+      const { decision } = await deps.approvals.request(
         {
           kind: 'fileChange',
           title: 'Codex wants to change files',
