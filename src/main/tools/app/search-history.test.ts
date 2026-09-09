@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { searchHistory } from './search-history';
-import { fail, runTool } from '../../../shared/tools';
+import { runTool } from '../../../shared/tools';
 import { AppStore, toFtsQuery, type HistoryHit, type HistoryQuery } from '../../history/store';
 import type { AppToolCtx } from './context';
 
@@ -14,16 +14,16 @@ const args = (over: Record<string, unknown>) => ({ query: 'hello', ...over });
 const run = (c: AppToolCtx, over: Record<string, unknown> = {}) => runTool(searchHistory, args(over), c);
 
 describe('xpilot_search_history', () => {
-  it('defaults the limit and refuses one outside the range it declares', async () => {
+  it('defaults the limit and clamps one outside the range it declares', async () => {
     const { c, search } = ctx();
     await run(c);
     expect(search.mock.calls[0][0]).toMatchObject({ limit: 20 });
-    expect(await run(c, { limit: 1e9 })).toEqual(
-      fail('Invalid arguments for xpilot_search_history: limit: Too big: expected number to be <=100'),
-    );
-    expect(await run(c, { limit: 0 })).toMatchObject({ success: false });
+    await run(c, { limit: 1e9 });
+    expect(search.mock.calls[1][0]).toMatchObject({ limit: 100 });
+    await run(c, { limit: 0 });
+    expect(search.mock.calls[2][0]).toMatchObject({ limit: 1 });
     expect(await run(c, { limit: 'lots' })).toMatchObject({ success: false });
-    expect(search).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledTimes(3);
   });
 
   it('truncates a long query rather than failing on it', async () => {

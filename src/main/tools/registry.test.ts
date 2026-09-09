@@ -160,7 +160,7 @@ describe('the JSON schema the model sees', () => {
       type: 'object',
       properties: {
         tab: { type: 'string', enum: ['for_you', 'following'] },
-        pages: { type: 'integer', minimum: 1, maximum: 10, description: 'How many screens to scroll (default 3)' },
+        pages: { type: 'integer', description: 'How many screens to scroll (default 3) (1 to 10; values outside are clamped)' },
         sinceId: {
           type: 'string',
           pattern: '^\\d+$',
@@ -182,7 +182,7 @@ describe('the JSON schema the model sees', () => {
         author: { type: 'string', description: 'Handle without @' },
         since: { type: 'string', description: 'ISO date; only likes on/after' },
         until: { type: 'string', description: 'ISO date; only likes on/before' },
-        limit: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+        limit: { type: 'integer', default: 20, description: 'How many hits to return (1 to 100; values outside are clamped)' },
       },
       required: ['query'],
       additionalProperties: false,

@@ -95,9 +95,9 @@ describe('preload tools', () => {
   });
 
   it('rejects arguments that do not match the tool schema, before touching the page', async () => {
-    expect(await runAdapterTool('x_read_visible_posts', { limit: 500 }, ctx)).toEqual({
+    expect(await runAdapterTool('x_read_visible_posts', { limit: 'many' }, ctx)).toEqual({
       success: false,
-      error: 'Invalid arguments for x_read_visible_posts: limit: Too big: expected number to be <=100',
+      error: 'Invalid arguments for x_read_visible_posts: limit: Invalid input: expected number, received string',
     });
     expect(await runAdapterTool('x_scroll', { direction: 'sideways' }, ctx)).toMatchObject({ success: false });
     expect(await runAdapterTool('x_nope', {}, ctx)).toEqual({ success: false, error: 'Unknown tool in preload: x_nope' });

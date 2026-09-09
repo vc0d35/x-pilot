@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, fail, ok } from '../../../shared/tools';
+import { defineTool, fail, ok, clampedInt } from '../../../shared/tools';
 import type { AppToolCtx } from './context';
 
 const QUERY_MAX = 200;
@@ -15,7 +15,7 @@ export const searchHistory = defineTool({
     author: z.string().optional().describe('Handle without @'),
     since: z.string().optional().describe('ISO date; only likes on/after'),
     until: z.string().optional().describe('ISO date; only likes on/before'),
-    limit: z.int().min(1).max(LIMIT_MAX).default(LIMIT_DEFAULT),
+    limit: clampedInt(1, LIMIT_MAX, 'How many hits to return', LIMIT_DEFAULT),
   }),
   annotations: { readOnlyHint: true },
   execute: async (args, ctx: AppToolCtx) => {

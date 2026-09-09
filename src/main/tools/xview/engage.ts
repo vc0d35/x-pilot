@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, fail, ok } from '../../../shared/tools';
+import { defineTool, fail, ok, clampedInt } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
@@ -92,7 +92,7 @@ export const readTimeline = defineTool({
     'Reads the Home timeline ("For you" or "Following") by scrolling through it, returning the posts seen. Runs in a hidden window by default so the user\'s screen is untouched; pass view: "visible" to scroll the user\'s own window. Pass sinceId to get only posts newer than one already read; the result reports `newest`, the largest id seen.',
   args: z.strictObject({
     tab: z.enum(['for_you', 'following']).optional(),
-    pages: z.int().min(1).max(10).optional().describe('How many screens to scroll (default 3)'),
+    pages: clampedInt(1, 10, 'How many screens to scroll (default 3)'),
     sinceId: z
       .string()
       .regex(DIGITS)

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { toolSpec, type ToolDef, type ToolSpec } from '../../../../shared/tools';
+import { toolSpec, type ToolDef, type ToolSpec, clampedInt } from '../../../../shared/tools';
 
 /**
  * The adapter's tool surface as a compile-time constant. Main imports this so the agent's tool list
@@ -20,7 +20,7 @@ export const readVisiblePostsDef = {
   name: 'x_read_visible_posts',
   description:
     'Reads the posts currently rendered on the page (timeline, search results, profile, likes). Returns id, url, author, text, time and stats. Use x_scroll to load more.',
-  args: z.strictObject({ limit: z.int().min(1).max(100).default(20) }),
+  args: z.strictObject({ limit: clampedInt(1, 100, 'How many posts to return', 20) }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;
 
@@ -36,7 +36,7 @@ export const scrollDef = {
   name: 'x_scroll',
   description:
     'Scrolls the window the user is looking at to load more content (e.g. to roll through the timeline when asked). direction: "down" (default) or "up"; amount in pixels (default 800).',
-  args: z.strictObject({ direction: z.enum(['down', 'up']).optional(), amount: z.int().min(100).max(5000).optional() }),
+  args: z.strictObject({ direction: z.enum(['down', 'up']).optional(), amount: clampedInt(100, 5000, 'Pixels to scroll') }),
 } satisfies ToolDef;
 
 export const readComposerDef = {
@@ -95,7 +95,7 @@ export const inspectPageDef = {
     'Returns the markup of the elements matching a CSS selector on the page in this window: for each match its tag, the attributes that identify it (data-testid, role, aria-label, href, class) and its outer HTML, truncated. Use it when a read comes back empty or adapterHealthy is false, to see what X actually renders and work out what a selector should be; then try candidates with xpilot_test_selector. Defaults to the page body, so start there and narrow down.',
   args: z.strictObject({
     selector: z.string().optional().describe('The CSS selector to look at; the page body when omitted'),
-    limit: z.int().min(1).max(20).default(5).describe('How many matches to return'),
+    limit: clampedInt(1, 20, 'How many matches to return', 5),
   }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;

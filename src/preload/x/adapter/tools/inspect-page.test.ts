@@ -53,7 +53,9 @@ describe('x_inspect_page', () => {
     expect(await run({ selector: 'div:has(((' })).toMatchObject({ success: false, error: expect.stringContaining('not a valid') });
   });
 
-  it('refuses a limit outside the range the spec allows', async () => {
-    expect(await run({ selector: 'div', limit: 50 })).toMatchObject({ success: false });
+  it('clamps a limit above the range the spec allows instead of refusing it', async () => {
+    const r = (await run({ selector: 'div', limit: 50 })) as { success: boolean; content: { elements: unknown[] } };
+    expect(r.success).toBe(true);
+    expect(r.content.elements.length).toBeLessThanOrEqual(20);
   });
 });

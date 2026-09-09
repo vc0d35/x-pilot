@@ -1,13 +1,13 @@
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import { defineTool, fail, ok } from '../../../shared/tools';
+import { defineTool, fail, ok, clampedInt } from '../../../shared/tools';
 import { isOpenablePdf } from '../../library/paths';
 import type { AppToolCtx } from './context';
 
 export const listLibrary = defineTool({
   name: 'xpilot_list_library',
   description: 'Lists PDFs saved to the library, newest first.',
-  args: z.strictObject({ limit: z.int().min(1).max(500).default(50) }),
+  args: z.strictObject({ limit: clampedInt(1, 500, 'How many entries to return', 50) }),
   annotations: { readOnlyHint: true },
   execute: async (args, ctx: AppToolCtx) => ok(ctx.store.listLibrary(args.limit)),
 });

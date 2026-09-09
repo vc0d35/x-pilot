@@ -18,6 +18,22 @@ export const ToolResultSchema = z.discriminatedUnion('success', [
 ]);
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
+/**
+ * An integer argument that is clamped into [min, max] instead of rejected: the model guesses
+ * sizes, and a guess above the cap should still get an answer.
+ */
+export function clampedInt(min: number, max: number, description: string, fallback?: number) {
+  const clamp = (n: number) => Math.max(min, Math.min(max, n));
+  const text = `${description} (${min} to ${max}; values outside are clamped)`;
+  if (fallback === undefined)
+    return z
+      .int()
+      .optional()
+      .transform((n) => (n === undefined ? undefined : clamp(n)))
+      .describe(text);
+  return z.int().default(fallback).transform(clamp).describe(text);
+}
+
 export const ok = (content: unknown, warning?: string): ToolResult =>
   warning ? { success: true, content, warning } : { success: true, content };
 export const fail = (error: string): ToolResult => ({ success: false, error });
