@@ -79,6 +79,11 @@ describe('retention', () => {
     tasks.create({ title: 'T', prompt: 'p', schedule: { every: '1h' }, threadMode: 'resume', nextRunAt: null });
     tasks.update(1, { threadId: 'task-thread' });
     expect(s.applyRetention({ keepConversations: 1, keepDays: 30, keepThreadId: 'live' })).toMatchObject({ conversations: 1 });
-    expect(s.list().map((c) => c.threadId).sort()).toEqual(['fresh', 'live', 'task-thread']);
+    expect(
+      s
+        .list()
+        .map((c) => c.threadId)
+        .sort(),
+    ).toEqual(['fresh', 'live', 'task-thread']);
   });
 });

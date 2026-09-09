@@ -52,7 +52,7 @@ export const SHORT_LINK_BUDGET = { max: 20, windowMs: 60_000 };
 
 export interface LinkRouterDeps {
   allowHosts(): string[];
-  headFetch(url: string): Promise<{ status: number; location: string | null }>;
+  headFetch: (url: string) => Promise<{ status: number; location: string | null }>;
   openExternal(url: string): void;
   loadInView(url: string): void;
   now?: () => number;
@@ -60,9 +60,9 @@ export interface LinkRouterDeps {
 }
 
 export interface LinkRouter {
-  openShortLink(url: string): void;
+  openShortLink: (url: string) => void;
   /** Links clicked in the sidebar follow the same rules as links in the page. */
-  openLink(url: string): void;
+  openLink: (url: string) => void;
 }
 
 export function createLinkRouter(deps: LinkRouterDeps): LinkRouter {
@@ -70,7 +70,9 @@ export function createLinkRouter(deps: LinkRouterDeps): LinkRouter {
   const resolutions = createBudget({ ...SHORT_LINK_BUDGET, now: deps.now });
   const openShortLink = (url: string) => {
     if (!resolutions.take()) {
-      warn(`[xpilot] more than ${SHORT_LINK_BUDGET.max} short links resolved in ${SHORT_LINK_BUDGET.windowMs} ms; opening this one unresolved`);
+      warn(
+        `[xpilot] more than ${SHORT_LINK_BUDGET.max} short links resolved in ${SHORT_LINK_BUDGET.windowMs} ms; opening this one unresolved`,
+      );
       deps.openExternal(url);
       return;
     }

@@ -1,5 +1,9 @@
 export class JsonRpcError extends Error {
-  constructor(public readonly code: number, message: string, public readonly data?: unknown) {
+  constructor(
+    public readonly code: number,
+    message: string,
+    public readonly data?: unknown,
+  ) {
     super(message);
     this.name = 'JsonRpcError';
   }
@@ -18,7 +22,10 @@ export class JsonRpcStdio {
     throw new JsonRpcError(-32601, `Unhandled server request: ${method}`);
   };
 
-  constructor(private readonly stdin: NodeJS.WritableStream, stdout: NodeJS.ReadableStream) {
+  constructor(
+    private readonly stdin: NodeJS.WritableStream,
+    stdout: NodeJS.ReadableStream,
+  ) {
     stdout.on('data', (chunk) => this.onData(String(chunk)));
   }
 
@@ -34,7 +41,9 @@ export class JsonRpcStdio {
     this.write({ jsonrpc: '2.0', method, params });
   }
 
-  onRequest(handler: RequestHandler): void { this.requestHandler = handler; }
+  onRequest(handler: RequestHandler): void {
+    this.requestHandler = handler;
+  }
 
   onNotification(cb: NotificationListener): () => void {
     this.listeners.add(cb);
@@ -58,7 +67,11 @@ export class JsonRpcStdio {
       this.buffer = this.buffer.slice(idx + 1);
       if (!line) continue;
       let msg: Record<string, unknown>;
-      try { msg = JSON.parse(line); } catch { continue; }
+      try {
+        msg = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
       this.dispatch(msg);
     }
   }

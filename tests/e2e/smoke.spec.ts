@@ -20,20 +20,39 @@ test.beforeAll(async () => {
   // whenReady().then() callback has run far enough to set __xpilotTest. Wait
   // for it here (swallowing the pre-ready rejection) so the tests below never
   // race main's startup.
-  await expect.poll(async () => {
-    try { return await app.evaluate(() => !!(globalThis as { __xpilotTest?: unknown }).__xpilotTest); } catch { return false; }
-  }, { timeout: 15_000 }).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        try {
+          return await app.evaluate(() => !!(globalThis as { __xpilotTest?: unknown }).__xpilotTest);
+        } catch {
+          return false;
+        }
+      },
+      { timeout: 15_000 },
+    )
+    .toBe(true);
 });
-test.afterAll(async () => { await app.close(); });
+test.afterAll(async () => {
+  await app.close();
+});
 
-type Harness = { windowCount(): number; sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } }; registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> }; openExternalCalls: string[]; xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } } };
-const inMain = <T,>(fn: (t: Harness) => T | Promise<T>) => app.evaluate(async (_electron, fnSrc: string) => {
-  const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
-  return (new Function('t', `return (${fnSrc})(t)`))(t);
-}, fn.toString());
+type Harness = {
+  windowCount(): number;
+  sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
+  registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> };
+  openExternalCalls: string[];
+  xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
+};
+const inMain = <T>(fn: (t: Harness) => T | Promise<T>) =>
+  app.evaluate(async (_electron, fnSrc: string) => {
+    const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+    return new Function('t', `return (${fnSrc})(t)`)(t);
+  }, fn.toString());
 
 test('the preload registers its adapter tools with the main-process registry', async () => {
-  await expect.poll(() => inMain((t) => t.registry.list().map((x) => x.name)), { timeout: 15_000 })
+  await expect
+    .poll(() => inMain((t) => t.registry.list().map((x) => x.name)), { timeout: 15_000 })
     .toEqual(expect.arrayContaining(['x_get_page_state', 'x_read_visible_posts']));
 });
 
@@ -54,8 +73,14 @@ test('both preloads are self-contained bundles and the React header renders', as
     expect(built, name).not.toMatch(/require\("\.\//);
     expect(built, name).not.toMatch(/require\("zod"\)/);
   }
-  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 }).toBe('object');
-  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('XPilot');
+  await expect
+    .poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('typeof window.xpilot')), { timeout: 15_000 })
+    .toBe('object');
+  await expect
+    .poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), {
+      timeout: 15_000,
+    })
+    .toBe('XPilot');
 });
 
 test('the sidebar is served from the app scheme, with its stylesheet and fonts past the CSP', async () => {
@@ -63,13 +88,30 @@ test('the sidebar is served from the app scheme, with its stylesheet and fonts p
   expect(await inMain((t) => t.sidebar.webContents.executeJavaScript('location.origin'))).toBe('xpilot://sidebar');
   // The bundle, the stylesheet and a @font-face file all come back through the handler: a CSP that
   // did not recognise the new origin as 'self', or a handler that refused a path, shows up here.
-  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript(
-    "[...document.styleSheets].some((s) => s.href?.startsWith('xpilot://sidebar/assets/') && s.cssRules.length > 0)"))).toBe(true);
-  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript(
-    "document.fonts.ready.then(() => [...document.fonts].some((f) => f.status === 'loaded'))")), { timeout: 15_000 }).toBe(true);
+  expect(
+    await inMain((t) =>
+      t.sidebar.webContents.executeJavaScript(
+        "[...document.styleSheets].some((s) => s.href?.startsWith('xpilot://sidebar/assets/') && s.cssRules.length > 0)",
+      ),
+    ),
+  ).toBe(true);
+  await expect
+    .poll(
+      () =>
+        inMain((t) =>
+          t.sidebar.webContents.executeJavaScript(
+            "document.fonts.ready.then(() => [...document.fonts].some((f) => f.status === 'loaded'))",
+          ),
+        ),
+      { timeout: 15_000 },
+    )
+    .toBe(true);
   // Containment: the handler serves the renderer directory and nothing above it.
-  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript(
-    "fetch('xpilot://sidebar/../../package.json').then((r) => r.status).catch(() => 'blocked')"))).not.toBe(200);
+  expect(
+    await inMain((t) =>
+      t.sidebar.webContents.executeJavaScript("fetch('xpilot://sidebar/../../package.json').then((r) => r.status).catch(() => 'blocked')"),
+    ),
+  ).not.toBe(200);
 });
 
 // Network-dependent (set XPILOT_E2E_NETWORK=1 to run): loads x.com search (logged out) in the hidden session window.

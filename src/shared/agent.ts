@@ -1,6 +1,9 @@
 export type AgentStatus = 'starting' | 'ready' | 'running' | 'disconnected' | 'error';
 
-export interface ApprovalOption { id: string; label: string }
+export interface ApprovalOption {
+  id: string;
+  label: string;
+}
 export interface ApprovalRequest {
   id: string;
   kind: 'command' | 'fileChange' | 'post';
@@ -10,8 +13,16 @@ export interface ApprovalRequest {
 }
 
 /** One clarifying question Codex asked; `options` makes it a choice, `secret` hides what is typed. */
-export interface UserInputQuestion { id: string; prompt: string; options?: string[]; secret?: boolean }
-export interface UserInputRequest { id: string; questions: UserInputQuestion[] }
+export interface UserInputQuestion {
+  id: string;
+  prompt: string;
+  options?: string[];
+  secret?: boolean;
+}
+export interface UserInputRequest {
+  id: string;
+  questions: UserInputQuestion[];
+}
 /** Answers by question id; null means the user skipped, or nobody answered in time. */
 export type UserInputAnswers = Record<string, string> | null;
 

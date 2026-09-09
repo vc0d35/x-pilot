@@ -4,8 +4,13 @@ import { IPC } from '../../shared/ipc';
 import { fail, ToolResultSchema, ToolSpecSchema, type ToolResult, type ToolSpec } from '../../shared/tools';
 import type { ToolSource } from '../tools/registry';
 
-export interface BridgeIpc { on(channel: string, listener: (event: { sender: { id: number } }, payload: unknown) => void): void }
-export interface NavigationDetails { isMainFrame: boolean; isSameDocument: boolean }
+export interface BridgeIpc {
+  on(channel: string, listener: (event: { sender: { id: number } }, payload: unknown) => void): void;
+}
+export interface NavigationDetails {
+  isMainFrame: boolean;
+  isSameDocument: boolean;
+}
 export interface BridgeTarget {
   id: number;
   send(channel: string, payload: unknown): void;
@@ -16,7 +21,7 @@ export interface BridgeOptions {
   /** The adapter's tool surface as a compile-time constant, from `src/preload/x/adapter/tools/specs`. */
   staticSpecs?: ToolSpec[];
   timeoutMs?: number;
-  log?(message: string): void;
+  log?: (message: string) => void;
 }
 
 const RegisterSchema = z.object({ tools: z.array(ToolSpecSchema) });
@@ -40,7 +45,11 @@ export class AdapterBridge implements ToolSource {
   private readonly listeners = new Set<() => void>();
   private readyWaiters: Array<() => void> = [];
 
-  constructor(ipc: BridgeIpc, private readonly target: BridgeTarget, opts: BridgeOptions = {}) {
+  constructor(
+    ipc: BridgeIpc,
+    private readonly target: BridgeTarget,
+    opts: BridgeOptions = {},
+  ) {
     this.specs = opts.staticSpecs ?? [];
     this.timeoutMs = opts.timeoutMs ?? 20_000;
     this.log = opts.log ?? ((m) => console.warn(m));
@@ -70,13 +79,18 @@ export class AdapterBridge implements ToolSource {
     });
   }
 
-  list(): ToolSpec[] { return this.specs; }
+  list(): ToolSpec[] {
+    return this.specs;
+  }
 
   async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     if (!this.specs.some((t) => t.name === name)) return fail(`Unknown tool: ${name}`);
     if (signal?.aborted) return fail(CANCELLED);
     if (!this.ready) {
-      const back = await this.waitForReady(CALL_READY_TIMEOUT_MS, signal).then(() => true, () => false);
+      const back = await this.waitForReady(CALL_READY_TIMEOUT_MS, signal).then(
+        () => true,
+        () => false,
+      );
       if (signal?.aborted) return fail(CANCELLED);
       if (!back) return fail(`The page is still loading and did not register its tools; ${name} was not run. Retry once it has loaded.`);
     }
@@ -90,16 +104,27 @@ export class AdapterBridge implements ToolSource {
       };
       const timer = setTimeout(() => settle(fail(`Adapter tool call timed out: ${name}`)), this.timeoutMs);
       const onAbort = () => settle(fail(CANCELLED));
-      this.pending.set(callId, { resolve: (r) => { signal?.removeEventListener('abort', onAbort); resolve(r); }, timer });
+      this.pending.set(callId, {
+        resolve: (r) => {
+          signal?.removeEventListener('abort', onAbort);
+          resolve(r);
+        },
+        timer,
+      });
       signal?.addEventListener('abort', onAbort, { once: true });
       this.target.send(IPC.adapterCall, { callId, name, args });
     });
   }
 
-  onChange(cb: () => void): () => void { this.listeners.add(cb); return () => this.listeners.delete(cb); }
+  onChange(cb: () => void): () => void {
+    this.listeners.add(cb);
+    return () => this.listeners.delete(cb);
+  }
 
   /** Call right before loading a new URL so waitForReady waits for the fresh preload. */
-  markNavigating(): void { this.ready = false; }
+  markNavigating(): void {
+    this.ready = false;
+  }
 
   waitForReady(timeoutMs = 15_000, signal?: AbortSignal): Promise<void> {
     if (this.ready) return Promise.resolve();

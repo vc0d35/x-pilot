@@ -1,10 +1,9 @@
-import type { AgentEvent } from '../../shared/agent';
 import type { ScheduledTask } from '../../shared/sidebar-api';
 import type { Settings } from '../../shared/settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { AgentProvider } from '../agent/provider';
 import { RECORDED, toolsFingerprint, transcriptEvent } from '../agent/controller';
-import type { HistoryStore } from '../history/store';
+import type { AppStore } from '../history/store';
 import { fenceBlock, fenceLine } from '../agent/fence';
 import { describeSchedule } from './schedule';
 import type { RunStatus } from './manager';
@@ -26,15 +25,17 @@ export function buildRunPrompt(task: ScheduledTask, lastRunAt: string | null): s
 export class TaskRunner {
   lastThreadId: string | null = null;
 
-  constructor(private readonly deps: {
-    createProvider: () => AgentProvider;
-    tools: () => ToolSpec[];
-    settings: () => Settings['agent']['codex'];
-    workspaceDir: string;
-    store: HistoryStore;
-    timeoutMs?: number;
-    log?: (m: string) => void;
-  }) {}
+  constructor(
+    private readonly deps: {
+      createProvider: () => AgentProvider;
+      tools: () => ToolSpec[];
+      settings: () => Settings['agent']['codex'];
+      workspaceDir: string;
+      store: AppStore;
+      timeoutMs?: number;
+      log?: (m: string) => void;
+    },
+  ) {}
 
   async run(task: ScheduledTask): Promise<RunStatus> {
     const provider = this.deps.createProvider();
@@ -43,7 +44,8 @@ export class TaskRunner {
     const done = new Promise<RunStatus>((resolve) => {
       provider.onEvent((e) => {
         if (threadId && RECORDED.has(e.type)) this.deps.store.appendEvent(threadId, transcriptEvent(e));
-        if (e.type === 'turn.completed') resolve(e.status === 'completed' ? 'completed' : e.status === 'interrupted' ? 'interrupted' : 'failed');
+        if (e.type === 'turn.completed')
+          resolve(e.status === 'completed' ? 'completed' : e.status === 'interrupted' ? 'interrupted' : 'failed');
         if (e.type === 'status' && (e.status === 'disconnected' || e.status === 'error')) resolve('failed');
       });
     });
@@ -52,7 +54,12 @@ export class TaskRunner {
       // unless the task was created asking for it.
       const codex = this.deps.settings();
       const settings = { ...codex, webSearch: task.webSearch ? codex.webSearch : ('disabled' as const) };
-      const started = await provider.start({ tools, settings, threadId: task.threadMode === 'resume' ? task.threadId : null, workspaceDir: this.deps.workspaceDir });
+      const started = await provider.start({
+        tools,
+        settings,
+        threadId: task.threadMode === 'resume' ? task.threadId : null,
+        workspaceDir: this.deps.workspaceDir,
+      });
       threadId = started.threadId;
       this.lastThreadId = threadId;
       this.deps.store.upsertConversation({ threadId, kind: 'task', taskId: task.id, toolsHash: toolsFingerprint(tools) });

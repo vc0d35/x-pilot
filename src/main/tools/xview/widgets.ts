@@ -6,7 +6,10 @@ import { VIEW_ARG, navigateStep, parseView, withView } from './target';
 
 export type { WidgetSection };
 
-interface WidgetsPayload { url: string; sections: WidgetSection[] }
+interface WidgetsPayload {
+  url: string;
+  sections: WidgetSection[];
+}
 
 /** Explore shows both widgets regardless of which Home tab the user is on. */
 const EXPLORE_URL = 'https://x.com/explore';
@@ -20,7 +23,8 @@ export function hasWanted(sections: WidgetSection[], want: 'news' | 'trends' | '
 
 export const readNewsAndTrends = defineTool({
   name: 'x_read_news_and_trends',
-  description: 'Reads the "Today\'s News" headlines and "What\'s happening" trending topics (title plus context such as category, age and post count), grouped by widget heading. Uses what is already on the user\'s screen when the widgets are there; otherwise loads Explore in a hidden window without moving the user\'s view.',
+  description:
+    'Reads the "Today\'s News" headlines and "What\'s happening" trending topics (title plus context such as category, age and post count), grouped by widget heading. Uses what is already on the user\'s screen when the widgets are there; otherwise loads Explore in a hidden window without moving the user\'s view.',
   args: z.strictObject({
     section: z.enum(['news', 'trends', 'both']).optional().describe('Which widget you need (default both)'),
     ...VIEW_ARG,
@@ -31,7 +35,8 @@ export const readNewsAndTrends = defineTool({
     const explicit = args.view !== undefined;
     if (!explicit || args.view === 'visible') {
       const onScreen = await ctx.xview.callPreload('x_read_widgets', { timeoutMs: explicit ? 8000 : 0 }, signal);
-      if (onScreen.success && hasWanted((onScreen.content as WidgetsPayload).sections, want)) return ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) });
+      if (onScreen.success && hasWanted((onScreen.content as WidgetsPayload).sections, want))
+        return ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) });
       if (args.view === 'visible') return onScreen.success ? ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) }) : onScreen;
     }
     return withView(ctx, parseView(args), async (view) => {

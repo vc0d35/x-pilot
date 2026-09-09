@@ -8,28 +8,34 @@ import { toolSpec, type ToolDef, type ToolSpec } from '../../../../shared/tools'
 
 export const pageStateDef = {
   name: 'x_get_page_state',
-  description: 'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, and newPostsAvailable when a "Show N posts" pill is on screen.',
-  args: z.strictObject({ timeoutMs: z.int().min(0).default(8000).describe('How long to wait for the page layout to render before reporting') }),
+  description:
+    'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, and newPostsAvailable when a "Show N posts" pill is on screen.',
+  args: z.strictObject({
+    timeoutMs: z.int().min(0).default(8000).describe('How long to wait for the page layout to render before reporting'),
+  }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;
 
 export const readVisiblePostsDef = {
   name: 'x_read_visible_posts',
-  description: 'Reads the posts currently rendered on the page (timeline, search results, profile, likes). Returns id, url, author, text, time and stats. Use x_scroll to load more.',
+  description:
+    'Reads the posts currently rendered on the page (timeline, search results, profile, likes). Returns id, url, author, text, time and stats. Use x_scroll to load more.',
   args: z.strictObject({ limit: z.int().min(1).max(100).default(20) }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;
 
 export const readCurrentPostDef = {
   name: 'x_read_current_post',
-  description: 'Reads the post the page is currently showing (must be on a post or article page): full text, the author\'s own thread continuation, and the X Article title/body when present.',
+  description:
+    "Reads the post the page is currently showing (must be on a post or article page): full text, the author's own thread continuation, and the X Article title/body when present.",
   args: z.strictObject({ timeoutMs: z.int().default(10000) }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;
 
 export const scrollDef = {
   name: 'x_scroll',
-  description: 'Scrolls the window the user is looking at to load more content (e.g. to roll through the timeline when asked). direction: "down" (default) or "up"; amount in pixels (default 800).',
+  description:
+    'Scrolls the window the user is looking at to load more content (e.g. to roll through the timeline when asked). direction: "down" (default) or "up"; amount in pixels (default 800).',
   args: z.strictObject({ direction: z.enum(['down', 'up']).optional(), amount: z.int().min(100).max(5000).optional() }),
 } satisfies ToolDef;
 
@@ -49,7 +55,8 @@ export const typeInComposerDef = {
 
 export const clickPostButtonDef = {
   name: 'x_click_post_button',
-  description: 'Clicks the Post button of the open composer and reports the confirmation toast and new post URL if shown. Internal: main calls this after approval.',
+  description:
+    'Clicks the Post button of the open composer and reports the confirmation toast and new post URL if shown. Internal: main calls this after approval.',
   args: z.strictObject({ timeoutMs: z.int().default(8000) }),
   annotations: { destructiveHint: true, internal: true },
 } satisfies ToolDef;
@@ -77,7 +84,8 @@ export const readWidgetsDef = {
 
 export const showNewPostsDef = {
   name: 'x_show_new_posts',
-  description: 'Clicks the "Show N posts" pill that X puts at the top of the timeline in the window the user is looking at when new posts have arrived, so they load on screen. Returns shown: false when there is no pill. x_get_page_state and x_scroll report newPostsAvailable when one is present.',
+  description:
+    'Clicks the "Show N posts" pill that X puts at the top of the timeline in the window the user is looking at when new posts have arrived, so they load on screen. Returns shown: false when there is no pill. x_get_page_state and x_scroll report newPostsAvailable when one is present.',
   args: z.strictObject({}),
 } satisfies ToolDef;
 

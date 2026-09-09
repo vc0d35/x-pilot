@@ -6,7 +6,12 @@ import { SEL } from '../selectors';
 import { clickPostButtonDef, readComposerDef, typeInComposerDef } from './specs';
 
 async function waitComposer(timeoutMs: number) {
-  try { await waitFor(() => document.querySelector(SEL.composerTextarea), timeoutMs); return true; } catch { return false; }
+  try {
+    await waitFor(() => document.querySelector(SEL.composerTextarea), timeoutMs);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export const readComposer = defineTool({
@@ -37,7 +42,11 @@ export const clickPostButton = defineTool({
     if (!state.present) return fail('No composer is open');
     if (!state.canSubmit) return fail('Post button is disabled (empty draft or over the length limit)');
     document.querySelector<HTMLElement>(SEL.postButton)!.click();
-    try { await waitFor(() => document.querySelector(SEL.toast) || !document.querySelector(SEL.composerTextarea), args.timeoutMs); } catch { /* report what we have */ }
+    try {
+      await waitFor(() => document.querySelector(SEL.toast) || !document.querySelector(SEL.composerTextarea), args.timeoutMs);
+    } catch {
+      /* report what we have */
+    }
     const toast = document.querySelector(SEL.toast);
     const href = toast?.querySelector('a[href*="/status/"]')?.getAttribute('href') ?? null;
     return ok({ clicked: true, toast: toast?.textContent?.trim() ?? null, url: href ? `https://x.com${href}` : null });

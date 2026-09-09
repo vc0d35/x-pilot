@@ -12,7 +12,8 @@ describe('SettingsPatchSchema', () => {
   });
 
   it('never accepts binPath over the patch channel: it is set through the file picker only', () => {
-    for (const binPath of ['/opt/homebrew/bin/codex', 'codex', null]) expect(() => parse({ agent: { codex: { binPath } } })).toThrow(/unrecognized_key|Unrecognized/i);
+    for (const binPath of ['/opt/homebrew/bin/codex', 'codex', null])
+      expect(() => parse({ agent: { codex: { binPath } } })).toThrow(/unrecognized_key|Unrecognized/i);
   });
 
   it('rejects host patterns that cover a public suffix, uppercase, or anything but a hostname', () => {

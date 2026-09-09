@@ -22,7 +22,10 @@ export function App() {
 
   useEffect(() => window.xpilot.onEvent(dispatch), []);
   useEffect(() => window.xpilot.onFocus(setFocus), []);
-  useEffect(() => { void window.xpilot.getSettings().then(setSettings); return window.xpilot.onSettings(setSettings); }, []);
+  useEffect(() => {
+    void window.xpilot.getSettings().then(setSettings);
+    return window.xpilot.onSettings(setSettings);
+  }, []);
 
   const reconnect = () => void window.xpilot.reconnect();
   const issue = setupIssue(state);
@@ -32,18 +35,33 @@ export function App() {
 
   return (
     <div className="app">
-      <Header status={state.status} statusMessage={state.statusMessage}
-        onNewThread={() => { dispatch({ type: 'reset' }); void window.xpilot.newThread(); }}
-        onReconnect={reconnect}
-        panel={panel} onPanel={setPanel} onCollapse={() => void window.xpilot.setSidebarCollapsed(true)} />
-      {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
-      {settings?.posting.mode === 'autonomous' && <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>}
-      {panel === 'history' ? (
-        <HistoryPanel currentThreadId={state.threadId} onOpen={(threadId) => {
+      <Header
+        status={state.status}
+        statusMessage={state.statusMessage}
+        onNewThread={() => {
           dispatch({ type: 'reset' });
-          setPanel('chat');
-          void window.xpilot.openConversation(threadId).then((events) => { for (const e of events) dispatch(e); });
-        }} />
+          void window.xpilot.newThread();
+        }}
+        onReconnect={reconnect}
+        panel={panel}
+        onPanel={setPanel}
+        onCollapse={() => void window.xpilot.setSidebarCollapsed(true)}
+      />
+      {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
+      {settings?.posting.mode === 'autonomous' && (
+        <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
+      )}
+      {panel === 'history' ? (
+        <HistoryPanel
+          currentThreadId={state.threadId}
+          onOpen={(threadId) => {
+            dispatch({ type: 'reset' });
+            setPanel('chat');
+            void window.xpilot.openConversation(threadId).then((events) => {
+              for (const e of events) dispatch(e);
+            });
+          }}
+        />
       ) : panel === 'library' ? (
         <LibraryPanel />
       ) : panel === 'settings' ? (
@@ -52,17 +70,38 @@ export function App() {
         <>
           {issue && <SetupCard issue={issue} onRetry={reconnect} onOpenSettings={() => setPanel('settings')} />}
           {settings && !settings.ui.onboarded && (
-            <OnboardingCard libraryDir={settings.library.dir ?? '~/Documents/X Pilot'} onOpenSettings={() => setPanel('settings')}
-              onDismiss={() => void window.xpilot.setSettings({ ui: { onboarded: true } })} />
+            <OnboardingCard
+              libraryDir={settings.library.dir ?? '~/Documents/X Pilot'}
+              onOpenSettings={() => setPanel('settings')}
+              onDismiss={() => void window.xpilot.setSettings({ ui: { onboarded: true } })}
+            />
           )}
-          <EntryList entries={state.entries} activity={state.activity}
+          <EntryList
+            entries={state.entries}
+            activity={state.activity}
             onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)}
-            onResolveInput={(id, answers) => void window.xpilot.resolveInput(id, answers)} />
-          <Composer disabled={state.status !== 'ready' && state.status !== 'running'} running={state.running} focus={focus} onStop={() => void window.xpilot.interrupt()}
-            onSend={(text, ctx) => window.xpilot.send(text, ctx).then(() => true, (err) => {
-              dispatch({ type: 'turn.completed', turnId: '', status: 'failed', error: err instanceof Error ? err.message : String(err) });
-              return false;
-            })} />
+            onResolveInput={(id, answers) => void window.xpilot.resolveInput(id, answers)}
+          />
+          <Composer
+            disabled={state.status !== 'ready' && state.status !== 'running'}
+            running={state.running}
+            focus={focus}
+            onStop={() => void window.xpilot.interrupt()}
+            onSend={(text, ctx) =>
+              window.xpilot.send(text, ctx).then(
+                () => true,
+                (err) => {
+                  dispatch({
+                    type: 'turn.completed',
+                    turnId: '',
+                    status: 'failed',
+                    error: err instanceof Error ? err.message : String(err),
+                  });
+                  return false;
+                },
+              )
+            }
+          />
         </>
       )}
     </div>

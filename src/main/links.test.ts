@@ -6,7 +6,7 @@ describe('rateLimit', () => {
   it('passes calls through up to the limit and drops the rest', () => {
     const fn = vi.fn();
     const warn = vi.fn();
-    let now = 1000;
+    const now = 1000;
     const limited = rateLimit(fn, { max: 5, windowMs: 10_000, now: () => now, warn });
     for (let i = 0; i < 8; i++) limited(`https://example.com/${i}`);
     expect(fn.mock.calls.map((c) => c[0])).toEqual([0, 1, 2, 3, 4].map((i) => `https://example.com/${i}`));
@@ -17,7 +17,9 @@ describe('rateLimit', () => {
     const fn = vi.fn();
     let now = 0;
     const limited = rateLimit(fn, { max: 2, windowMs: 10_000, now: () => now, warn: () => {} });
-    limited('a'); limited('b'); limited('c');
+    limited('a');
+    limited('b');
+    limited('c');
     expect(fn).toHaveBeenCalledTimes(2);
     now = 10_001;
     limited('d');
@@ -34,7 +36,7 @@ describe('rateLimit', () => {
 
 describe('createBudget', () => {
   it('allows up to max in a window and refuses after that', () => {
-    let now = 0;
+    const now = 0;
     const b = createBudget({ max: 3, windowMs: 1000, now: () => now });
     expect([b.take(), b.take(), b.take(), b.take()]).toEqual([true, true, true, false]);
   });
@@ -98,13 +100,18 @@ describe('createLinkRouter', () => {
     const loadInView = vi.fn();
     const warn = vi.fn();
     let now = 0;
-    const headFetch = vi.fn(async (url: string) => (url.startsWith('https://t.co/')
-      ? { status: 301, location: 'https://example.com/dest' }
-      : { status: 200, location: null }));
+    const headFetch = vi.fn(async (url: string) =>
+      url.startsWith('https://t.co/') ? { status: 301, location: 'https://example.com/dest' } : { status: 200, location: null },
+    );
     const router = createLinkRouter({ allowHosts: () => DEFAULT_ALLOW_HOSTS, headFetch, openExternal, loadInView, warn, now: () => now });
     return {
-      router, openExternal, loadInView, warn,
-      setNow: (t: number) => { now = t; },
+      router,
+      openExternal,
+      loadInView,
+      warn,
+      setNow: (t: number) => {
+        now = t;
+      },
       resolutions: () => headFetch.mock.calls.filter(([url]) => url.startsWith('https://t.co/')).length,
       lastFetch: () => headFetch.mock.calls.at(-1)?.[0],
     };

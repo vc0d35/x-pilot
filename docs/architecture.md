@@ -44,11 +44,11 @@ Health is reported rather than assumed: `x_get_page_state` waits for X's layout 
 
 `src/shared/tools.ts` defines the contract: a `ToolSpec` (name, description, input schema, annotations) and a `ToolResult` that is either `ok(content)` or `fail(error)`. A `ToolRegistry` merges tool sources by name; later sources win, and tools annotated `internal` are callable by main but hidden from the model. There are three sources:
 
-| Source | Runs in | Examples |
-| --- | --- | --- |
-| adapter bridge | the visible X view's preload | `x_get_page_state`, `x_read_visible_posts`, `x_scroll`, `x_show_new_posts` |
-| xview tools | main, driving a view | `x_read_post`, `x_search`, `x_read_timeline`, `x_read_news_and_trends`, `x_like_post`, `x_compose_post`, `x_submit_post`, `x_navigate` |
-| app tools | main, app services | `xpilot_search_history`, `xpilot_save_article_pdf`, `xpilot_list_library`, `xpilot_schedule_task` |
+| Source         | Runs in                      | Examples                                                                                                                               |
+| -------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| adapter bridge | the visible X view's preload | `x_get_page_state`, `x_read_visible_posts`, `x_scroll`, `x_show_new_posts`                                                             |
+| xview tools    | main, driving a view         | `x_read_post`, `x_search`, `x_read_timeline`, `x_read_news_and_trends`, `x_like_post`, `x_compose_post`, `x_submit_post`, `x_navigate` |
+| app tools      | main, app services           | `xpilot_search_history`, `xpilot_save_article_pdf`, `xpilot_list_library`, `xpilot_schedule_task`                                      |
 
 Two rules shape the xview tools. First, **background by default**: reading, searching and verifying happen in a hidden window, and only tools that the user's intent clearly points at the screen (`x_navigate`, `x_scroll`, `view: "visible"`) move the visible view. Second, **user decisions are final**: anything that writes to the account goes through the `ApprovalBroker` when the relevant setting says confirm, and a decline comes back as `status: 'cancelled_by_user'`, not as an error, so the model does not retry.
 

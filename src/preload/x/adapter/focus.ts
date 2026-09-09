@@ -18,7 +18,8 @@ export function visiblePosts(doc: Document, isVisible: InViewport): VisiblePost[
     if (out.length >= VISIBLE_LIMIT) break;
     if (!isVisible(article)) continue;
     const p = extractPost(article);
-    if (p && !out.some((v) => v.id === p.id)) out.push({ id: p.id, url: p.url, authorHandle: p.authorHandle, text: p.text.slice(0, EXCERPT) });
+    if (p && !out.some((v) => v.id === p.id))
+      out.push({ id: p.id, url: p.url, authorHandle: p.authorHandle, text: p.text.slice(0, EXCERPT) });
   }
   return out;
 }
@@ -31,7 +32,11 @@ export function computeFocus(doc: Document, url: string, isVisible: InViewport =
     // An article page may render only the reader view; synthesise the post from the URL then.
     const post = (main ? extractPost(main, url) : null) ?? (kind === 'article' ? postFromArticleUrl(url, a?.title ?? '') : null);
     if (!post) return null;
-    if (a) { post.kind = 'article'; post.articleTitle = a.title; post.articleBody = a.body; }
+    if (a) {
+      post.kind = 'article';
+      post.articleTitle = a.title;
+      post.articleBody = a.body;
+    }
     return { url, kind, post };
   }
   const dialog = doc.querySelector(SEL.dialog);
@@ -44,7 +49,13 @@ export function computeFocus(doc: Document, url: string, isVisible: InViewport =
   return visible.length ? { url, kind, post: null, visible } : null;
 }
 
-export function installFocusTracker(doc: Document, getUrl: () => string, send: (ctx: PageContext | null) => void, intervalMs = 1000, isVisible: InViewport = inViewport): () => void {
+export function installFocusTracker(
+  doc: Document,
+  getUrl: () => string,
+  send: (ctx: PageContext | null) => void,
+  intervalMs = 1000,
+  isVisible: InViewport = inViewport,
+): () => void {
   let lastSig: string | null | undefined; // undefined = never sent
   let lastKey: string | null = null;
   const tick = () => {

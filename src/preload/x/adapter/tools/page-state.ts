@@ -23,7 +23,13 @@ export function currentPageState(): PageState {
   const url = location.href;
   const kind = pageKindFromUrl(url);
   const health = computeHealth(kind);
-  const state: PageState = { url, kind, title: document.title, adapterHealthy: health.layout && (health.posts ?? true) && (health.article ?? true), health };
+  const state: PageState = {
+    url,
+    kind,
+    title: document.title,
+    adapterHealthy: health.layout && (health.posts ?? true) && (health.article ?? true),
+    health,
+  };
   const pill = findNewPostsButton(document);
   if (pill) state.newPostsAvailable = pill.count;
   return state;
@@ -45,7 +51,11 @@ export async function settledPageState(timeoutMs: number): Promise<PageState> {
   const left = () => deadline - Date.now();
   const settle = async (check: () => Element | null) => {
     if (left() <= 0) return;
-    try { await waitFor(check, left()); } catch { /* report the unhealthy state */ }
+    try {
+      await waitFor(check, left());
+    } catch {
+      /* report the unhealthy state */
+    }
   };
   if (timeoutMs > 0) {
     if (needsLayout(kind)) await settle(() => document.querySelector(SEL.primaryColumn));

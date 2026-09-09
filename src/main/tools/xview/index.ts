@@ -7,4 +7,13 @@ import { likePost, readTimeline } from './engage';
 import { composePost, submitPost } from './compose';
 import { readNewsAndTrends } from './widgets';
 
-export const xviewTools: ToolModule<XViewToolCtx>[] = [navigate, search, readPost, composePost, submitPost, likePost, readTimeline, readNewsAndTrends];
+export const xviewTools: ToolModule<XViewToolCtx>[] = [
+  navigate,
+  search,
+  readPost,
+  composePost,
+  submitPost,
+  likePost,
+  readTimeline,
+  readNewsAndTrends,
+];

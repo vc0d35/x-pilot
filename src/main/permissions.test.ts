@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { applyPermissionPolicy, installPermissionHandlers, isAllowedPermissionOrigin, X_SESSION_PERMISSIONS, type PermissionDetails, type PermissionSessionLike } from './permissions';
+import {
+  applyPermissionPolicy,
+  installPermissionHandlers,
+  isAllowedPermissionOrigin,
+  X_SESSION_PERMISSIONS,
+  type PermissionDetails,
+  type PermissionSessionLike,
+} from './permissions';
 import { DEFAULT_ALLOW_HOSTS } from '../shared/settings';
 
 const onX = (url: string | undefined) => isAllowedPermissionOrigin(url, [...DEFAULT_ALLOW_HOSTS]);
@@ -12,24 +19,42 @@ function fakeSession() {
     display: null as null | ((r: unknown, cb: (s: Record<string, never>) => void) => void),
   };
   const session: PermissionSessionLike = {
-    setPermissionRequestHandler: (h) => { state.request = h; },
-    setPermissionCheckHandler: (h) => { state.check = h; },
-    setDevicePermissionHandler: (h) => { state.device = h; },
-    setDisplayMediaRequestHandler: (h) => { state.display = h; },
+    setPermissionRequestHandler: (h) => {
+      state.request = h;
+    },
+    setPermissionCheckHandler: (h) => {
+      state.check = h;
+    },
+    setDevicePermissionHandler: (h) => {
+      state.device = h;
+    },
+    setDisplayMediaRequestHandler: (h) => {
+      state.display = h;
+    },
   };
   return {
     session,
     request(permission: string, details: PermissionDetails = { requestingUrl: 'https://x.com/home', isMainFrame: true }): boolean {
       let granted: boolean | null = null;
-      state.request!(null, permission, (g) => { granted = g; }, details);
+      state.request!(
+        null,
+        permission,
+        (g) => {
+          granted = g;
+        },
+        details,
+      );
       if (granted === null) throw new Error('permission request handler never answered');
       return granted;
     },
-    check: (permission: string, origin = 'https://x.com', details: PermissionDetails = { isMainFrame: true }) => state.check!(null, permission, origin, details),
+    check: (permission: string, origin = 'https://x.com', details: PermissionDetails = { isMainFrame: true }) =>
+      state.check!(null, permission, origin, details),
     device: () => state.device!({}),
     display(): Record<string, never> {
       let streams: Record<string, never> | null = null;
-      state.display!({}, (s) => { streams = s; });
+      state.display!({}, (s) => {
+        streams = s;
+      });
       if (streams === null) throw new Error('display media handler never answered');
       return streams;
     },
@@ -55,7 +80,17 @@ describe('applyPermissionPolicy', () => {
     applyPermissionPolicy(f.session, X_SESSION_PERMISSIONS, onX);
     expect(f.request('fullscreen')).toBe(true);
     expect(f.request('clipboard-sanitized-write')).toBe(true);
-    for (const denied of ['media', 'geolocation', 'notifications', 'midi', 'midiSysex', 'clipboard-read', 'openExternal', 'pointerLock', 'display-capture']) {
+    for (const denied of [
+      'media',
+      'geolocation',
+      'notifications',
+      'midi',
+      'midiSysex',
+      'clipboard-read',
+      'openExternal',
+      'pointerLock',
+      'display-capture',
+    ]) {
       expect(f.request(denied), denied).toBe(false);
       expect(f.check(denied), denied).toBe(false);
     }

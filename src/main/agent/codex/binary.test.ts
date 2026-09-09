@@ -12,8 +12,9 @@ import { augmentedPath, codexSpawnEnv, isSafeExecutable, type ExecutableFs, type
 
 describe('augmentedPath', () => {
   it('puts the binary directory first, then the login shell PATH, then the current PATH, without duplicates', () => {
-    expect(augmentedPath('/Users/me/.nvm/versions/node/v24/bin/codex', '/usr/bin:/bin', '/opt/homebrew/bin:/usr/bin'))
-      .toBe('/Users/me/.nvm/versions/node/v24/bin:/opt/homebrew/bin:/usr/bin:/bin');
+    expect(augmentedPath('/Users/me/.nvm/versions/node/v24/bin/codex', '/usr/bin:/bin', '/opt/homebrew/bin:/usr/bin')).toBe(
+      '/Users/me/.nvm/versions/node/v24/bin:/opt/homebrew/bin:/usr/bin:/bin',
+    );
   });
   it('copes with a missing login shell PATH and an empty current PATH', () => {
     expect(augmentedPath('/usr/local/bin/codex', undefined, null)).toBe('/usr/local/bin');
@@ -67,9 +68,15 @@ describe('isSafeExecutable', () => {
 
   it('follows a symlink to its target and judges both ends', () => {
     const target = { '/opt/bin/real': {} };
-    expect(isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, ...target, '/opt/bin/codex': { link: '/opt/bin/real', mode: 0o777 } }))).toBe(true);
-    expect(isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, ...target, '/opt/bin/codex': { link: '/opt/bin/real', uid: 502 } }))).toBe(false);
-    expect(isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, '/opt/bin/real': { uid: 502 }, '/opt/bin/codex': { link: '/opt/bin/real' } }))).toBe(false);
+    expect(
+      isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, ...target, '/opt/bin/codex': { link: '/opt/bin/real', mode: 0o777 } })),
+    ).toBe(true);
+    expect(isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, ...target, '/opt/bin/codex': { link: '/opt/bin/real', uid: 502 } }))).toBe(
+      false,
+    );
+    expect(
+      isSafeExecutable('/opt/bin/codex', fakeFs({ ...dir, '/opt/bin/real': { uid: 502 }, '/opt/bin/codex': { link: '/opt/bin/real' } })),
+    ).toBe(false);
   });
 });
 

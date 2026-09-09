@@ -22,8 +22,22 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: node node_modules/electron/install.js
       - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run format:check
       - run: npm test
       - run: npm run build
-      # The Playwright/Electron e2e suite is left out of this first workflow: driving a
-      # packaged Electron app on a runner needs extra setup (browser install, a display
-      # server and macOS signing). Add it as a separate job once that is in place.
+
+  e2e:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
+      - run: npm run build
+      # Playwright drives the Electron binary directly, so no browser download is needed. The two
+      # tests that talk to x.com stay skipped: they only run when XPILOT_E2E_NETWORK is set.
+      - run: npx playwright test

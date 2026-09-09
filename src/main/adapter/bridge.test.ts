@@ -11,11 +11,21 @@ function setup(timeoutMs = 50, staticSpecs = [spec]) {
   const sent: Array<{ channel: string; payload: { callId: string; name: string; args: unknown } }> = [];
   const target = {
     id: 7,
-    send: (channel: string, payload: never) => { sent.push({ channel, payload }); },
+    send: (channel: string, payload: never) => {
+      sent.push({ channel, payload });
+    },
     on: (event: 'did-start-navigation', listener: (details: NavigationDetails) => void) => nav.on(event, listener),
   };
   const warnings: string[] = [];
-  const bridge = new AdapterBridge({ on: (ch, l) => { ipc.on(ch, l); } }, target, { timeoutMs, staticSpecs, log: (m) => warnings.push(m) });
+  const bridge = new AdapterBridge(
+    {
+      on: (ch, l) => {
+        ipc.on(ch, l);
+      },
+    },
+    target,
+    { timeoutMs, staticSpecs, log: (m) => warnings.push(m) },
+  );
   const fromPreload = (channel: string, payload: unknown, senderId = 7) => ipc.emit(channel, { sender: { id: senderId } }, payload);
   const navigate = (details: NavigationDetails) => nav.emit('did-start-navigation', details);
   return { bridge, sent, fromPreload, navigate, warnings };
@@ -66,7 +76,10 @@ describe('AdapterBridge', () => {
     const { bridge, fromPreload } = setup(20);
     await expect(bridge.call('x_not_a_tool', {})).resolves.toEqual({ success: false, error: 'Unknown tool: x_not_a_tool' });
     fromPreload(IPC.adapterRegister, { tools: [spec] });
-    await expect(bridge.call('x_get_page_state', {})).resolves.toEqual({ success: false, error: 'Adapter tool call timed out: x_get_page_state' });
+    await expect(bridge.call('x_get_page_state', {})).resolves.toEqual({
+      success: false,
+      error: 'Adapter tool call timed out: x_get_page_state',
+    });
   });
 
   it('waitForReady resolves on the next registration after markNavigating', async () => {
@@ -112,7 +125,10 @@ describe('AdapterBridge', () => {
       const p = bridge.call('x_get_page_state', {});
       await vi.advanceTimersByTimeAsync(10_000);
       expect(sent).toEqual([]);
-      await expect(p).resolves.toEqual({ success: false, error: 'The page is still loading and did not register its tools; x_get_page_state was not run. Retry once it has loaded.' });
+      await expect(p).resolves.toEqual({
+        success: false,
+        error: 'The page is still loading and did not register its tools; x_get_page_state was not run. Retry once it has loaded.',
+      });
     } finally {
       vi.useRealTimers();
     }

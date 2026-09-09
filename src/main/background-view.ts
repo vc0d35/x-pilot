@@ -13,24 +13,45 @@ export class BackgroundXView {
   private win: BrowserWindow | null = null;
   private controller: XViewController | null = null;
 
-  constructor(private readonly opts: { preload: string; allowHosts(): string[]; openExternal(url: string): void; onContents?(contents: WebContents): void }) {}
+  constructor(
+    private readonly opts: {
+      preload: string;
+      allowHosts: () => string[];
+      openExternal: (url: string) => void;
+      onContents?: (contents: WebContents) => void;
+    },
+  ) {}
 
   async get(): Promise<XViewController> {
     if (this.controller && this.win && !this.win.isDestroyed()) return this.controller;
     const win = new BrowserWindow({
-      show: false, width: 1100, height: 1400,
+      show: false,
+      width: 1100,
+      height: 1400,
       webPreferences: { partition: 'persist:x', preload: this.opts.preload, contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     const contents: WebContents = win.webContents;
-    attachNavigationPolicy(contents, { allowHosts: this.opts.allowHosts, openExternal: () => { /* background reads never open external pages */ } });
+    attachNavigationPolicy(contents, {
+      allowHosts: this.opts.allowHosts,
+      openExternal: () => {
+        /* background reads never open external pages */
+      },
+    });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.opts.onContents?.(contents);
     const bridge = new AdapterBridge(ipcMain, contents, { staticSpecs: adapterToolSpecs });
     this.win = win;
     this.controller = new XViewController(contents, bridge);
-    win.on('closed', () => { this.win = null; this.controller = null; });
+    win.on('closed', () => {
+      this.win = null;
+      this.controller = null;
+    });
     return this.controller;
   }
 
-  destroy(): void { if (this.win && !this.win.isDestroyed()) this.win.destroy(); this.win = null; this.controller = null; }
+  destroy(): void {
+    if (this.win && !this.win.isDestroyed()) this.win.destroy();
+    this.win = null;
+    this.controller = null;
+  }
 }

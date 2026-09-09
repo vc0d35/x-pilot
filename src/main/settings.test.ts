@@ -6,7 +6,9 @@ import { SettingsStore } from './settings';
 
 const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'xpilot-')), 'settings.json');
 
-afterEach(() => { vi.restoreAllMocks(); });
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('SettingsStore', () => {
   it('returns defaults when no file exists', () => {

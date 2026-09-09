@@ -25,7 +25,11 @@ export function deceptiveLinkHost(text: string, href: string): string | null {
   const claimed = claimedHost(text);
   if (!claimed) return null;
   let real: string;
-  try { real = bareHost(new URL(href).hostname); } catch { return null; }
+  try {
+    real = bareHost(new URL(href).hostname);
+  } catch {
+    return null;
+  }
   if (!real) return null;
   return claimed === real ? null : real;
 }

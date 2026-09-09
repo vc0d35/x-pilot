@@ -4,18 +4,35 @@ import type { LibraryItem } from '../../shared/sidebar-api';
 export function LibraryPanel() {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [error, setError] = useState<{ id: number; message: string } | null>(null);
-  useEffect(() => { void window.xpilot.listLibrary().then(setItems); }, []);
+  useEffect(() => {
+    void window.xpilot.listLibrary().then(setItems);
+  }, []);
   const open = (it: LibraryItem) => {
     setError(null);
-    window.xpilot.openPdf(it.path).catch((err: unknown) => setError({ id: it.id, message: err instanceof Error ? err.message : String(err) }));
+    window.xpilot
+      .openPdf(it.path)
+      .catch((err: unknown) => setError({ id: it.id, message: err instanceof Error ? err.message : String(err) }));
   };
-  if (items.length === 0) return <div className="panel"><p className="hint">No PDFs yet. Open an article on X and ask the agent to &ldquo;save this as a PDF&rdquo;; it lands in your library folder (Settings) and is listed here.</p></div>;
+  if (items.length === 0)
+    return (
+      <div className="panel">
+        <p className="hint">
+          No PDFs yet. Open an article on X and ask the agent to &ldquo;save this as a PDF&rdquo;; it lands in your library folder
+          (Settings) and is listed here.
+        </p>
+      </div>
+    );
   return (
     <div className="panel">
       {items.map((it) => (
         <div key={it.id} className="lib-item">
           <div className="lib-title">{it.title || it.url}</div>
-          <div className="lib-meta">{new Date(it.savedAt).toLocaleString()} · <a href={it.url} onClick={(e) => e.preventDefault()}>{it.url}</a></div>
+          <div className="lib-meta">
+            {new Date(it.savedAt).toLocaleString()} ·{' '}
+            <a href={it.url} onClick={(e) => e.preventDefault()}>
+              {it.url}
+            </a>
+          </div>
           <button onClick={() => open(it)}>Open PDF</button>
           {error?.id === it.id && <div className="banner">Could not open this PDF: {error.message}</div>}
         </div>

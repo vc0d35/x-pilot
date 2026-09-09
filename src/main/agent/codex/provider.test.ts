@@ -12,13 +12,20 @@ const FAKE = fileURLToPath(new URL('../../../../tests/fakes/codex-app-server.mjs
 
 type CallTool = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<ToolResult>;
 
-function makeProvider(callTool: CallTool = async (name) => ok({ url: 'https://x.com/home', tool: name }), extra: Partial<CodexProviderDeps> = {}) {
+function makeProvider(
+  callTool: CallTool = async (name) => ok({ url: 'https://x.com/home', tool: name }),
+  extra: Partial<CodexProviderDeps> = {},
+) {
   const approvals = new ApprovalBroker();
   const stderr: string[] = [];
   const provider = new CodexProvider({
     callTool,
     approvals,
-    spawn: () => { const p = spawn(process.execPath, [FAKE]); p.stderr.on('data', (d) => stderr.push(String(d))); return p; },
+    spawn: () => {
+      const p = spawn(process.execPath, [FAKE]);
+      p.stderr.on('data', (d) => stderr.push(String(d)));
+      return p;
+    },
     ...extra,
   });
   const events: AgentEvent[] = [];
@@ -59,7 +66,10 @@ describe('CodexProvider', () => {
     expect(types).toContain('tool.completed');
     const done = events.find((e) => e.type === 'message.completed') as { text: string };
     expect(done.text).toContain('"url":"https://x.com/home"');
-    const deltas = events.filter((e) => e.type === 'message.delta').map((e) => (e as { delta: string }).delta).join('');
+    const deltas = events
+      .filter((e) => e.type === 'message.delta')
+      .map((e) => (e as { delta: string }).delta)
+      .join('');
     expect(deltas.startsWith('You are on: ')).toBe(true);
     expect(provider.isRunning()).toBe(false);
     await provider.stop();
@@ -81,14 +91,19 @@ describe('CodexProvider', () => {
 
   it('passes the web search mode to thread/start and surfaces web searches as tool rows', async () => {
     const { provider, events, stderr } = makeProvider();
-    await provider.start({ tools, settings: { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'cached', reasoningEffort: 'low' }, workspaceDir: '/tmp' });
+    await provider.start({
+      tools,
+      settings: { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'cached', reasoningEffort: 'low' },
+      workspaceDir: '/tmp',
+    });
     await waitUntil(() => stderr.join('').includes('CFG:'));
     expect(stderr.join('')).toContain('CFG:{"model_reasoning_effort":"low","web_search":"cached"}');
     await provider.send('What page?');
     await waitFor(events, 'turn.completed');
     const started = events.find((e) => e.type === 'tool.started' && e.name === 'web_search') as { args: unknown } | undefined;
     expect(started?.args).toEqual({ queries: ['electron latest version', 'electron releases'] });
-    const done = events.find((e) => e.type === 'tool.completed' && e.name === 'web_search') as { success: boolean; output: string } | undefined;
+    const done = events.find((e) => e.type === 'tool.completed' && e.name === 'web_search') as
+      { success: boolean; output: string } | undefined;
     expect(done).toMatchObject({ success: true, output: 'electron latest version' });
     await provider.stop();
   });
@@ -98,7 +113,9 @@ describe('CodexProvider', () => {
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     await provider.send('What page?');
     await waitFor(events, 'turn.completed');
-    const acts = events.filter((e) => e.type === 'activity').map((e) => (e as { activity: string; detail?: string }).activity + (('detail' in e && e.detail) ? ':' + e.detail : ''));
+    const acts = events
+      .filter((e) => e.type === 'activity')
+      .map((e) => (e as { activity: string; detail?: string }).activity + ('detail' in e && e.detail ? ':' + e.detail : ''));
     expect(acts).toEqual(['thinking', 'tool:web_search', 'tool:x_get_page_state', 'writing']);
     await provider.stop();
   });
@@ -109,8 +126,14 @@ describe('CodexProvider', () => {
     await provider.send('What page?');
     await waitFor(events, 'turn.completed');
     const thinking = events.filter((e) => e.type === 'thinking.completed') as { itemId: string; text: string }[];
-    expect(thinking.map((t) => [t.itemId, t.text])).toEqual([['r-1', 'Need the page state first.'], ['c-1', "I'll check the page."]]);
-    const deltas = events.filter((e) => e.type === 'thinking.delta').map((e) => (e as { delta: string }).delta).join('');
+    expect(thinking.map((t) => [t.itemId, t.text])).toEqual([
+      ['r-1', 'Need the page state first.'],
+      ['c-1', "I'll check the page."],
+    ]);
+    const deltas = events
+      .filter((e) => e.type === 'thinking.delta')
+      .map((e) => (e as { delta: string }).delta)
+      .join('');
     expect(deltas).toBe("Need the page state first.I'll check the page.");
     const messages = events.filter((e) => e.type === 'message.completed') as { itemId: string }[];
     expect(messages.map((m) => m.itemId)).toEqual(['msg-1']);
@@ -121,7 +144,9 @@ describe('CodexProvider', () => {
   it('lists models', async () => {
     const { provider } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
-    await expect(provider.listModels()).resolves.toEqual([{ id: 'fake-model', displayName: 'Fake', isDefault: true, reasoningEfforts: ['low', 'high'] }]);
+    await expect(provider.listModels()).resolves.toEqual([
+      { id: 'fake-model', displayName: 'Fake', isDefault: true, reasoningEfforts: ['low', 'high'] },
+    ]);
     await provider.stop();
   });
 
@@ -199,7 +224,6 @@ describe('CodexProvider', () => {
     await provider.stop();
   }, 2000);
 
-
   it('drains stderr and reports its tail when the process dies unexpectedly', async () => {
     const { provider, events } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
@@ -218,7 +242,10 @@ describe('CodexProvider', () => {
   it('keeps pending approvals alive when the death was requested by stop()', async () => {
     const { provider, approvals, events } = makeProvider();
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
-    const pending = approvals.request({ kind: 'post', title: 'Post this?', detail: 'hi', options: [{ id: 'accept', label: 'Post' }] }, 5000);
+    const pending = approvals.request(
+      { kind: 'post', title: 'Post this?', detail: 'hi', options: [{ id: 'accept', label: 'Post' }] },
+      5000,
+    );
     await provider.stop();
     await new Promise((r) => setTimeout(r, 50));
     expect(events.some((e) => e.type === 'approval.resolved')).toBe(false);
@@ -254,7 +281,9 @@ describe('CodexProvider', () => {
     const events: AgentEvent[] = [];
     const provider = new CodexProvider({ callTool: async () => ok({}), approvals, binary: async () => null });
     provider.onEvent((e) => events.push(e));
-    await expect(provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' })).rejects.toThrow('Codex CLI not found');
+    await expect(provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' })).rejects.toThrow(
+      'Codex CLI not found',
+    );
     const err = events.find((e) => e.type === 'status' && e.status === 'error') as { message: string };
     expect(err.message).toContain('npm i -g @openai/codex');
     expect(err.message).toContain('binary path in Settings');
@@ -264,17 +293,28 @@ describe('CodexProvider', () => {
     const approvals = new ApprovalBroker();
     const seen: (string | null)[] = [];
     const provider = new CodexProvider({
-      callTool: async () => ok({}), approvals,
-      binary: async (explicit) => { seen.push(explicit); return null; },
+      callTool: async () => ok({}),
+      approvals,
+      binary: async (explicit) => {
+        seen.push(explicit);
+        return null;
+      },
     });
     provider.onEvent(() => {});
-    await expect(provider.start({ tools, settings: { ...DEFAULT_SETTINGS.agent.codex, binPath: '/opt/codex' }, workspaceDir: '/tmp' })).rejects.toThrow();
+    await expect(
+      provider.start({ tools, settings: { ...DEFAULT_SETTINGS.agent.codex, binPath: '/opt/codex' }, workspaceDir: '/tmp' }),
+    ).rejects.toThrow();
     expect(seen).toEqual(['/opt/codex']);
   });
 
   it('sends the client version from deps in initialize', async () => {
     const approvals = new ApprovalBroker();
-    const provider = new CodexProvider({ callTool: async () => ok({}), approvals, clientVersion: '9.9.9', spawn: () => spawn(process.execPath, [FAKE]) });
+    const provider = new CodexProvider({
+      callTool: async () => ok({}),
+      approvals,
+      clientVersion: '9.9.9',
+      spawn: () => spawn(process.execPath, [FAKE]),
+    });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     await provider.stop();
   });
@@ -288,11 +328,15 @@ describe('CodexProvider', () => {
     expect(child.signalCode).toBe('SIGKILL');
   }, 10000);
 
-
   it('gives every tool call the turn signal and aborts it on interrupt', async () => {
     let seen: AbortSignal | undefined;
     let release: ((r: ToolResult) => void) | null = null;
-    const { provider, events } = makeProvider((_name, _args, signal) => { seen = signal; return new Promise<ToolResult>((r) => { release = r; }); });
+    const { provider, events } = makeProvider((_name, _args, signal) => {
+      seen = signal;
+      return new Promise<ToolResult>((r) => {
+        release = r;
+      });
+    });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     await provider.send('What page?');
     await waitUntil(() => seen !== undefined);
@@ -335,11 +379,23 @@ describe('CodexProvider', () => {
   it('spawns a detached watchdog for the codex child and kills it on stop', async () => {
     const spawned: Array<{ command: string; args: string[]; options: unknown }> = [];
     const killed: (string | undefined)[] = [];
-    const dog = { pid: 4242, unref: vi.fn(), kill: (signal?: NodeJS.Signals) => { killed.push(signal); return true; } };
+    const dog = {
+      pid: 4242,
+      unref: vi.fn(),
+      kill: (signal?: NodeJS.Signals) => {
+        killed.push(signal);
+        return true;
+      },
+    };
     const child = spawn(process.execPath, [FAKE]);
     const provider = new CodexProvider({
-      callTool: async () => ok({}), approvals: new ApprovalBroker(), spawn: () => child,
-      spawnDetached: (command, args, options) => { spawned.push({ command, args, options }); return dog; },
+      callTool: async () => ok({}),
+      approvals: new ApprovalBroker(),
+      spawn: () => child,
+      spawnDetached: (command, args, options) => {
+        spawned.push({ command, args, options });
+        return dog;
+      },
     });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     expect(spawned).toHaveLength(1);
@@ -366,7 +422,15 @@ describe('CodexProvider', () => {
     expect(userInput.resolve(request.id, { q1: '@vc0d35', q2: 'fast' })).toBe(true);
     await waitFor(events, 'turn.completed');
     const msg = events.find((e) => e.type === 'message.completed') as { text: string };
-    expect(msg.text).toBe('input-reply=' + JSON.stringify({ answers: [{ id: 'q1', answer: '@vc0d35' }, { id: 'q2', answer: 'fast' }] }));
+    expect(msg.text).toBe(
+      'input-reply=' +
+        JSON.stringify({
+          answers: [
+            { id: 'q1', answer: '@vc0d35' },
+            { id: 'q2', answer: 'fast' },
+          ],
+        }),
+    );
     expect(events.some((e) => e.type === 'input.resolved')).toBe(true);
     await provider.stop();
   });
@@ -387,7 +451,9 @@ describe('CodexProvider', () => {
   });
 
   it('reports a failed tool call to the agent instead of crashing when callTool rejects', async () => {
-    const { provider, events } = makeProvider(async () => { throw new Error('boom'); });
+    const { provider, events } = makeProvider(async () => {
+      throw new Error('boom');
+    });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
     await provider.send('What page?');
     await waitFor(events, 'turn.completed');
@@ -398,7 +464,6 @@ describe('CodexProvider', () => {
     await provider.stop();
   });
 });
-
 
 describe('watchdogArgs', () => {
   it('passes both pids as arguments and terminates the child when the parent is gone', () => {

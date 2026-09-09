@@ -1,9 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { AppStore, HistoryStore } from './store';
+import { AppStore } from './store';
 import type { Post } from '../../shared/page';
 
 const post = (id: string, text: string): Post => ({
-  id, url: `https://x.com/alice/status/${id}`, authorHandle: 'alice', authorName: 'ALICE', text, postedAt: null, kind: 'post',
+  id,
+  url: `https://x.com/alice/status/${id}`,
+  authorHandle: 'alice',
+  authorName: 'ALICE',
+  text,
+  postedAt: null,
+  kind: 'post',
 });
 
 describe('AppStore', () => {
@@ -28,7 +34,9 @@ describe('AppStore', () => {
     expect(s.getConversation('t2')).toBeNull();
     expect(s.applyRetention({ keepConversations: 200, keepDays: 90 })).toEqual({ conversations: 0, events: 0 });
 
-    expect(s.createTask({ title: 'T', prompt: 'p', schedule: { every: '1h' }, threadMode: 'resume', nextRunAt: '2026-09-08T10:00:00.000Z' }).id).toBe(1);
+    expect(
+      s.createTask({ title: 'T', prompt: 'p', schedule: { every: '1h' }, threadMode: 'resume', nextRunAt: '2026-09-08T10:00:00.000Z' }).id,
+    ).toBe(1);
     s.updateTask(1, { lastStatus: 'completed' });
     expect(s.getTask(1)?.lastStatus).toBe('completed');
     expect(s.listTasks()).toHaveLength(1);
@@ -42,7 +50,7 @@ describe('AppStore', () => {
     s.close();
   });
 
-  it('shares one connection with the domain stores, and is still exported as HistoryStore', () => {
+  it('shares one connection with the domain stores', () => {
     const s = new AppStore(':memory:');
     s.likes.recordLike(post('1', 'shared connection'), '2026-09-01T00:00:00Z');
     expect(s.search({ query: 'shared' }).map((h) => h.id)).toEqual(['1']);
@@ -50,6 +58,5 @@ describe('AppStore', () => {
     expect(s.listTasks()).toHaveLength(1);
     expect(s.conversations).toBeDefined();
     expect(s.library).toBeDefined();
-    expect(new HistoryStore(':memory:')).toBeInstanceOf(AppStore);
   });
 });

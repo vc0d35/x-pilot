@@ -3,9 +3,14 @@ import type { ToolResult } from '../shared/tools';
 import { CANCELLED, type AdapterBridge } from './adapter/bridge';
 
 export class XViewController {
-  constructor(private readonly contents: WebContents, private readonly bridge: AdapterBridge) {}
+  constructor(
+    private readonly contents: WebContents,
+    private readonly bridge: AdapterBridge,
+  ) {}
 
-  currentUrl(): string { return this.contents.getURL(); }
+  currentUrl(): string {
+    return this.contents.getURL();
+  }
 
   /** Full navigation of the X view; resolves once the new preload has registered its tools. */
   async navigate(url: string, signal?: AbortSignal): Promise<void> {

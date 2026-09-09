@@ -11,7 +11,8 @@ const template = readFileSync(new URL('../build/entitlements.mac.plist.in', impo
 const target = new URL('../build/entitlements.mac.plist', import.meta.url);
 const hasProfile = existsSync(new URL('../build/embedded.provisionprofile', import.meta.url));
 
-if (team !== '' && !hasProfile) console.warn('XPILOT_TEAM_ID is set but build/embedded.provisionprofile is missing: passkeys are disabled in this build');
+if (team !== '' && !hasProfile)
+  console.warn('XPILOT_TEAM_ID is set but build/embedded.provisionprofile is missing: passkeys are disabled in this build');
 
 if (team === '' || !hasProfile) {
   const stripped = template.replace(
@@ -23,7 +24,9 @@ if (team === '' || !hasProfile) {
     process.exit(1);
   }
   writeFileSync(target, stripped);
-  console.log('wrote build/entitlements.mac.plist without keychain-access-groups: passkeys are disabled in this build (set XPILOT_TEAM_ID, see docs/passkeys.md)');
+  console.log(
+    'wrote build/entitlements.mac.plist without keychain-access-groups: passkeys are disabled in this build (set XPILOT_TEAM_ID, see docs/passkeys.md)',
+  );
 } else if (!/^[A-Z0-9]{10}$/.test(team)) {
   console.error('XPILOT_TEAM_ID must be your 10-character Apple Team ID, or unset (see docs/passkeys.md)');
   process.exit(1);

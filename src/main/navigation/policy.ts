@@ -1,4 +1,3 @@
-import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 import { isShortLinkHost } from './shortlink';
 
 export const POPUP_ONLY_HOSTS = ['accounts.google.com', 'appleid.apple.com'];
@@ -15,7 +14,11 @@ function hostMatches(host: string, pattern: string): boolean {
 
 export function decideNavigation(url: string, allowHosts: string[], opts: { isPopup?: boolean } = {}): NavigationDecision {
   let parsed: URL;
-  try { parsed = new URL(url); } catch { return 'deny'; }
+  try {
+    parsed = new URL(url);
+  } catch {
+    return 'deny';
+  }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return 'deny';
   const host = parsed.hostname.toLowerCase();
   // Only https loads in-app: a downgraded link to an allowlisted host goes to the browser
@@ -28,13 +31,20 @@ export function decideNavigation(url: string, allowHosts: string[], opts: { isPo
 }
 
 /** Login popups must not inherit the X preload (or any node access): they are third-party pages. */
-export function popupWindowOptions(): { webPreferences: { preload: undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean } } {
+export function popupWindowOptions(): {
+  webPreferences: { preload: undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean };
+} {
   return { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } };
 }
 
 export type WindowOpenResponse =
   | { action: 'deny' }
-  | { action: 'allow'; overrideBrowserWindowOptions?: { webPreferences: { preload?: string | undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean } } };
+  | {
+      action: 'allow';
+      overrideBrowserWindowOptions?: {
+        webPreferences: { preload?: string | undefined; sandbox: boolean; contextIsolation: boolean; nodeIntegration: boolean };
+      };
+    };
 
 /** Electron hands all three navigation events a details object carrying the URL and the frame. */
 export interface NavigationDetails {
@@ -81,12 +91,17 @@ export function attachNavigationPolicy(contents: NavigationContents, deps: Navig
   contents.on('will-redirect', guard);
   // will-navigate is main-frame only; will-frame-navigate is the subframe event and fires for the
   // main frame too, so only subframes are taken here to avoid deciding the same navigation twice.
-  contents.on('will-frame-navigate', (details) => { if (details.isMainFrame === false) guard(details); });
+  contents.on('will-frame-navigate', (details) => {
+    if (details.isMainFrame === false) guard(details);
+  });
   contents.setWindowOpenHandler(({ url }) => {
     const active = current();
     // Outbound links are t.co redirects opened in a new tab: resolve them in main instead of
     // creating a window that would be left blank once the redirect is cancelled.
-    if (active.openShortLink && isShortLinkHost(url)) { active.openShortLink(url); return { action: 'deny' }; }
+    if (active.openShortLink && isShortLinkHost(url)) {
+      active.openShortLink(url);
+      return { action: 'deny' };
+    }
     const decision = decideNavigation(url, active.allowHosts(), { isPopup: true });
     if (decision === 'allow') return { action: 'allow', overrideBrowserWindowOptions: popupWindowOptions() };
     if (decision === 'external') active.openExternal(url);

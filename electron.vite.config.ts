@@ -4,17 +4,19 @@ import { resolve } from 'node:path';
 import type { Plugin } from 'vite';
 import { IPC } from './src/shared/ipc';
 
-const DEV_CSP = "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' http://localhost:*; connect-src 'self' ws://localhost:* http://localhost:*";
+const DEV_CSP =
+  "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' http://localhost:*; connect-src 'self' ws://localhost:* http://localhost:*";
 
 /** index.html ships the production policy; the dev server needs Vite's HMR socket and module URLs. */
 function devCsp(): Plugin {
   return {
     name: 'xpilot-dev-csp',
     apply: 'serve',
-    transformIndexHtml: (html) => html.replace(
-      /(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/,
-      (_m, before: string, after: string) => `${before}${DEV_CSP}${after}`,
-    ),
+    transformIndexHtml: (html) =>
+      html.replace(
+        /(<meta http-equiv="Content-Security-Policy" content=")[^"]*(")/,
+        (_m, before: string, after: string) => `${before}${DEV_CSP}${after}`,
+      ),
   };
 }
 

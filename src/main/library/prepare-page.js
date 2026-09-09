@@ -1,4 +1,6 @@
 // Prepares an x.com post/article page for printing. Evaluated in the page; must stay dependency-free.
+// The whole file is one bare expression: a statement semicolon would break the `new Function('return (' + source + ')')` that loads it.
+// prettier-ignore
 async ({ timeoutMs }) => {
   const SEL = {
     article: 'article[data-testid="tweet"]',

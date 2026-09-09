@@ -24,11 +24,26 @@ export function resolveKeychainGroup(
   return team ? `${team}.${BUNDLE_ID}.webauthn` : null;
 }
 
-interface WebAuthnApp { configureWebAuthn(options: { touchID: { keychainAccessGroup: string; promptReason?: string } }): void }
-interface WebAuthnAccount { name?: string; displayName?: string; credentialId: string }
-type SelectAccountListener = (event: unknown, details: { accounts: WebAuthnAccount[] }, callback: (credentialId?: string | null) => void) => void;
+interface WebAuthnApp {
+  configureWebAuthn(options: { touchID: { keychainAccessGroup: string; promptReason?: string } }): void;
+}
+interface WebAuthnAccount {
+  name?: string;
+  displayName?: string;
+  credentialId: string;
+}
+type SelectAccountListener = (
+  event: unknown,
+  details: { accounts: WebAuthnAccount[] },
+  callback: (credentialId?: string | null) => void,
+) => void;
 
-export function configureTouchIdPasskeys(deps: { app: WebAuthnApp; onSelectAccount: (listener: SelectAccountListener) => void; group: string | null; log?: (msg: string) => void }): boolean {
+export function configureTouchIdPasskeys(deps: {
+  app: WebAuthnApp;
+  onSelectAccount: (listener: SelectAccountListener) => void;
+  group: string | null;
+  log?: (msg: string) => void;
+}): boolean {
   const log = deps.log ?? ((m) => console.log(m));
   if (!deps.group) {
     log('[xpilot] passkeys disabled: set XPILOT_TEAM_ID (see docs/passkeys.md) to enable Touch ID passkeys');
@@ -39,7 +54,10 @@ export function configureTouchIdPasskeys(deps: { app: WebAuthnApp; onSelectAccou
   // first one Electron lists; a chooser in the sidebar can replace this later.
   deps.onSelectAccount((_event, details, callback) => {
     const chosen = details.accounts[0];
-    if (details.accounts.length > 1) log(`[xpilot] passkeys: ${details.accounts.length} accounts match; using "${chosen.name ?? chosen.displayName ?? chosen.credentialId}"`);
+    if (details.accounts.length > 1)
+      log(
+        `[xpilot] passkeys: ${details.accounts.length} accounts match; using "${chosen.name ?? chosen.displayName ?? chosen.credentialId}"`,
+      );
     callback(chosen?.credentialId);
   });
   log(`[xpilot] passkeys enabled with keychain group ${deps.group}`);

@@ -1,4 +1,15 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname } from 'node:path';
 import { deepMerge, normalizeSettings, type DeepPartial, type Settings } from '../shared/settings';
@@ -11,7 +22,9 @@ export class SettingsStore {
     this.current = this.load();
   }
 
-  get(): Settings { return this.current; }
+  get(): Settings {
+    return this.current;
+  }
 
   update(patch: DeepPartial<Settings>): Settings {
     this.current = normalizeSettings(deepMerge(this.current, patch));
@@ -22,11 +35,19 @@ export class SettingsStore {
     const tmp = `${this.filePath}.${randomUUID()}.tmp`;
     try {
       const fd = openSync(tmp, 'wx', 0o600);
-      try { writeFileSync(fd, JSON.stringify(this.current, null, 2)); } finally { closeSync(fd); }
+      try {
+        writeFileSync(fd, JSON.stringify(this.current, null, 2));
+      } finally {
+        closeSync(fd);
+      }
       renameSync(tmp, this.filePath);
       chmodSync(this.filePath, 0o600);
     } catch (err) {
-      try { unlinkSync(tmp); } catch { /* nothing to clean up */ }
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* nothing to clean up */
+      }
       throw err;
     }
     for (const cb of this.listeners) cb(this.current);
@@ -63,9 +84,13 @@ export class SettingsStore {
     const kept = `${this.filePath}.corrupt-${randomUUID()}`;
     try {
       renameSync(this.filePath, kept);
-      console.error(`[xpilot] settings at ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}); moved to ${kept} and started from defaults`);
+      console.error(
+        `[xpilot] settings at ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}); moved to ${kept} and started from defaults`,
+      );
     } catch (moveErr) {
-      console.error(`[xpilot] settings at ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}) and could not be moved aside (${moveErr instanceof Error ? moveErr.message : String(moveErr)}); started from defaults`);
+      console.error(
+        `[xpilot] settings at ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}) and could not be moved aside (${moveErr instanceof Error ? moveErr.message : String(moveErr)}); started from defaults`,
+      );
     }
   }
 }

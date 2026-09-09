@@ -13,13 +13,28 @@ import type { XViewLike, XViewToolCtx } from './context';
 function tracingView(log: string[], tag: string): XViewLike {
   return {
     currentUrl: () => 'https://x.com/home',
-    navigate: vi.fn(async () => { log.push(`${tag}:navigate`); await new Promise((r) => setTimeout(r, 5)); }),
-    callPreload: vi.fn(async (name: string) => { log.push(`${tag}:${name}`); await new Promise((r) => setTimeout(r, 5)); return ok([]); }),
+    navigate: vi.fn(async () => {
+      log.push(`${tag}:navigate`);
+      await new Promise((r) => setTimeout(r, 5));
+    }),
+    callPreload: vi.fn(async (name: string) => {
+      log.push(`${tag}:${name}`);
+      await new Promise((r) => setTimeout(r, 5));
+      return ok([]);
+    }),
   };
 }
 
 function ctx(xview: XViewLike, background: XViewLike): XViewToolCtx {
-  return { xview, background: async () => background, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm', likesMode: () => 'auto', drafts: new DraftStore() };
+  return {
+    xview,
+    background: async () => background,
+    allowHosts: () => DEFAULT_ALLOW_HOSTS,
+    approvals: new ApprovalBroker(),
+    postingMode: () => 'confirm',
+    likesMode: () => 'auto',
+    drafts: new DraftStore(),
+  };
 }
 
 describe('withView', () => {
@@ -36,8 +51,14 @@ describe('withView', () => {
     const interactive = tracingView(log, 'a');
     const scheduled = tracingView(log, 'b');
     await Promise.all([
-      withView(ctx(interactive, interactive), 'background', async (v) => { await v.navigate('u'); return v.callPreload('x_read_visible_posts', {}); }),
-      withView(ctx(scheduled, scheduled), 'background', async (v) => { await v.navigate('u'); return v.callPreload('x_read_visible_posts', {}); }),
+      withView(ctx(interactive, interactive), 'background', async (v) => {
+        await v.navigate('u');
+        return v.callPreload('x_read_visible_posts', {});
+      }),
+      withView(ctx(scheduled, scheduled), 'background', async (v) => {
+        await v.navigate('u');
+        return v.callPreload('x_read_visible_posts', {});
+      }),
     ]);
     expect(log).toEqual(['a:navigate', 'b:navigate', 'a:x_read_visible_posts', 'b:x_read_visible_posts']);
   });
@@ -46,7 +67,11 @@ describe('withView', () => {
     const log: string[] = [];
     const bg = tracingView(log, 'bg');
     const c = ctx(bg, bg);
-    await expect(withView(c, 'background', async () => { throw new Error('boom'); })).rejects.toThrow('boom');
+    await expect(
+      withView(c, 'background', async () => {
+        throw new Error('boom');
+      }),
+    ).rejects.toThrow('boom');
     await search.execute({ query: 'after' }, c);
     expect(log).toEqual(['bg:navigate', 'bg:x_read_visible_posts']);
   });
@@ -57,7 +82,10 @@ describe('cancellation', () => {
     const log: string[] = [];
     const x = tracingView(log, 'x');
     const c = ctx(x, tracingView(log, 'bg'));
-    expect(await navigate.execute({ url: 'https://x.com/explore' }, c, AbortSignal.abort())).toEqual({ success: false, error: 'Cancelled by the user' });
+    expect(await navigate.execute({ url: 'https://x.com/explore' }, c, AbortSignal.abort())).toEqual({
+      success: false,
+      error: 'Cancelled by the user',
+    });
     expect(x.navigate).not.toHaveBeenCalled();
     expect(log).toEqual([]);
   });
@@ -79,7 +107,9 @@ describe('cancellation', () => {
     const ac = new AbortController();
     const bg: XViewLike = {
       currentUrl: () => 'https://x.com/home',
-      navigate: vi.fn(async () => { log.push('navigate'); }),
+      navigate: vi.fn(async () => {
+        log.push('navigate');
+      }),
       callPreload: vi.fn(async (name: string) => {
         log.push(name);
         if (log.filter((l) => l === 'x_read_visible_posts').length === 2) ac.abort();

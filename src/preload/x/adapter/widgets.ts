@@ -15,14 +15,29 @@ export function textLines(el: Element): string[] {
   const lines: string[] = [];
   let cur = '';
   let lastRun = '';
-  const flush = () => { const t = cur.replace(/\s+/g, ' ').trim(); if (t && lines[lines.length - 1] !== t) lines.push(t); cur = ''; lastRun = ''; };
-  const run = (t: string) => { if (t.trim() && t.trim() === lastRun) return; cur += t; if (t.trim()) lastRun = t.trim(); };
+  const flush = () => {
+    const t = cur.replace(/\s+/g, ' ').trim();
+    if (t && lines[lines.length - 1] !== t) lines.push(t);
+    cur = '';
+    lastRun = '';
+  };
+  const run = (t: string) => {
+    if (t.trim() && t.trim() === lastRun) return;
+    cur += t;
+    if (t.trim()) lastRun = t.trim();
+  };
   const walk = (n: Node) => {
-    if (n.nodeType === Node.TEXT_NODE) { run(n.textContent ?? ''); return; }
+    if (n.nodeType === Node.TEXT_NODE) {
+      run(n.textContent ?? '');
+      return;
+    }
     if (n.nodeType !== Node.ELEMENT_NODE) return;
     const e = n as Element;
     if (SKIP_TAGS.has(e.tagName)) return;
-    if (e.tagName === 'IMG') { run(e.getAttribute('alt') ?? ''); return; }
+    if (e.tagName === 'IMG') {
+      run(e.getAttribute('alt') ?? '');
+      return;
+    }
     const block = BLOCK_TAGS.has(e.tagName);
     if (block) flush();
     for (const c of e.childNodes) walk(c);
@@ -41,7 +56,7 @@ export function widgetItem(el: Element): WidgetItem | null {
   const lines = textLines(el);
   if (lines.length === 0) return null;
   const isNews = (el.getAttribute('data-testid') ?? '').startsWith('news_sidebar_article_');
-  const title = isNews ? lines[0] : lines.find((l) => !CONTEXT_LINE.test(l) && !COUNT_LINE.test(l)) ?? lines[0];
+  const title = isNews ? lines[0] : (lines.find((l) => !CONTEXT_LINE.test(l) && !COUNT_LINE.test(l)) ?? lines[0]);
   const detail = lines.filter((l) => l !== title).join(' · ');
   return { title, detail };
 }
@@ -57,13 +72,24 @@ export function extractWidgets(root: ParentNode): WidgetSection[] {
   const add = (item: WidgetItem) => {
     const key = heading ?? FALLBACK_HEADING;
     let s = byHeading.get(key);
-    if (!s) { s = { heading: key, items: [] }; byHeading.set(key, s); sections.push(s); }
+    if (!s) {
+      s = { heading: key, items: [] };
+      byHeading.set(key, s);
+      sections.push(s);
+    }
     if (!s.items.some((i) => i.title === item.title)) s.items.push(item);
   };
   const itemSel = `${SEL.trend}, ${SEL.newsArticle}`;
   for (const el of root.querySelectorAll(`${SEL.sectionHeading}, ${itemSel}, ${SEL.timelineCell}`)) {
-    if (el.matches(itemSel)) { const it = widgetItem(el); if (it) add(it); continue; }
-    if (el.matches(SEL.sectionHeading)) { heading = (el.textContent ?? '').replace(/\s+/g, ' ').trim() || null; continue; }
+    if (el.matches(itemSel)) {
+      const it = widgetItem(el);
+      if (it) add(it);
+      continue;
+    }
+    if (el.matches(SEL.sectionHeading)) {
+      heading = (el.textContent ?? '').replace(/\s+/g, ' ').trim() || null;
+      continue;
+    }
     if (!(el.textContent ?? '').trim() && !el.querySelector(itemSel)) heading = null;
   }
   return sections;

@@ -24,13 +24,13 @@ The first launch opens x.com in the left pane and the agent sidebar on the right
 
 Useful environment variables:
 
-| Variable | Effect |
-| --- | --- |
-| `XPILOT_USER_DATA=<dir>` | Use a separate profile (settings, history, X session). Handy for testing without touching your real login. |
-| `XPILOT_CDP_PORT=9222` | Expose Chrome DevTools Protocol so you can inspect the live DOM with `scripts/inspect.mjs`. See `docs/manual-test.md`. |
-| `XPILOT_TEAM_ID=<team id>` | Used by `npm run sign-dev` for passkey (Touch ID) support. See `docs/passkeys.md`. |
-| `XPILOT_START_URL=<url>` | Open a different first page (used by the e2e tests). |
-| `XPILOT_E2E=1` | Exposes a test harness on `globalThis` for Playwright. Never set this for normal use. |
+| Variable                   | Effect                                                                                                                 |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `XPILOT_USER_DATA=<dir>`   | Use a separate profile (settings, history, X session). Handy for testing without touching your real login.             |
+| `XPILOT_CDP_PORT=9222`     | Expose Chrome DevTools Protocol so you can inspect the live DOM with `scripts/inspect.mjs`. See `docs/manual-test.md`. |
+| `XPILOT_TEAM_ID=<team id>` | Used by `npm run sign-dev` for passkey (Touch ID) support. See `docs/passkeys.md`.                                     |
+| `XPILOT_START_URL=<url>`   | Open a different first page (used by the e2e tests).                                                                   |
+| `XPILOT_E2E=1`             | Exposes a test harness on `globalThis` for Playwright. Never set this for normal use.                                  |
 
 ### Passkeys (Touch ID)
 
@@ -39,14 +39,16 @@ X's passkey login only works when the app is signed with a keychain access group
 ## Test
 
 ```bash
-npm run typecheck   # tsc for the main/preload and renderer projects
-npm test            # vitest unit tests (co-located *.test.ts next to the code)
-npm run e2e         # builds, then Playwright launches the real Electron app against fixtures
+npm run typecheck     # tsc for the main/preload and renderer projects
+npm run lint          # eslint, type-checked rules over src/ and tests/
+npm run format:check  # prettier; `npm run format` rewrites
+npm test              # vitest unit tests (co-located *.test.ts next to the code)
+npm run e2e           # builds, then Playwright launches the real Electron app against fixtures
 ```
 
 Unit tests cover the DOM adapter against captured x.com fixtures in `tests/fixtures/`, the tool layer with fake views, the Codex protocol with a fake app-server, the history store, and the renderer state. The e2e suite starts Electron with a temporary profile and a local fixture page, so it needs no X login. Two tests that reach the live site are skipped unless you set `XPILOT_E2E_NETWORK=1`.
 
-CI runs typecheck, unit tests and the build on every push and pull request (`.github/workflows/ci.yml`).
+CI runs typecheck, lint, the formatting check, unit tests and the build on every push and pull request, and the hermetic e2e suite in a second job (`.github/workflows/ci.yml`).
 
 Some behaviour can only be checked against the real site. [docs/manual-test.md](docs/manual-test.md) is the checklist for that, and it explains how to attach to a running app over CDP to inspect what the adapter sees.
 

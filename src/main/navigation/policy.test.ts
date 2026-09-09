@@ -36,9 +36,18 @@ describe('attachNavigationPolicy', () => {
     let handler: ((d: { url: string }) => WindowOpenResponse) | null = null;
     return {
       on: (ev: string, l: (details: NavigationDetails) => void) => em.on(ev, l),
-      setWindowOpenHandler: (h: (d: { url: string }) => WindowOpenResponse) => { handler = h; },
+      setWindowOpenHandler: (h: (d: { url: string }) => WindowOpenResponse) => {
+        handler = h;
+      },
       emit: (ev: string, url: string, isMainFrame = true) => {
-        const d = { url, isMainFrame, prevented: false, preventDefault() { this.prevented = true; } };
+        const d = {
+          url,
+          isMainFrame,
+          prevented: false,
+          preventDefault() {
+            this.prevented = true;
+          },
+        };
         em.emit(ev, d);
         return d.prevented;
       },
@@ -64,7 +73,12 @@ describe('attachNavigationPolicy', () => {
     expect(openExternal).toHaveBeenCalledWith('https://example.com');
     const popup = c.open('https://accounts.google.com/x');
     expect(popup.action).toBe('allow');
-    expect(popup).toEqual({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } } });
+    expect(popup).toEqual({
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false },
+      },
+    });
   });
 
   it('blocks an off-allowlist subframe navigation without opening the browser', () => {
@@ -129,11 +143,17 @@ describe('short links in popups', () => {
   it('never opens a window for t.co; hands the url to the short-link resolver instead', () => {
     const c = (function fakeContents() {
       let handler: ((d: { url: string }) => { action: string }) | null = null;
-      return { on: () => {}, setWindowOpenHandler: (h: typeof handler) => { handler = h; }, open: (url: string) => handler!({ url }) };
+      return {
+        on: () => {},
+        setWindowOpenHandler: (h: typeof handler) => {
+          handler = h;
+        },
+        open: (url: string) => handler!({ url }),
+      };
     })();
     const openExternal = vi.fn();
     const openShortLink = vi.fn();
-    attachNavigationPolicy(c as never, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal, openShortLink });
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal, openShortLink });
     expect(c.open('https://t.co/abc').action).toBe('deny');
     expect(openShortLink).toHaveBeenCalledWith('https://t.co/abc');
     expect(openExternal).not.toHaveBeenCalled();

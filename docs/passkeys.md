@@ -40,7 +40,7 @@ be granted by a code-signing entitlement. Two consequences:
 
 ## 2. Provisioning profile (required)
 
-macOS treats `keychain-access-groups` as a *restricted* entitlement: an app that carries it
+macOS treats `keychain-access-groups` as a _restricted_ entitlement: an app that carries it
 without an embedded provisioning profile authorising the group is killed at launch
 (exit 137, no crash report). Electron's docs omit this. Create a macOS development
 profile once:
@@ -90,7 +90,7 @@ electron-builder signs `dist/mac*/XPilot.app` with your identity, the rendered
    code). The session persists in the app.
 2. In X: Settings → Security and account access → Security → Two-factor authentication
    → Security key (or Passkeys) → add. macOS shows `"XPilot" is trying to sign in to
-   x.com` with Touch ID; approve it.
+x.com` with Touch ID; approve it.
 3. From now on, passkey prompts inside XPilot are answered with Touch ID.
 
 If macOS refuses the keychain group on a Personal Team, the Touch ID prompt never

@@ -25,10 +25,16 @@ describe('sidebar reducer', () => {
     const s = run([
       { type: 'tool.started', itemId: 'c1', name: 'x_get_page_state', args: {} },
       { type: 'tool.completed', itemId: 'c1', name: 'x_get_page_state', success: true, output: '{"url":"u"}' },
-      { type: 'approval.requested', request: { id: 'a1', kind: 'post', title: 'Post?', detail: 'hello', options: [{ id: 'post', label: 'Post' }] } },
+      {
+        type: 'approval.requested',
+        request: { id: 'a1', kind: 'post', title: 'Post?', detail: 'hello', options: [{ id: 'post', label: 'Post' }] },
+      },
       { type: 'approval.resolved', id: 'a1', decision: 'post' },
     ]);
-    expect(s.entries[0]).toEqual({ kind: 'tool', call: { id: 'c1', name: 'x_get_page_state', args: {}, status: 'done', output: '{"url":"u"}' } });
+    expect(s.entries[0]).toEqual({
+      kind: 'tool',
+      call: { id: 'c1', name: 'x_get_page_state', args: {}, status: 'done', output: '{"url":"u"}' },
+    });
     expect(s.entries[1]).toEqual({ kind: 'approval', request: expect.objectContaining({ id: 'a1' }), decision: 'post' });
   });
 
@@ -89,7 +95,10 @@ describe('sidebar reducer', () => {
   });
 
   it('reset clears entries but keeps status', () => {
-    const s = run([{ type: 'status', status: 'ready' }, { type: 'user.message', text: 'x' }]);
+    const s = run([
+      { type: 'status', status: 'ready' },
+      { type: 'user.message', text: 'x' },
+    ]);
     const r = reduce(s, { type: 'reset' });
     expect(r.entries).toEqual([]);
     expect(r.status).toBe('ready');
@@ -98,7 +107,10 @@ describe('sidebar reducer', () => {
 });
 
 it('tracks activity while running and clears it when the turn ends', () => {
-  let s = run([{ type: 'turn.started', turnId: 't' }, { type: 'activity', activity: 'thinking' }]);
+  let s = run([
+    { type: 'turn.started', turnId: 't' },
+    { type: 'activity', activity: 'thinking' },
+  ]);
   expect(s.activity).toEqual({ activity: 'thinking' });
   s = run([{ type: 'activity', activity: 'tool', detail: 'web_search' }], s);
   expect(s.activity).toEqual({ activity: 'tool', detail: 'web_search' });
@@ -120,7 +132,14 @@ it('folds all thinking in a turn into one entry, even around tool calls', () => 
     { type: 'thinking.completed', itemId: 'r9', text: 'Second turn' },
   ]);
   expect(s.entries.map((e) => e.kind)).toEqual(['thinking', 'tool', 'message', 'thinking']);
-  expect(s.entries[0]).toEqual({ kind: 'thinking', id: 't1', steps: [{ id: 'r1', text: 'Need state.' }, { id: 'c2', text: 'Now answer.' }] });
+  expect(s.entries[0]).toEqual({
+    kind: 'thinking',
+    id: 't1',
+    steps: [
+      { id: 'r1', text: 'Need state.' },
+      { id: 'c2', text: 'Now answer.' },
+    ],
+  });
   expect(s.entries[3]).toEqual({ kind: 'thinking', id: 't2', steps: [{ id: 'r9', text: 'Second turn' }] });
 });
 

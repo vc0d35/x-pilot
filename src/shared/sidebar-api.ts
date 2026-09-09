@@ -2,17 +2,52 @@ import type { AgentEvent, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
 
-export interface ModelInfo { id: string; displayName: string; isDefault: boolean; reasoningEfforts: string[] }
-export interface Conversation { threadId: string; title: string; kind: 'chat' | 'task'; taskId: number | null; createdAt: string; updatedAt: string; toolsHash: string | null }
+export interface ModelInfo {
+  id: string;
+  displayName: string;
+  isDefault: boolean;
+  reasoningEfforts: string[];
+}
+export interface Conversation {
+  threadId: string;
+  title: string;
+  kind: 'chat' | 'task';
+  taskId: number | null;
+  createdAt: string;
+  updatedAt: string;
+  toolsHash: string | null;
+}
 export type TaskSchedule = { every: string } | { cron: string };
 export interface ScheduledTask {
-  id: number; title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; threadId: string | null;
-  enabled: boolean; createdAt: string; lastRunAt: string | null; lastStatus: string | null; nextRunAt: string | null;
+  id: number;
+  title: string;
+  prompt: string;
+  schedule: TaskSchedule;
+  threadMode: 'resume' | 'new';
+  threadId: string | null;
+  enabled: boolean;
+  createdAt: string;
+  lastRunAt: string | null;
+  lastStatus: string | null;
+  nextRunAt: string | null;
   /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
   webSearch: boolean;
 }
-export interface HistoryStats { conversations: number; events: number; posts: number; library: number; tasks: number; dbBytes: number }
-export interface LibraryItem { id: number; url: string; path: string; title: string; savedAt: string }
+export interface HistoryStats {
+  conversations: number;
+  events: number;
+  posts: number;
+  library: number;
+  tasks: number;
+  dbBytes: number;
+}
+export interface LibraryItem {
+  id: number;
+  url: string;
+  path: string;
+  title: string;
+  savedAt: string;
+}
 
 export interface XPilotApi {
   send(text: string, pageContext: PageContext | null): Promise<void>;

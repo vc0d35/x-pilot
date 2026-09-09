@@ -1,5 +1,10 @@
 export function slugify(s: string): string {
-  return s.normalize('NFKD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return s
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 /** Post ids come from page-evaluated JS, so they are reduced to characters that cannot shape a path. */
 export function sanitizeId(id: string): string {

@@ -6,7 +6,18 @@ describe('ApprovalBroker', () => {
     const broker = new ApprovalBroker();
     const events: unknown[] = [];
     broker.onEvent((e) => events.push(e));
-    const p = broker.request({ kind: 'post', title: 'Post?', detail: 'hello', options: [{ id: 'post', label: 'Post' }, { id: 'cancel', label: 'Cancel' }] }, 1000);
+    const p = broker.request(
+      {
+        kind: 'post',
+        title: 'Post?',
+        detail: 'hello',
+        options: [
+          { id: 'post', label: 'Post' },
+          { id: 'cancel', label: 'Cancel' },
+        ],
+      },
+      1000,
+    );
     const req = (events[0] as { request: { id: string } }).request;
     expect(broker.resolve(req.id, 'post')).toBe(true);
     await expect(p).resolves.toBe('post');

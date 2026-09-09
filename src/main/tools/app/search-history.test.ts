@@ -1,13 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { searchHistory } from './search-history';
 import { fail, runTool } from '../../../shared/tools';
-import { HistoryStore, toFtsQuery, type HistoryHit, type HistoryQuery } from '../../history/store';
+import { AppStore, toFtsQuery, type HistoryHit, type HistoryQuery } from '../../history/store';
 import type { AppToolCtx } from './context';
 
 function ctx() {
   const search = vi.fn((_q: HistoryQuery): HistoryHit[] => []);
-  const history = { search, count: () => 0 } as unknown as AppToolCtx['history'];
-  return { c: { history } as AppToolCtx, search };
+  const store = { search, count: () => 0 } as unknown as AppToolCtx['store'];
+  return { c: { store } as AppToolCtx, search };
 }
 
 const args = (over: Record<string, unknown>) => ({ query: 'hello', ...over });
@@ -18,7 +18,9 @@ describe('xpilot_search_history', () => {
     const { c, search } = ctx();
     await run(c);
     expect(search.mock.calls[0][0]).toMatchObject({ limit: 20 });
-    expect(await run(c, { limit: 1e9 })).toEqual(fail('Invalid arguments for xpilot_search_history: limit: Too big: expected number to be <=100'));
+    expect(await run(c, { limit: 1e9 })).toEqual(
+      fail('Invalid arguments for xpilot_search_history: limit: Too big: expected number to be <=100'),
+    );
     expect(await run(c, { limit: 0 })).toMatchObject({ success: false });
     expect(await run(c, { limit: 'lots' })).toMatchObject({ success: false });
     expect(search).toHaveBeenCalledTimes(1);
@@ -43,9 +45,17 @@ describe('toFtsQuery', () => {
   });
 
   it('answers a query of ten thousand matching tokens quickly', () => {
-    const store = new HistoryStore(':memory:');
+    const store = new AppStore(':memory:');
     for (let i = 0; i < 50; i++) {
-      store.recordLike({ id: String(i), url: `https://x.com/a/status/${i}`, authorHandle: 'a', authorName: 'A', text: 'a a a hello world lorem ipsum', postedAt: null, kind: 'post' });
+      store.recordLike({
+        id: String(i),
+        url: `https://x.com/a/status/${i}`,
+        authorHandle: 'a',
+        authorName: 'A',
+        text: 'a a a hello world lorem ipsum',
+        postedAt: null,
+        kind: 'post',
+      });
     }
     const started = Date.now();
     store.search({ query: 'a '.repeat(10_000), limit: 20 });

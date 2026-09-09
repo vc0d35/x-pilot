@@ -1,10 +1,18 @@
 import { statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 
-export interface HistoryStats { conversations: number; events: number; posts: number; library: number; tasks: number; dbBytes: number }
+export interface HistoryStats {
+  conversations: number;
+  events: number;
+  posts: number;
+  library: number;
+  tasks: number;
+  dbBytes: number;
+}
 
 /** Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a released entry: add a new one. */
-const MIGRATIONS: string[] = [`
+const MIGRATIONS: string[] = [
+  `
 CREATE TABLE IF NOT EXISTS posts(
   id TEXT PRIMARY KEY, url TEXT NOT NULL, author_handle TEXT NOT NULL, author_name TEXT NOT NULL,
   text TEXT NOT NULL, extra TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, posted_at TEXT,
@@ -36,9 +44,11 @@ CREATE TABLE IF NOT EXISTS tasks(
   thread_mode TEXT NOT NULL DEFAULT 'resume', thread_id TEXT, enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL, last_run_at TEXT, last_status TEXT, next_run_at TEXT
 );
-`, `
+`,
+  `
 ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0;
-`];
+`,
+];
 
 const V1_TABLES = ['posts', 'posts_fts', 'library', 'conversations', 'conversation_events', 'tasks'];
 
@@ -61,8 +71,15 @@ export function migrate(db: DatabaseSync): number {
     db.exec(`PRAGMA user_version = ${target}`);
     db.exec('COMMIT');
   } catch (err) {
-    try { db.exec('ROLLBACK'); } catch { /* the failed statement may have aborted the transaction already */ }
-    throw new Error(`XPilot could not upgrade its history database from version ${version} to ${target}: ${err instanceof Error ? err.message : String(err)}`);
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      /* the failed statement may have aborted the transaction already */
+    }
+    throw new Error(
+      `XPilot could not upgrade its history database from version ${version} to ${target}: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
   }
   return target;
 }
@@ -92,12 +109,18 @@ export class HistoryDb {
   /** The file on disk, or - for an in-memory database, and if the file cannot be read - the pages SQLite holds. */
   private dbBytes(): number {
     if (this.path !== ':memory:') {
-      try { return statSync(this.path).size; } catch { /* fall through to the page count */ }
+      try {
+        return statSync(this.path).size;
+      } catch {
+        /* fall through to the page count */
+      }
     }
     const pages = (this.db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
     const size = (this.db.prepare('PRAGMA page_size').get() as { page_size: number }).page_size;
     return pages * size;
   }
 
-  close(): void { this.db.close(); }
+  close(): void {
+    this.db.close();
+  }
 }

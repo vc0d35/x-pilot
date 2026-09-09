@@ -2,10 +2,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { resolveShortLink, isFollowableHop, isShortLinkHost, routeShortLink, sidebarLinkAction } from './shortlink';
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 
-const fetcher = (hops: Record<string, string | null>) => vi.fn(async (url: string) => {
-  const next = hops[url];
-  return next === undefined ? { status: 404, location: null } : next === null ? { status: 200, location: null } : { status: 301, location: next };
-});
+const fetcher = (hops: Record<string, string | null>) =>
+  vi.fn(async (url: string) => {
+    const next = hops[url];
+    return next === undefined
+      ? { status: 404, location: null }
+      : next === null
+        ? { status: 200, location: null }
+        : { status: 301, location: next };
+  });
 
 describe('isShortLinkHost', () => {
   it('matches t.co only', () => {
@@ -26,7 +31,9 @@ describe('resolveShortLink', () => {
     await expect(resolveShortLink('https://t.co/a', f, 3)).resolves.toBe('https://t.co/a');
   });
   it('returns the input when the request fails', async () => {
-    const f = vi.fn(async () => { throw new Error('offline'); });
+    const f = vi.fn(async () => {
+      throw new Error('offline');
+    });
     await expect(resolveShortLink('https://t.co/a', f)).resolves.toBe('https://t.co/a');
   });
 
@@ -45,7 +52,16 @@ describe('resolveShortLink', () => {
   });
 
   it('refuses a hop to a private or link-local address', async () => {
-    for (const hop of ['https://127.0.0.1/x', 'https://localhost/x', 'https://169.254.169.254/x', 'https://10.0.0.1/x', 'https://192.168.1.1/x', 'https://172.16.0.1/x', 'https://[::1]/x', 'https://printer.local/x']) {
+    for (const hop of [
+      'https://127.0.0.1/x',
+      'https://localhost/x',
+      'https://169.254.169.254/x',
+      'https://10.0.0.1/x',
+      'https://192.168.1.1/x',
+      'https://172.16.0.1/x',
+      'https://[::1]/x',
+      'https://printer.local/x',
+    ]) {
       const f = fetcher({ 'https://t.co/a': hop });
       await expect(resolveShortLink('https://t.co/a', f), hop).resolves.toBe('https://t.co/a');
       expect(f).toHaveBeenCalledTimes(1);
@@ -53,7 +69,11 @@ describe('resolveShortLink', () => {
   });
 
   it('resolves a live chain through to an x.com status, so the view branch is reachable again', async () => {
-    const f = fetcher({ 'https://t.co/a': 'https://bit.ly/b', 'https://bit.ly/b': 'https://x.com/attacker/status/1', 'https://x.com/attacker/status/1': null });
+    const f = fetcher({
+      'https://t.co/a': 'https://bit.ly/b',
+      'https://bit.ly/b': 'https://x.com/attacker/status/1',
+      'https://x.com/attacker/status/1': null,
+    });
     const target = await resolveShortLink('https://t.co/a', f);
     expect(target).toBe('https://x.com/attacker/status/1');
     expect(routeShortLink(target, DEFAULT_ALLOW_HOSTS)).toBe('view');

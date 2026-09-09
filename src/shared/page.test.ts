@@ -2,8 +2,14 @@ import { describe, it, expect } from 'vitest';
 import { PostSchema, VisiblePostSchema } from './page';
 
 const post = (over: Record<string, unknown> = {}) => ({
-  id: '111', url: 'https://x.com/alice/status/111', authorHandle: 'alice', authorName: 'Alice',
-  text: 'hello', postedAt: null, kind: 'post', ...over,
+  id: '111',
+  url: 'https://x.com/alice/status/111',
+  authorHandle: 'alice',
+  authorName: 'Alice',
+  text: 'hello',
+  postedAt: null,
+  kind: 'post',
+  ...over,
 });
 
 describe('PostSchema caps', () => {

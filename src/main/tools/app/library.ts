@@ -9,7 +9,7 @@ export const listLibrary = defineTool({
   description: 'Lists PDFs saved to the library, newest first.',
   args: z.strictObject({ limit: z.int().min(1).max(500).default(50) }),
   annotations: { readOnlyHint: true },
-  execute: async (args, ctx: AppToolCtx) => ok(ctx.history.listLibrary(args.limit)),
+  execute: async (args, ctx: AppToolCtx) => ok(ctx.store.listLibrary(args.limit)),
 });
 
 export const openPdf = defineTool({
@@ -18,7 +18,8 @@ export const openPdf = defineTool({
   args: z.strictObject({ path: z.string() }),
   execute: async (args, ctx: AppToolCtx) => {
     const path = resolve(args.path);
-    if (!isOpenablePdf(path, ctx.libraryDir(), (p) => ctx.history.hasLibraryPath(p))) return fail('Refusing to open a file that is not a PDF in the library');
+    if (!isOpenablePdf(path, ctx.libraryDir(), (p) => ctx.store.hasLibraryPath(p)))
+      return fail('Refusing to open a file that is not a PDF in the library');
     const err = await ctx.openPath(path);
     return err ? fail(`Could not open PDF: ${err}`) : ok({ opened: true });
   },

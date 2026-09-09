@@ -14,8 +14,12 @@ export interface PermissionDetails {
 
 /** The slice of Electron's Session this module drives; unit tests feed a fake. */
 export interface PermissionSessionLike {
-  setPermissionRequestHandler(handler: (webContents: unknown, permission: string, callback: PermissionCallback, details: PermissionDetails) => void): void;
-  setPermissionCheckHandler(handler: (webContents: unknown, permission: string, requestingOrigin: string, details: PermissionDetails) => boolean): void;
+  setPermissionRequestHandler(
+    handler: (webContents: unknown, permission: string, callback: PermissionCallback, details: PermissionDetails) => void,
+  ): void;
+  setPermissionCheckHandler(
+    handler: (webContents: unknown, permission: string, requestingOrigin: string, details: PermissionDetails) => boolean,
+  ): void;
   setDevicePermissionHandler(handler: (details: unknown) => boolean): void;
   setDisplayMediaRequestHandler(handler: (request: unknown, callback: (streams: Record<string, never>) => void) => void): void;
 }
@@ -35,7 +39,9 @@ export function applyPermissionPolicy(
   // the PDF window and every third-party iframe inside them.
   const ok = (permission: string, url: string | undefined, details: PermissionDetails | undefined) =>
     allowed.has(permission) && details?.isMainFrame !== false && isAllowedOrigin(url);
-  session.setPermissionRequestHandler((_webContents, permission, callback, details) => callback(ok(permission, details?.requestingUrl, details)));
+  session.setPermissionRequestHandler((_webContents, permission, callback, details) =>
+    callback(ok(permission, details?.requestingUrl, details)),
+  );
   session.setPermissionCheckHandler((_webContents, permission, requestingOrigin, details) => ok(permission, requestingOrigin, details));
   session.setDevicePermissionHandler(() => false);
   // No video/audio in the response means "the user picked nothing": the request is denied.
@@ -43,6 +49,6 @@ export function applyPermissionPolicy(
 }
 
 export function installPermissionHandlers(sessions: { x: Session; default: Session; allowHosts: () => string[] }): void {
-  applyPermissionPolicy(sessions.x as unknown as PermissionSessionLike, X_SESSION_PERMISSIONS, (url) => isAllowedPermissionOrigin(url, sessions.allowHosts()));
-  applyPermissionPolicy(sessions.default as unknown as PermissionSessionLike, []);
+  applyPermissionPolicy(sessions.x, X_SESSION_PERMISSIONS, (url) => isAllowedPermissionOrigin(url, sessions.allowHosts()));
+  applyPermissionPolicy(sessions.default, []);
 }

@@ -13,14 +13,22 @@ const OFF_LIMITS = /^\/(logout|settings|account|intent|compose|login|signup|i\/f
 
 export const navigate = defineTool({
   name: 'x_navigate',
-  description: 'Navigates the window the USER is looking at to a URL on x.com (home, a profile, a post, search, likes…) and returns the page state. Only use when the user asked to open, show, or go somewhere; for reading use x_read_post or x_search instead.',
+  description:
+    'Navigates the window the USER is looking at to a URL on x.com (home, a profile, a post, search, likes…) and returns the page state. Only use when the user asked to open, show, or go somewhere; for reading use x_read_post or x_search instead.',
   args: z.strictObject({ url: z.string() }),
   execute: async (args, ctx: XViewToolCtx, signal) => {
     const url = args.url;
     if (decideNavigation(url, ctx.allowHosts()) !== 'allow') return fail(`Refusing to navigate outside x.com: ${url}`);
-    let path = '';
-    try { path = new URL(url).pathname.toLowerCase(); } catch { return fail(`Not a URL: ${url}`); }
-    if (OFF_LIMITS.test(path)) return fail(`Refusing to open ${path}: it changes the user's account or session. Ask the user to do this themselves; to write a post use x_compose_post.`);
+    let path: string;
+    try {
+      path = new URL(url).pathname.toLowerCase();
+    } catch {
+      return fail(`Not a URL: ${url}`);
+    }
+    if (OFF_LIMITS.test(path))
+      return fail(
+        `Refusing to open ${path}: it changes the user's account or session. Ask the user to do this themselves; to write a post use x_compose_post.`,
+      );
     return withView(ctx, 'visible', async (view) => {
       const stopped = await navigateStep(view, url, signal);
       if (stopped) return stopped;

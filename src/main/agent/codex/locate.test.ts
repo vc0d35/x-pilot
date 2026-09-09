@@ -32,7 +32,13 @@ describe('locateCodex', () => {
   });
 
   it('finds installs under the home directory', async () => {
-    for (const p of ['/Users/x/.local/bin/codex', '/Users/x/.codex/bin/codex', '/Users/x/.volta/bin/codex', '/Users/x/.bun/bin/codex', '/Users/x/.fnm/aliases/default/bin/codex']) {
+    for (const p of [
+      '/Users/x/.local/bin/codex',
+      '/Users/x/.codex/bin/codex',
+      '/Users/x/.volta/bin/codex',
+      '/Users/x/.bun/bin/codex',
+      '/Users/x/.fnm/aliases/default/bin/codex',
+    ]) {
       await expect(locateCodex({ ...base, ...fakeFs([p]) })).resolves.toBe(p);
     }
   });
@@ -47,8 +53,11 @@ describe('locateCodex', () => {
     const dirs = { '/Users/x/.nvm/versions/node': ['v18.20.0', 'v22.3.1', 'v20.11.0'] };
     const fs = fakeFs(['/Users/x/.nvm/versions/node/v18.20.0/bin/codex', '/Users/x/.nvm/versions/node/v22.3.1/bin/codex'], dirs);
     await expect(locateCodex({ ...base, ...fs })).resolves.toBe('/Users/x/.nvm/versions/node/v22.3.1/bin/codex');
-    expect(candidateDirs({ home: '/Users/x', listDir: fs.listDir }).filter((d) => d.includes('.nvm')))
-      .toEqual(['/Users/x/.nvm/versions/node/v22.3.1/bin', '/Users/x/.nvm/versions/node/v20.11.0/bin', '/Users/x/.nvm/versions/node/v18.20.0/bin']);
+    expect(candidateDirs({ home: '/Users/x', listDir: fs.listDir }).filter((d) => d.includes('.nvm'))).toEqual([
+      '/Users/x/.nvm/versions/node/v22.3.1/bin',
+      '/Users/x/.nvm/versions/node/v20.11.0/bin',
+      '/Users/x/.nvm/versions/node/v18.20.0/bin',
+    ]);
   });
 
   it('asks the login shell after PATH, and not at all when PATH already answered', async () => {
@@ -80,6 +89,8 @@ describe('locateCodex', () => {
   it('works without a home directory and on win32', async () => {
     await expect(locateCodex({ ...base, ...fakeFs(['/usr/local/bin/codex']), home: null })).resolves.toBe('/usr/local/bin/codex');
     const win = fakeFs(['C:/npm/codex.cmd']);
-    await expect(locateCodex({ ...win, home: null, platform: 'win32', env: { PATH: 'C:/npm;C:/windows' } })).resolves.toBe('C:/npm/codex.cmd');
+    await expect(locateCodex({ ...win, home: null, platform: 'win32', env: { PATH: 'C:/npm;C:/windows' } })).resolves.toBe(
+      'C:/npm/codex.cmd',
+    );
   });
 });

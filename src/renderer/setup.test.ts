@@ -9,7 +9,9 @@ describe('classifyAgentFailure', () => {
   it('reads the messages main produces for a missing or unrunnable binary', () => {
     expect(classifyAgentFailure(CODEX_MISSING_MESSAGE)).toBe('missing');
     expect(classifyAgentFailure('Could not start codex: spawn codex ENOENT. Install Codex CLI and run `codex login`.')).toBe('missing');
-    expect(classifyAgentFailure('Could not start codex: spawn /opt/codex EACCES. Install Codex CLI and run `codex login`.')).toBe('missing');
+    expect(classifyAgentFailure('Could not start codex: spawn /opt/codex EACCES. Install Codex CLI and run `codex login`.')).toBe(
+      'missing',
+    );
   });
 
   it('reads the auth failures Codex reports on the first turn', () => {
@@ -37,9 +39,14 @@ describe('setupIssue', () => {
   });
 
   it('shows a missing or logged-out problem even while the status reads ready', () => {
-    expect(setupIssue({ ...base, failure: { message: CODEX_MISSING_MESSAGE } })).toEqual({ problem: 'missing', message: CODEX_MISSING_MESSAGE });
+    expect(setupIssue({ ...base, failure: { message: CODEX_MISSING_MESSAGE } })).toEqual({
+      problem: 'missing',
+      message: CODEX_MISSING_MESSAGE,
+    });
     expect(setupIssue({ ...base, failure: { message: 'not logged in' } })?.problem).toBe('logged-out');
-    expect(setupIssue({ ...base, status: 'running', everSucceeded: true, failure: { message: 'not logged in' } })?.problem).toBe('logged-out');
+    expect(setupIssue({ ...base, status: 'running', everSucceeded: true, failure: { message: 'not logged in' } })?.problem).toBe(
+      'logged-out',
+    );
   });
 
   it('shows an unclassified failure only while the agent is down and nothing has worked yet', () => {

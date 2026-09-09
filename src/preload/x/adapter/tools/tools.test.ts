@@ -14,7 +14,9 @@ const ctx = {};
 const run = (tool: ToolModule<typeof ctx>, args: Record<string, unknown> = {}) => runTool(tool, args, ctx);
 
 describe('preload tools', () => {
-  beforeEach(() => { document.body.innerHTML = ''; });
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('registers exactly the specs main compiles in, so the two halves cannot drift', () => {
     expect(adapterTools.map((t) => t.spec)).toEqual(adapterToolSpecs);
@@ -25,32 +27,53 @@ describe('preload tools', () => {
     document.body.innerHTML = fixture('x-status.html');
     document.title = 'Alice on X';
     const r = await run(pageState, {});
-    expect(r).toEqual({ success: true, content: { url: 'http://localhost:3000/alice/status/111', kind: 'post', title: 'Alice on X', adapterHealthy: true, health: { layout: true } } });
+    expect(r).toEqual({
+      success: true,
+      content: {
+        url: 'http://localhost:3000/alice/status/111',
+        kind: 'post',
+        title: 'Alice on X',
+        adapterHealthy: true,
+        health: { layout: true },
+      },
+    });
     document.body.innerHTML = '<div>blank</div>';
-    expect((await run(pageState, { timeoutMs: 0 })) as { content: { adapterHealthy: boolean } }).toMatchObject({ content: { adapterHealthy: false, health: { layout: false } } });
+    expect((await run(pageState, { timeoutMs: 0 })) as { content: { adapterHealthy: boolean } }).toMatchObject({
+      content: { adapterHealthy: false, health: { layout: false } },
+    });
   });
 
   it('x_get_page_state reports the posts extractor separately on a timeline page', async () => {
     window.history.pushState({}, '', '/home');
     document.body.innerHTML = fixture('x-timeline.html');
-    expect((await run(pageState, {})) as { content: unknown }).toMatchObject({ content: { adapterHealthy: true, health: { layout: true, posts: true } } });
+    expect((await run(pageState, {})) as { content: unknown }).toMatchObject({
+      content: { adapterHealthy: true, health: { layout: true, posts: true } },
+    });
     // The layout X renders is still there; only the posts inside it stopped being extractable.
     for (const a of document.querySelectorAll('article[data-testid="tweet"]')) a.removeAttribute('data-testid');
-    expect((await run(pageState, { timeoutMs: 50 })) as { content: unknown }).toMatchObject({ content: { adapterHealthy: false, health: { layout: true, posts: false } } });
+    expect((await run(pageState, { timeoutMs: 50 })) as { content: unknown }).toMatchObject({
+      content: { adapterHealthy: false, health: { layout: true, posts: false } },
+    });
   });
 
   it('x_get_page_state reports the article extractor separately on an article page', async () => {
     window.history.pushState({}, '', '/i/article/555');
     document.body.innerHTML = fixture('x-article.html');
-    expect((await run(pageState, {})) as { content: unknown }).toMatchObject({ content: { adapterHealthy: true, health: { layout: true, article: true } } });
+    expect((await run(pageState, {})) as { content: unknown }).toMatchObject({
+      content: { adapterHealthy: true, health: { layout: true, article: true } },
+    });
     document.body.innerHTML = '<div data-testid="primaryColumn">no reader view</div>';
-    expect((await run(pageState, { timeoutMs: 50 })) as { content: unknown }).toMatchObject({ content: { adapterHealthy: false, health: { layout: true, article: false } } });
+    expect((await run(pageState, { timeoutMs: 50 })) as { content: unknown }).toMatchObject({
+      content: { adapterHealthy: false, health: { layout: true, article: false } },
+    });
   });
 
   it('x_get_page_state waits for the layout to render after a navigation before judging health', async () => {
     window.history.pushState({}, '', '/alice/status/111');
     document.body.innerHTML = '<div>still loading</div>';
-    setTimeout(() => { document.body.innerHTML = fixture('x-status.html'); }, 50);
+    setTimeout(() => {
+      document.body.innerHTML = fixture('x-status.html');
+    }, 50);
     const r = (await run(pageState, { timeoutMs: 2000 })) as { content: { adapterHealthy: boolean } };
     expect(r.content.adapterHealthy).toBe(true);
     document.body.innerHTML = '<div>never renders</div>';
@@ -65,12 +88,17 @@ describe('preload tools', () => {
     const pill = document.querySelector<HTMLElement>('[data-testid="cellInnerDiv"] button')!;
     pill.addEventListener('click', () => pill.remove());
     expect(await run(showNewPosts, {})).toMatchObject({ success: true, content: { shown: true, count: 3, kind: 'home' } });
-    expect((await run(showNewPosts, {})) as { content: { shown: boolean; newPostsAvailable?: number } }).toMatchObject({ content: { shown: false } });
+    expect((await run(showNewPosts, {})) as { content: { shown: boolean; newPostsAvailable?: number } }).toMatchObject({
+      content: { shown: false },
+    });
     expect(((await run(pageState, {})) as { content: { newPostsAvailable?: number } }).content.newPostsAvailable).toBeUndefined();
   });
 
   it('rejects arguments that do not match the tool schema, before touching the page', async () => {
-    expect(await runAdapterTool('x_read_visible_posts', { limit: 500 }, ctx)).toEqual({ success: false, error: 'Invalid arguments for x_read_visible_posts: limit: Too big: expected number to be <=100' });
+    expect(await runAdapterTool('x_read_visible_posts', { limit: 500 }, ctx)).toEqual({
+      success: false,
+      error: 'Invalid arguments for x_read_visible_posts: limit: Too big: expected number to be <=100',
+    });
     expect(await runAdapterTool('x_scroll', { direction: 'sideways' }, ctx)).toMatchObject({ success: false });
     expect(await runAdapterTool('x_nope', {}, ctx)).toEqual({ success: false, error: 'Unknown tool in preload: x_nope' });
   });
@@ -88,7 +116,9 @@ describe('preload tools', () => {
         const p = run(readVisiblePosts, {});
         await vi.advanceTimersByTimeAsync(8000);
         return await p;
-      } finally { vi.useRealTimers(); }
+      } finally {
+        vi.useRealTimers();
+      }
     };
     window.history.pushState({}, '', '/home');
     document.body.innerHTML = '<div data-testid="primaryColumn">nothing we recognise</div>';
@@ -106,7 +136,10 @@ describe('preload tools', () => {
     document.body.innerHTML = fixture('x-status.html');
     let clicked = 0;
     document.querySelector<HTMLElement>('[data-testid="tweet-text-show-more-link"]')!.addEventListener('click', () => clicked++);
-    const r = (await run(readCurrentPost, {})) as { success: boolean; content: { post: { id: string }; thread: { id: string }[]; article: unknown } };
+    const r = (await run(readCurrentPost, {})) as {
+      success: boolean;
+      content: { post: { id: string }; thread: { id: string }[]; article: unknown };
+    };
     expect(r.success).toBe(true);
     expect(clicked).toBe(1);
     expect(r.content.post.id).toBe('111');
@@ -117,7 +150,14 @@ describe('preload tools', () => {
   it('x_read_current_post reads an X Article page that has no tweet element', async () => {
     window.history.pushState({}, '', '/i/article/555');
     document.body.innerHTML = fixture('x-article.html');
-    const r = (await run(readCurrentPost, {})) as { success: boolean; content: { post: { id: string; kind: string; url: string; authorHandle: string; articleTitle?: string | null; articleBody?: string | null }; thread: unknown[]; article: { title: string } | null } };
+    const r = (await run(readCurrentPost, {})) as {
+      success: boolean;
+      content: {
+        post: { id: string; kind: string; url: string; authorHandle: string; articleTitle?: string | null; articleBody?: string | null };
+        thread: unknown[];
+        article: { title: string } | null;
+      };
+    };
     expect(r.success).toBe(true);
     expect(r.content.post.id).toBe('555');
     expect(r.content.post.kind).toBe('article');

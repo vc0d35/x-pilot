@@ -13,19 +13,12 @@ export interface Bounds {
   height: number;
 }
 
-export function computeLayout(
-  width: number,
-  height: number,
-  collapsed: boolean,
-): { xView: Bounds; sidebar: Bounds } {
+export function computeLayout(width: number, height: number, collapsed: boolean): { xView: Bounds; sidebar: Bounds } {
   if (collapsed) {
     return {
       xView: { x: 0, y: 0, width: Math.max(0, width), height },
       sidebar: {
-        x: Math.max(
-          0,
-          width - HANDLE_WIDTH - HANDLE_INSET - HANDLE_RIGHT_OFFSET,
-        ),
+        x: Math.max(0, width - HANDLE_WIDTH - HANDLE_INSET - HANDLE_RIGHT_OFFSET),
         y: HANDLE_INSET,
         width: HANDLE_WIDTH,
         height: HANDLE_HEIGHT,

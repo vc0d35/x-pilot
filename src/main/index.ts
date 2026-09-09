@@ -16,9 +16,7 @@ app.enableSandbox();
 
 // Has to happen before the app is ready. A standard, secure scheme gives the sidebar a real origin,
 // so the production CSP's 'self' covers its bundle and fonts and the file: fuse can stay off.
-protocol.registerSchemesAsPrivileged([
-  { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
-]);
+protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else void start();
@@ -35,11 +33,21 @@ async function start(): Promise<void> {
       sidebarUrl: dev.sidebarUrl,
       e2e: dev.e2e,
     });
-    if (dev.e2e) (globalThis as Record<string, unknown>).__xpilotTest = {
-      win: xpilot.win, tasks: xpilot.tasks, history: xpilot.history, windowCount: () => BrowserWindow.getAllWindows().length,
-      registry: xpilot.registry, xview: xpilot.xview, bridge: xpilot.bridge, openExternalCalls: xpilot.openExternalCalls,
-      settings: xpilot.settings, xView: xpilot.xView, sidebar: xpilot.sidebar, agent: xpilot.agent,
-    };
+    if (dev.e2e)
+      (globalThis as Record<string, unknown>).__xpilotTest = {
+        win: xpilot.win,
+        tasks: xpilot.tasks,
+        store: xpilot.store,
+        windowCount: () => BrowserWindow.getAllWindows().length,
+        registry: xpilot.registry,
+        xview: xpilot.xview,
+        bridge: xpilot.bridge,
+        openExternalCalls: xpilot.openExternalCalls,
+        settings: xpilot.settings,
+        xView: xpilot.xView,
+        sidebar: xpilot.sidebar,
+        agent: xpilot.agent,
+      };
     await xpilot.launch();
   } catch (err) {
     console.error('[xpilot] fatal during startup', err);

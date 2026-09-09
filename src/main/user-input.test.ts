@@ -2,7 +2,10 @@ import { describe, it, expect, vi } from 'vitest';
 import { UserInputBroker } from './user-input';
 import type { AgentEvent } from '../shared/agent';
 
-const questions = [{ id: 'q1', prompt: 'Which account?' }, { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] }];
+const questions = [
+  { id: 'q1', prompt: 'Which account?' },
+  { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] },
+];
 
 describe('UserInputBroker', () => {
   it('emits a request event and resolves with the answers', async () => {
@@ -10,7 +13,7 @@ describe('UserInputBroker', () => {
     const events: AgentEvent[] = [];
     broker.onEvent((e) => events.push(e));
     const p = broker.request({ questions }, 1000);
-    const req = (events[0] as { type: string; request: { id: string; questions: unknown[] } });
+    const req = events[0] as { type: string; request: { id: string; questions: unknown[] } };
     expect(req.type).toBe('input.requested');
     expect(req.request.questions).toEqual(questions);
     expect(broker.resolve(req.request.id, { q1: '@me', q2: 'fast' })).toBe(true);

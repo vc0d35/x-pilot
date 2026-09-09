@@ -11,7 +11,7 @@ function ctx(overrides: { libraryDir?: string; hasLibraryPath?: (p: string) => b
     hasLibraryPath,
     listLibraryFn,
     value: {
-      history: { hasLibraryPath, listLibrary: listLibraryFn },
+      store: { hasLibraryPath, listLibrary: listLibraryFn },
       libraryDir: () => overrides.libraryDir ?? '/lib',
       openPath,
     } as unknown as AppToolCtx,

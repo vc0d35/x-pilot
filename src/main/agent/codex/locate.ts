@@ -10,7 +10,7 @@ export interface LocateDeps {
   explicit?: string | null;
   env?: Record<string, string | undefined>;
   home?: string | null;
-  platform?: NodeJS.Platform | string;
+  platform?: string;
   /** True when the path is a safe executable: a regular file, owned by the user or root, not group- or world-writable. */
   exists(path: string): boolean;
   /** Entries of a directory; returns [] when it does not exist. */
@@ -23,7 +23,13 @@ const BIN_NAME = (platform: string): string => (platform === 'win32' ? 'codex.cm
 
 /** Sorts `v22.14.0`-style names newest first; anything unparseable sorts last. */
 function byVersionDesc(a: string, b: string): number {
-  const parse = (s: string) => (/^v?\d/.test(s) ? s.replace(/^v/, '').split('.').map((n) => Number.parseInt(n, 10) || 0) : null);
+  const parse = (s: string) =>
+    /^v?\d/.test(s)
+      ? s
+          .replace(/^v/, '')
+          .split('.')
+          .map((n) => Number.parseInt(n, 10) || 0)
+      : null;
   const pa = parse(a);
   const pb = parse(b);
   if (!pa && !pb) return a < b ? 1 : -1;

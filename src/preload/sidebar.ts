@@ -5,11 +5,15 @@ declare const __XPILOT_IPC__: typeof import('../shared/ipc').IPC;
 const IPC = __XPILOT_IPC__;
 import type { XPilotApi } from '../shared/sidebar-api';
 
-const subscribe = <T,>(channel: string) => (cb: (v: T) => void) => {
-  const listener = (_e: unknown, v: T) => cb(v);
-  ipcRenderer.on(channel, listener);
-  return () => { ipcRenderer.removeListener(channel, listener); };
-};
+const subscribe =
+  <T>(channel: string) =>
+  (cb: (v: T) => void) => {
+    const listener = (_e: unknown, v: T) => cb(v);
+    ipcRenderer.on(channel, listener);
+    return () => {
+      ipcRenderer.removeListener(channel, listener);
+    };
+  };
 
 const api: XPilotApi = {
   send: (text, pageContext) => ipcRenderer.invoke(IPC.agentSend, { text, pageContext }),

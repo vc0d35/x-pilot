@@ -31,7 +31,7 @@ import { registerSidebarIpc, registerFocusRelay } from './ipc';
 import { xviewTools } from './tools/xview';
 import type { XViewLike } from './tools/xview/context';
 import { DraftStore } from './tools/xview/drafts';
-import { HistoryStore } from './history/store';
+import { AppStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
 import { exportPdf } from './library/pdf';
@@ -84,7 +84,7 @@ export interface XPilotApp {
   taskRegistry: ToolRegistry;
   agent: AgentController;
   tasks: TaskManager;
-  history: HistoryStore;
+  store: AppStore;
   bridge: AdapterBridge;
   links: LinkRouter;
   settings: SettingsStore;
@@ -122,32 +122,56 @@ export function createApp(opts: AppOptions): XPilotApp {
   const threadState = ThreadState.beside(settings.filePath);
   const allowHosts = () => settings.get().navigation.allowHosts;
   const openExternalCalls: string[] | null = opts.e2e ? [] : null;
-  const openExternal = rateLimit((url: string) => {
-    if (openExternalCalls) openExternalCalls.push(url);
-    else void shell.openExternal(url);
-  }, { max: 5, windowMs: 10_000 });
+  const openExternal = rateLimit(
+    (url: string) => {
+      if (openExternalCalls) openExternalCalls.push(url);
+      else void shell.openExternal(url);
+    },
+    { max: 5, windowMs: 10_000 },
+  );
 
   installPermissionHandlers({ x: session.fromPartition('persist:x'), default: session.defaultSession, allowHosts });
   // Every WebContents, however it came to exist, gets the navigation policy: grandchild popups and
   // the PDF export window are covered here rather than by per-site wiring nobody remembers to add.
-  app.on('web-contents-created', (_e, contents) => hardenWebContents(contents, (c) => attachNavigationPolicy(c, { allowHosts, openExternal })));
+  app.on('web-contents-created', (_e, contents) =>
+    hardenWebContents(contents, (c) => attachNavigationPolicy(c, { allowHosts, openExternal })),
+  );
 
   const preloadX = join(opts.outDir, 'preload/x.js');
   const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
-    bounds: pickInitialBounds(settings.get().window.bounds, screen.getAllDisplays().map((d) => d.workArea)),
+    bounds: pickInitialBounds(
+      settings.get().window.bounds,
+      screen.getAllDisplays().map((d) => d.workArea),
+    ),
     onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
     preloadX,
     preloadSidebar: join(opts.outDir, 'preload/sidebar.js'),
     sidebarUrl: opts.sidebarUrl,
   });
-  app.on('second-instance', () => { if (win.isMinimized()) win.restore(); win.focus(); });
-  configureTouchIdPasskeys({ app, onSelectAccount: (l) => { xView.webContents.session.on('select-webauthn-account', l); }, group: resolveKeychainGroup(process.env, process.platform, { packaged: app.isPackaged, bundleTeamId: bundleTeamId() }) });
+  app.on('second-instance', () => {
+    if (win.isMinimized()) win.restore();
+    win.focus();
+  });
+  configureTouchIdPasskeys({
+    app,
+    onSelectAccount: (l) => {
+      xView.webContents.session.on('select-webauthn-account', l);
+    },
+    group: resolveKeychainGroup(process.env, process.platform, { packaged: app.isPackaged, bundleTeamId: bundleTeamId() }),
+  });
 
   reviveOnCrash(xView.webContents, 'X view');
   reviveOnCrash(sidebar.webContents, 'sidebar');
   app.on('child-process-gone', (_e, details) => console.warn(`[xpilot] child process gone: ${details.type} (${details.reason})`));
 
-  const links = createLinkRouter({ allowHosts, headFetch, openExternal, loadInView: (url) => { void xView.webContents.loadURL(url); } });
+  const links = createLinkRouter({
+    allowHosts,
+    headFetch,
+    openExternal,
+    loadInView: (url) => {
+      void xView.webContents.loadURL(url);
+    },
+  });
   attachNavigationPolicy(xView.webContents, { allowHosts, openExternal, openShortLink: links.openShortLink });
   // The sidebar is our own renderer: it never navigates and never opens windows.
   sidebar.webContents.on('will-navigate', (e) => e.preventDefault());
@@ -162,30 +186,59 @@ export function createApp(opts: AppOptions): XPilotApp {
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
   const backgroundOptions = { preload: preloadX, allowHosts, openExternal };
-  const background = new BackgroundXView({ ...backgroundOptions,
-    onContents: (contents) => { reviveOnCrash(contents, 'background X view'); registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store: history }); } });
+  const background = new BackgroundXView({
+    ...backgroundOptions,
+    onContents: (contents) => {
+      reviveOnCrash(contents, 'background X view');
+      registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store });
+    },
+  });
   // Scheduled runs get their own hidden window so a run and the user's agent never share one.
-  const taskBackground = new BackgroundXView({ ...backgroundOptions,
-    onContents: (contents) => { reviveOnCrash(contents, 'scheduled-run X view'); registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store: history }); } });
-  app.on('will-quit', () => { background.destroy(); taskBackground.destroy(); });
-  registry.addSource(new AppToolSource('xview', xviewTools, {
-    xview, background: () => background.get(), allowHosts,
-    approvals, postingMode: () => settings.get().posting.mode, likesMode: () => settings.get().likes.mode, drafts: new DraftStore(),
-  }));
-  registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));
+  const taskBackground = new BackgroundXView({
+    ...backgroundOptions,
+    onContents: (contents) => {
+      reviveOnCrash(contents, 'scheduled-run X view');
+      registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store });
+    },
+  });
+  app.on('will-quit', () => {
+    background.destroy();
+    taskBackground.destroy();
+  });
+  registry.addSource(
+    new AppToolSource('xview', xviewTools, {
+      xview,
+      background: () => background.get(),
+      allowHosts,
+      approvals,
+      postingMode: () => settings.get().posting.mode,
+      likesMode: () => settings.get().likes.mode,
+      drafts: new DraftStore(),
+    }),
+  );
+  registry.onChange(() =>
+    console.log(
+      '[xpilot] tools:',
+      registry
+        .list()
+        .map((t) => t.name)
+        .join(', '),
+    ),
+  );
 
   const historyPath = join(opts.userData, 'history.sqlite');
-  const history = new HistoryStore(historyPath);
+  const store = new AppStore(historyPath);
   // node:sqlite creates the database and its write-ahead log with the process umask; the log
   // holds the same rows as the database, so all three are narrowed once they exist.
   for (const suffix of ['', '-wal', '-shm']) restrictFile(`${historyPath}${suffix}`);
-  registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
+  registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store });
   // The transcript grows with every turn, so retention runs once at startup and then on a slow
   // timer: an app left open for weeks prunes itself without waiting for a restart.
   const applyRetention = () => {
     try {
-      const removed = history.applyRetention({ ...settings.get().history, keepThreadId: threadState.get().threadId });
-      if (removed.conversations) console.log(`[xpilot] history retention: removed ${removed.conversations} conversations (${removed.events} events)`);
+      const removed = store.applyRetention({ ...settings.get().history, keepThreadId: threadState.get().threadId });
+      if (removed.conversations)
+        console.log(`[xpilot] history retention: removed ${removed.conversations} conversations (${removed.events} events)`);
     } catch (err) {
       console.warn('[xpilot] history retention failed', err);
     }
@@ -195,21 +248,55 @@ export function createApp(opts: AppOptions): XPilotApp {
   app.on('will-quit', () => clearInterval(retentionTimer));
   const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), LIBRARY_FOLDER_NAME);
   const taskRunner = new TaskRunner({
-    createProvider: () => new CodexProvider({ callTool: (n, a, signal) => taskRegistry.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
-    tools: () => taskRegistry.list(), settings: () => settings.get().agent.codex, workspaceDir, store: history, log: (m) => console.log(m),
+    createProvider: () =>
+      new CodexProvider({ callTool: (n, a, signal) => taskRegistry.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
+    tools: () => taskRegistry.list(),
+    settings: () => settings.get().agent.codex,
+    workspaceDir,
+    store,
+    log: (m) => console.log(m),
   });
-  const tasks = new TaskManager({ store: history, run: (t) => taskRunner.run(t).then((status) => { if (taskRunner.lastThreadId) history.updateTask(t.id, { threadId: taskRunner.lastThreadId }); return status; }) });
+  const tasks = new TaskManager({
+    store,
+    run: (t) =>
+      taskRunner.run(t).then((status) => {
+        if (taskRunner.lastThreadId) store.updateTask(t.id, { threadId: taskRunner.lastThreadId });
+        return status;
+      }),
+  });
   const appCtx = {
-    history, tasks, libraryDir,
-    exportPdf: (url: string, outDir: string) => exportPdf({ url, outDir }, {
-      createWindow: () => {
-        const w = new BrowserWindow({ show: false, width: 900, height: 1400, webPreferences: { partition: 'persist:x', sandbox: true, contextIsolation: true } });
-        // The global hook already attached the policy; an unattended export opens nothing at all.
-        attachNavigationPolicy(w.webContents, { allowHosts, openExternal: () => { /* an export never opens the browser */ } });
-        w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-        return { loadURL: (u) => w.loadURL(u), executeJavaScript: (c) => w.webContents.executeJavaScript(c, true), printToPDF: (o) => w.webContents.printToPDF(o), getURL: () => w.webContents.getURL(), destroy: () => w.destroy() };
-      },
-    }),
+    store,
+    tasks,
+    libraryDir,
+    exportPdf: (url: string, outDir: string) =>
+      exportPdf(
+        { url, outDir },
+        {
+          createWindow: () => {
+            const w = new BrowserWindow({
+              show: false,
+              width: 900,
+              height: 1400,
+              webPreferences: { partition: 'persist:x', sandbox: true, contextIsolation: true },
+            });
+            // The global hook already attached the policy; an unattended export opens nothing at all.
+            attachNavigationPolicy(w.webContents, {
+              allowHosts,
+              openExternal: () => {
+                /* an export never opens the browser */
+              },
+            });
+            w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+            return {
+              loadURL: (u) => w.loadURL(u),
+              executeJavaScript: (c) => w.webContents.executeJavaScript(c, true),
+              printToPDF: (o) => w.webContents.printToPDF(o),
+              getURL: () => w.webContents.getURL(),
+              destroy: () => w.destroy(),
+            };
+          },
+        },
+      ),
     openPath: (p: string) => shell.openPath(p),
   };
   registry.addSource(new AppToolSource('app', appTools, appCtx));
@@ -221,17 +308,33 @@ export function createApp(opts: AppOptions): XPilotApp {
     callPreload: async () => fail("The user's window is not available in a scheduled run; use background reads"),
   };
   const taskRegistry = new ToolRegistry();
-  taskRegistry.addSource(new AppToolSource('xview', xviewTools, {
-    xview: taskXview, background: () => taskBackground.get(), allowHosts,
-    approvals, postingMode: () => settings.get().posting.mode, likesMode: () => settings.get().likes.mode, drafts: new DraftStore(),
-  }));
+  taskRegistry.addSource(
+    new AppToolSource('xview', xviewTools, {
+      xview: taskXview,
+      background: () => taskBackground.get(),
+      allowHosts,
+      approvals,
+      postingMode: () => settings.get().posting.mode,
+      likesMode: () => settings.get().likes.mode,
+      drafts: new DraftStore(),
+    }),
+  );
   taskRegistry.addSource(new AppToolSource('app', toolsForScheduledRuns(appTools), appCtx));
-  app.on('will-quit', () => history.close());
+  app.on('will-quit', () => store.close());
 
   const agent = new AgentController({
-    history, threadState,
-    registry, settings, workspaceDir,
-    createProvider: () => new CodexProvider({ callTool: (n, a, signal) => registry.call(n, a, { signal }), approvals, userInput, clientVersion: app.getVersion() }),
+    store,
+    threadState,
+    registry,
+    settings,
+    workspaceDir,
+    createProvider: () =>
+      new CodexProvider({
+        callTool: (n, a, signal) => registry.call(n, a, { signal }),
+        approvals,
+        userInput,
+        clientVersion: app.getVersion(),
+      }),
   });
   installAppMenu({
     openExternal,
@@ -242,7 +345,19 @@ export function createApp(opts: AppOptions): XPilotApp {
       sidebar.webContents.send(IPC.sidebarFocusInput);
     },
   });
-  registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink: links.openLink, tasks, agent, approvals, userInput, settings, history, libraryDir, openPath: appCtx.openPath });
+  registerSidebarIpc({
+    sidebar: sidebar.webContents,
+    setSidebarCollapsed,
+    openLink: links.openLink,
+    tasks,
+    agent,
+    approvals,
+    userInput,
+    settings,
+    store,
+    libraryDir,
+    openPath: appCtx.openPath,
+  });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
   let ticker: NodeJS.Timeout | null = null;
@@ -251,8 +366,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     if (ticker) clearInterval(ticker);
     clearInterval(retentionTimer);
     const deadline = new Promise((resolve) => setTimeout(resolve, 5_000));
-    await Promise.race([Promise.all([agent.stop(), tasks.idle()]), deadline])
-      .catch((err) => console.warn('[xpilot] shutdown failed', err));
+    await Promise.race([Promise.all([agent.stop(), tasks.idle()]), deadline]).catch((err) => console.warn('[xpilot] shutdown failed', err));
   };
   app.on('before-quit', (e) => {
     if (quitting) return;
@@ -268,7 +382,9 @@ export function createApp(opts: AppOptions): XPilotApp {
     await bridge.waitForReady(20_000).catch(() => console.warn('[xpilot] X view tools not ready; starting agent without them'));
     await agent.start({ resume: true });
     // Scheduled tasks run only while the app is open: tick every 30 s.
-    ticker = setInterval(() => { void tasks.tick().catch((err) => console.error('[xpilot] task tick failed', err)); }, 30_000);
+    ticker = setInterval(() => {
+      void tasks.tick().catch((err) => console.error('[xpilot] task tick failed', err));
+    }, 30_000);
 
     let lastAgentSettings = JSON.stringify(settings.get().agent);
     settings.onChange((s) => {
@@ -279,7 +395,23 @@ export function createApp(opts: AppOptions): XPilotApp {
     });
   };
 
-  return { win, xView, sidebar, xview, registry, taskRegistry, agent, tasks, history, bridge, links, settings, openExternalCalls, launch, shutdown };
+  return {
+    win,
+    xView,
+    sidebar,
+    xview,
+    registry,
+    taskRegistry,
+    agent,
+    tasks,
+    store,
+    bridge,
+    links,
+    settings,
+    openExternalCalls,
+    launch,
+    shutdown,
+  };
 }
 
 /** Creates a profile directory the user alone can enter, or narrows one an older build left open. */
@@ -323,11 +455,31 @@ function headFetch(url: string, timeoutMs = 5_000): Promise<{ status: number; lo
   return new Promise((resolve, reject) => {
     const request = net.request({ url, method: 'HEAD', redirect: 'manual' });
     let settled = false;
-    const finish = (act: () => void) => { if (settled) return; settled = true; clearTimeout(timer); act(); };
-    const timer = setTimeout(() => finish(() => { request.abort(); reject(new Error(`HEAD ${url} timed out`)); }), timeoutMs);
-    request.on('redirect', (status, _method, redirectUrl) => finish(() => { request.abort(); resolve({ status, location: redirectUrl }); }));
+    const finish = (act: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      act();
+    };
+    const timer = setTimeout(
+      () =>
+        finish(() => {
+          request.abort();
+          reject(new Error(`HEAD ${url} timed out`));
+        }),
+      timeoutMs,
+    );
+    request.on('redirect', (status, _method, redirectUrl) =>
+      finish(() => {
+        request.abort();
+        resolve({ status, location: redirectUrl });
+      }),
+    );
     // A HEAD has no body worth reading, but the response is drained so the socket is released.
-    request.on('response', (response) => { response.on('data', () => {}); finish(() => resolve({ status: response.statusCode, location: null })); });
+    request.on('response', (response) => {
+      response.on('data', () => {});
+      finish(() => resolve({ status: response.statusCode, location: null }));
+    });
     request.on('error', (err) => finish(() => reject(err)));
     request.end();
   });

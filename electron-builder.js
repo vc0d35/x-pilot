@@ -8,9 +8,7 @@ const hasProvisioningProfile = existsSync(provisioningProfile);
 
 // Notarization needs credentials. Without them electron-builder must not try, or the build fails.
 const env = process.env;
-const canNotarize = Boolean(
-  env.APPLE_KEYCHAIN_PROFILE || (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID),
-);
+const canNotarize = Boolean(env.APPLE_KEYCHAIN_PROFILE || (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID));
 
 // Baked into the packaged app so a shipped build derives its keychain group from the identity it
 // was signed with, never from the environment it happens to run in (see resolveKeychainGroup).

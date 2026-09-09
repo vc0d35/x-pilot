@@ -11,7 +11,7 @@ describe('parseSchedule', () => {
   it('accepts valid cron and rejects garbage', () => {
     expect(parseSchedule({ cron: '0 * * * *' })).toEqual({ cron: '0 * * * *' });
     expect(() => parseSchedule({ cron: 'every hour' })).toThrow(/cron/);
-    expect(() => parseSchedule({} as never)).toThrow(/schedule/);
+    expect(() => parseSchedule({})).toThrow(/schedule/);
   });
   it('holds cron to the same 5-minute floor as "every"', () => {
     expect(() => parseSchedule({ cron: '* * * * * *' })).toThrow(/every 5 minutes/);

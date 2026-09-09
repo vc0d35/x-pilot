@@ -7,7 +7,11 @@ const POST_PATH = /^\/(?:[^/]+\/status\/\d+|i\/article\/\d+|[^/]+\/article\/\d+)
 
 export function normalizePostUrl(input: string): string | null {
   let u: URL;
-  try { u = new URL(input); } catch { return null; }
+  try {
+    u = new URL(input);
+  } catch {
+    return null;
+  }
   const host = u.hostname.replace(/^(www|mobile)\./, '');
   if (host !== 'x.com' && host !== 'twitter.com') return null;
   const m = POST_PATH.exec(u.pathname);
@@ -17,7 +21,8 @@ export function normalizePostUrl(input: string): string | null {
 
 export const readPost = defineTool({
   name: 'x_read_post',
-  description: 'Reads a post, thread, or X Article by URL and returns the full text, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
+  description:
+    'Reads a post, thread, or X Article by URL and returns the full text, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
   args: z.strictObject({ url: z.string(), ...VIEW_ARG }),
   annotations: { readOnlyHint: true },
   execute: async (args, ctx: XViewToolCtx, signal) => {

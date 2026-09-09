@@ -10,7 +10,9 @@ const openComposer = (text = '') => {
 };
 
 describe('composer tools', () => {
-  beforeEach(() => { document.body.innerHTML = ''; });
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
 
   it('x_read_composer fails fast when no composer is open', async () => {
     expect(await run(readComposer, { timeoutMs: 30 })).toEqual({ success: false, error: 'No composer is open' });
@@ -19,7 +21,13 @@ describe('composer tools', () => {
   it('x_type_in_composer inserts text through execCommand', async () => {
     openComposer();
     let inserted = '';
-    (document as unknown as { execCommand: (c: string, u: boolean, v: string) => boolean }).execCommand = (cmd, _u, v) => { if (cmd === 'insertText') { inserted = v; document.querySelector('[data-testid="tweetTextarea_0"]')!.textContent = v; } return true; };
+    (document as unknown as { execCommand: (c: string, u: boolean, v: string) => boolean }).execCommand = (cmd, _u, v) => {
+      if (cmd === 'insertText') {
+        inserted = v;
+        document.querySelector('[data-testid="tweetTextarea_0"]')!.textContent = v;
+      }
+      return true;
+    };
     const r = await run(typeInComposer, { text: 'hello there' });
     expect(inserted).toBe('hello there');
     expect(r).toEqual({ success: true, content: { present: true, text: 'hello there', canSubmit: true } });
@@ -31,12 +39,18 @@ describe('composer tools', () => {
       document.body.innerHTML = '<div data-testid="toast">Your post was sent. <a href="/alice/status/777">View</a></div>';
     });
     const r = await run(clickPostButton, { timeoutMs: 500 });
-    expect(r).toEqual({ success: true, content: { clicked: true, toast: 'Your post was sent. View', url: 'https://x.com/alice/status/777' } });
+    expect(r).toEqual({
+      success: true,
+      content: { clicked: true, toast: 'Your post was sent. View', url: 'https://x.com/alice/status/777' },
+    });
   });
 
   it('x_click_post_button refuses when the button is disabled', async () => {
     openComposer('');
     document.querySelector('[data-testid="tweetButton"]')!.setAttribute('aria-disabled', 'true');
-    expect(await run(clickPostButton, {})).toEqual({ success: false, error: 'Post button is disabled (empty draft or over the length limit)' });
+    expect(await run(clickPostButton, {})).toEqual({
+      success: false,
+      error: 'Post button is disabled (empty draft or over the length limit)',
+    });
   });
 });

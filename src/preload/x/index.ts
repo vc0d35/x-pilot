@@ -14,10 +14,22 @@ function register(): void {
 }
 register();
 
-ipcRenderer.on(IPC.adapterCall, async (_event, msg: { callId: string; name: string; args?: Record<string, unknown> }) => {
-  const result: ToolResult = local.has(msg.name) ? await runAdapterTool(msg.name, msg.args ?? {}, ctx) : fail(`Unknown tool in preload: ${msg.name}`);
-  ipcRenderer.send(IPC.adapterResult, { callId: msg.callId, result });
+ipcRenderer.on(IPC.adapterCall, (_event, msg: { callId: string; name: string; args?: Record<string, unknown> }) => {
+  void (async () => {
+    const result: ToolResult = local.has(msg.name)
+      ? await runAdapterTool(msg.name, msg.args ?? {}, ctx)
+      : fail(`Unknown tool in preload: ${msg.name}`);
+    ipcRenderer.send(IPC.adapterResult, { callId: msg.callId, result });
+  })();
 });
 
-installLikeCapture(document, () => location.href, (channel, payload) => ipcRenderer.send(channel, payload));
-installFocusTracker(document, () => location.href, (ctx) => ipcRenderer.send(IPC.focusChanged, ctx));
+installLikeCapture(
+  document,
+  () => location.href,
+  (channel, payload) => ipcRenderer.send(channel, payload),
+);
+installFocusTracker(
+  document,
+  () => location.href,
+  (ctx) => ipcRenderer.send(IPC.focusChanged, ctx),
+);

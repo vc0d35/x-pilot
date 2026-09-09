@@ -32,7 +32,12 @@ export const PageStateSchema = z.object({
 export type PageState = z.infer<typeof PageStateSchema>;
 
 /** A post visible in the viewport of a timeline-like page: enough to refer to it, not the full text. */
-export const VisiblePostSchema = z.object({ id: z.string().max(32), url: z.string().max(512), authorHandle: z.string().max(64), text: z.string().max(20_000) });
+export const VisiblePostSchema = z.object({
+  id: z.string().max(32),
+  url: z.string().max(512),
+  authorHandle: z.string().max(64),
+  text: z.string().max(20_000),
+});
 export type VisiblePost = z.infer<typeof VisiblePostSchema>;
 
 /** What the user is looking at: a focused post (post/article pages, reply dialogs) or the posts on screen. */

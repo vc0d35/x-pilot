@@ -31,4 +31,24 @@ export const SEL = {
 /** Label of the new-posts pill; the count is the first capture group. */
 export const NEW_POSTS_LABEL = /^show\s+([\d,.]+)\s+posts?$/i;
 
-export const RESERVED_TOP_LEVEL = new Set(['home', 'explore', 'notifications', 'messages', 'search', 'settings', 'i', 'compose', 'intent', 'login', 'signup', 'logout', 'bookmarks', 'lists', 'communities', 'jobs', 'premium', 'tos', 'privacy']);
+export const RESERVED_TOP_LEVEL = new Set([
+  'home',
+  'explore',
+  'notifications',
+  'messages',
+  'search',
+  'settings',
+  'i',
+  'compose',
+  'intent',
+  'login',
+  'signup',
+  'logout',
+  'bookmarks',
+  'lists',
+  'communities',
+  'jobs',
+  'premium',
+  'tos',
+  'privacy',
+]);

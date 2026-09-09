@@ -29,7 +29,14 @@ export interface ExecutableFs {
 const nodeFs: ExecutableFs = {
   lstat: lstatSync,
   stat: statSync,
-  isExecutable: (path) => { try { accessSync(path, constants.X_OK); return true; } catch { return false; } },
+  isExecutable: (path) => {
+    try {
+      accessSync(path, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  },
   uid: () => process.getuid?.() ?? -1,
 };
 
@@ -49,7 +56,9 @@ export function isSafeExecutable(path: string, fs: ExecutableFs = nodeFs): boole
     link = fs.lstat(path);
     file = fs.stat(path);
     parent = fs.stat(dirname(path));
-  } catch { return false; }
+  } catch {
+    return false;
+  }
   if (!file.isFile() || !fs.isExecutable(path)) return false;
   if (!ownedByUserOrRoot(link) || !ownedByUserOrRoot(file)) return false;
   // Symlink mode bits are not enforced by the kernel; only the target's matter.
@@ -59,7 +68,11 @@ export function isSafeExecutable(path: string, fs: ExecutableFs = nodeFs): boole
 }
 
 function listDir(path: string): string[] {
-  try { return readdirSync(path); } catch { return []; }
+  try {
+    return readdirSync(path);
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -72,7 +85,14 @@ function runLoginShell(command: string): Promise<string | null> {
   if (!shell) return Promise.resolve(null);
   return new Promise((resolve) => {
     execFile(shell, ['-lc', command], { timeout: LOGIN_SHELL_TIMEOUT_MS, killSignal: 'SIGKILL' }, (err, stdout) => {
-      resolve(err ? null : String(stdout).split('\n').map((l) => l.trim()).find(Boolean) ?? null);
+      resolve(
+        err
+          ? null
+          : (String(stdout)
+              .split('\n')
+              .map((l) => l.trim())
+              .find(Boolean) ?? null),
+      );
     });
   });
 }

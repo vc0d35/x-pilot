@@ -7,7 +7,9 @@ export class LibraryStore {
 
   add(i: { postId: string | null; url: string; path: string; title: string }): LibraryItem {
     const savedAt = new Date().toISOString();
-    const res = this.db.prepare('INSERT INTO library(post_id, url, path, title, saved_at) VALUES (?, ?, ?, ?, ?)').run(i.postId, i.url, i.path, i.title, savedAt);
+    const res = this.db
+      .prepare('INSERT INTO library(post_id, url, path, title, saved_at) VALUES (?, ?, ?, ?, ?)')
+      .run(i.postId, i.url, i.path, i.title, savedAt);
     return { id: Number(res.lastInsertRowid), url: i.url, path: i.path, title: i.title, savedAt };
   }
 
@@ -16,7 +18,16 @@ export class LibraryStore {
   }
 
   list(limit = 100): LibraryItem[] {
-    return (this.db.prepare('SELECT id, url, path, title, saved_at FROM library ORDER BY id DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>)
-      .map((r) => ({ id: r.id as number, url: r.url as string, path: r.path as string, title: r.title as string, savedAt: r.saved_at as string }));
+    return (
+      this.db.prepare('SELECT id, url, path, title, saved_at FROM library ORDER BY id DESC LIMIT ?').all(limit) as Array<
+        Record<string, unknown>
+      >
+    ).map((r) => ({
+      id: r.id as number,
+      url: r.url as string,
+      path: r.path as string,
+      title: r.title as string,
+      savedAt: r.saved_at as string,
+    }));
   }
 }

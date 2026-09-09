@@ -1,7 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { fixture } from '../../../../tests/fixtures';
-import { pageKindFromUrl, extractPost, extractVisiblePosts, findMainArticle, extractThread, extractComposer, parseStats, postFromArticleUrl , extractArticle } from './extract';
+import {
+  pageKindFromUrl,
+  extractPost,
+  extractVisiblePosts,
+  findMainArticle,
+  extractThread,
+  extractComposer,
+  parseStats,
+  postFromArticleUrl,
+  extractArticle,
+} from './extract';
 import { SEL } from './selectors';
 
 describe('pageKindFromUrl', () => {
@@ -30,8 +40,20 @@ describe('parseStats', () => {
 
 describe('postFromArticleUrl', () => {
   it('synthesises an article post from /i/article and /handle/article urls', () => {
-    expect(postFromArticleUrl('https://x.com/i/article/555', 'On Compilers')).toMatchObject({ id: '555', kind: 'article', url: 'https://x.com/i/article/555', authorHandle: '', text: 'On Compilers' });
-    expect(postFromArticleUrl('https://x.com/alice/article/777')).toMatchObject({ id: '777', kind: 'article', url: 'https://x.com/alice/article/777', authorHandle: 'alice', text: '' });
+    expect(postFromArticleUrl('https://x.com/i/article/555', 'On Compilers')).toMatchObject({
+      id: '555',
+      kind: 'article',
+      url: 'https://x.com/i/article/555',
+      authorHandle: '',
+      text: 'On Compilers',
+    });
+    expect(postFromArticleUrl('https://x.com/alice/article/777')).toMatchObject({
+      id: '777',
+      kind: 'article',
+      url: 'https://x.com/alice/article/777',
+      authorHandle: 'alice',
+      text: '',
+    });
   });
   it('returns null for non-article urls', () => {
     expect(postFromArticleUrl('https://x.com/alice/status/111')).toBeNull();
@@ -40,14 +62,21 @@ describe('postFromArticleUrl', () => {
 });
 
 describe('timeline extraction', () => {
-  beforeEach(() => { document.body.innerHTML = fixture('x-timeline.html'); });
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-timeline.html');
+  });
 
   it('extracts posts with emoji alt text, author, url, time and stats', () => {
     const posts = extractVisiblePosts(document);
     expect(posts).toHaveLength(2);
     expect(posts[0]).toEqual({
-      id: '111', url: 'https://x.com/alice/status/111', authorHandle: 'alice', authorName: 'Alice Doe',
-      text: 'Hello 🌍world', postedAt: '2026-09-01T10:00:00.000Z', kind: 'post',
+      id: '111',
+      url: 'https://x.com/alice/status/111',
+      authorHandle: 'alice',
+      authorName: 'Alice Doe',
+      text: 'Hello 🌍world',
+      postedAt: '2026-09-01T10:00:00.000Z',
+      kind: 'post',
       stats: { replies: 3, reposts: 2, likes: 10, views: 1500 },
     });
     expect(posts[1].text).toBe('Second post about rust');
@@ -60,7 +89,10 @@ describe('timeline extraction', () => {
 
   it('reads the composer state', () => {
     expect(extractComposer(document)).toEqual({ present: false, text: '', canSubmit: false });
-    document.body.insertAdjacentHTML('beforeend', '<div role="dialog"><div data-testid="tweetTextarea_0" contenteditable="true"><span>draft</span></div><button data-testid="tweetButton">Post</button></div>');
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      '<div role="dialog"><div data-testid="tweetTextarea_0" contenteditable="true"><span>draft</span></div><button data-testid="tweetButton">Post</button></div>',
+    );
     expect(extractComposer(document)).toEqual({ present: true, text: 'draft', canSubmit: true });
     document.querySelector('[data-testid="tweetButton"]')!.setAttribute('aria-disabled', 'true');
     expect(extractComposer(document).canSubmit).toBe(false);
@@ -68,7 +100,9 @@ describe('timeline extraction', () => {
 });
 
 describe('status page extraction', () => {
-  beforeEach(() => { document.body.innerHTML = fixture('x-status.html'); });
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-status.html');
+  });
 
   it('finds the main article by permalink and extracts the author thread', () => {
     const url = 'https://x.com/alice/status/111';
@@ -92,12 +126,15 @@ describe('status page extraction', () => {
 
   it('stops the thread at an impostor whose display name matches but whose permalink does not', () => {
     const main = findMainArticle(document, 'https://x.com/alice/status/111')!;
-    document.querySelectorAll(SEL.article)[1].insertAdjacentHTML('beforebegin', `
+    document.querySelectorAll(SEL.article)[1].insertAdjacentHTML(
+      'beforebegin',
+      `
       <article data-testid="tweet">
         <div data-testid="User-Name"><a role="link" href="/alice"><span>Alice Doe</span></a><a role="link" href="/alice"><span>@alice</span></a></div>
         <a href="/attacker/status/2" role="link"><time datetime="2026-09-01T10:00:30.000Z">Sep 1</time></a>
         <div data-testid="tweetText"><span>Impostor continuation</span></div>
-      </article>`);
+      </article>`,
+    );
     expect(extractThread(document, main, 'alice')).toEqual([]);
   });
 });
@@ -110,7 +147,9 @@ describe('page-controlled identity', () => {
       <div data-testid="tweetText"><span>attacker chosen text</span></div>
     </article>`;
 
-  beforeEach(() => { document.body.innerHTML = fixture('x-status.html'); });
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-status.html');
+  });
 
   it('takes the handle from the permalink, never from the display name', () => {
     document.body.insertAdjacentHTML('beforeend', hostile('', '/attacker/status/1734000000000000000'));
@@ -121,7 +160,14 @@ describe('page-controlled identity', () => {
   });
 
   it('rejects permalinks that are not exactly /handle/status/<digits>', () => {
-    for (const href of ['/vic\ntim/status/1', '/a/status/1x', '/a b/status/1', '/toolongahandlename1/status/1', '/a/status/', '/a/statuses/1']) {
+    for (const href of [
+      '/vic\ntim/status/1',
+      '/a/status/1x',
+      '/a b/status/1',
+      '/toolongahandlename1/status/1',
+      '/a/status/',
+      '/a/statuses/1',
+    ]) {
       document.body.insertAdjacentHTML('beforeend', hostile('', href));
       const article = [...document.querySelectorAll(SEL.article)].at(-1)!;
       expect(extractPost(article), href).toBeNull();

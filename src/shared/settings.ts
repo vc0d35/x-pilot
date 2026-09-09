@@ -6,10 +6,19 @@ export const DEFAULT_ALLOW_HOSTS = ['x.com', '*.x.com', 'twitter.com', '*.twitte
  * A lowercase hostname, optionally prefixed with `*.` for its subdomains. The base always has at
  * least two labels, so no pattern can cover a whole public suffix (`*.com`).
  */
-const AllowHostSchema = z.string().max(253).regex(/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/, 'allowHosts entries must be lowercase hostnames, optionally prefixed with "*."');
+const AllowHostSchema = z
+  .string()
+  .max(253)
+  .regex(/^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/, 'allowHosts entries must be lowercase hostnames, optionally prefixed with "*."');
 
 /** An absolute path with no control characters: `binPath` is spawned, so a relative name (resolved off PATH) is not accepted. */
-const BinPathSchema = z.string().max(1024).refine((p) => /^\//.test(p) && ![...p].some((c) => (c.codePointAt(0) ?? 0) < 0x20 || (c.codePointAt(0) ?? 0) === 0x7f), 'binPath must be an absolute path with no control characters');
+const BinPathSchema = z
+  .string()
+  .max(1024)
+  .refine(
+    (p) => /^\//.test(p) && ![...p].some((c) => (c.codePointAt(0) ?? 0) < 0x20 || (c.codePointAt(0) ?? 0) === 0x7f),
+    'binPath must be an absolute path with no control characters',
+  );
 
 export const SettingsSchema = z.object({
   posting: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
@@ -67,20 +76,24 @@ export const SettingsPatchSchema = z.strictObject({
   posting: patchOf(SettingsSchema.shape.posting).optional(),
   likes: patchOf(SettingsSchema.shape.likes).optional(),
   library: patchOf(SettingsSchema.shape.library).optional(),
-  agent: z.strictObject({
-    provider: optionalField(SettingsSchema.shape.agent.shape.provider),
-    codex: patchOf(codexShape).optional(),
-  }).optional(),
+  agent: z
+    .strictObject({
+      provider: optionalField(SettingsSchema.shape.agent.shape.provider),
+      codex: patchOf(codexShape).optional(),
+    })
+    .optional(),
   navigation: patchOf(SettingsSchema.shape.navigation).optional(),
   history: patchOf(SettingsSchema.shape.history).optional(),
   ui: patchOf(SettingsSchema.shape.ui).optional(),
   window: patchOf(SettingsSchema.shape.window).optional(),
 }) as unknown as z.ZodType<DeepPartial<Settings>>;
 
-function isObj(v: unknown): v is Record<string, unknown> { return typeof v === 'object' && v !== null && !Array.isArray(v); }
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
 
 export function deepMerge<T>(base: T, patch: DeepPartial<T> | undefined): T {
-  if (!isObj(base) || !isObj(patch)) return (patch === undefined ? base : (patch as T));
+  if (!isObj(base) || !isObj(patch)) return patch === undefined ? base : (patch as T);
   const out: Record<string, unknown> = { ...base };
   for (const [k, v] of Object.entries(patch)) {
     out[k] = isObj(v) && isObj(out[k]) ? deepMerge(out[k], v as never) : v;

@@ -13,7 +13,9 @@ function view(url: string, sections: WidgetSection[] | Error) {
   return {
     state,
     currentUrl: () => state.url,
-    navigate: vi.fn(async (u: string) => { state.url = u; }),
+    navigate: vi.fn(async (u: string) => {
+      state.url = u;
+    }),
     callPreload: vi.fn(async (name: string) => {
       if (name !== 'x_read_widgets') return fail('unexpected ' + name);
       return sections instanceof Error ? fail(sections.message) : ok({ url: state.url, sections });
@@ -22,8 +24,21 @@ function view(url: string, sections: WidgetSection[] | Error) {
 }
 
 function ctx(visible: WidgetSection[] | Error, bg: WidgetSection[] = [news, trends]) {
-  const xview = view('https://x.com/home', visible); const back = view('https://x.com/alice/status/1', bg);
-  return { xview, back, c: { xview, background: async () => back, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm' as const, likesMode: () => 'auto' as const, drafts: new DraftStore() } };
+  const xview = view('https://x.com/home', visible);
+  const back = view('https://x.com/alice/status/1', bg);
+  return {
+    xview,
+    back,
+    c: {
+      xview,
+      background: async () => back,
+      allowHosts: () => DEFAULT_ALLOW_HOSTS,
+      approvals: new ApprovalBroker(),
+      postingMode: () => 'confirm' as const,
+      likesMode: () => 'auto' as const,
+      drafts: new DraftStore(),
+    },
+  };
 }
 
 describe('hasWanted', () => {
@@ -45,7 +60,9 @@ describe('x_read_news_and_trends', () => {
   });
   it('loads Explore in the hidden window when the visible page lacks what was asked for', async () => {
     const { c, xview, back } = ctx([trends]);
-    expect(await readNewsAndTrends.execute({ section: 'news' }, c)).toEqual(ok({ source: 'background', url: 'https://x.com/explore', sections: [news, trends] }));
+    expect(await readNewsAndTrends.execute({ section: 'news' }, c)).toEqual(
+      ok({ source: 'background', url: 'https://x.com/explore', sections: [news, trends] }),
+    );
     expect(back.navigate).toHaveBeenCalledWith('https://x.com/explore', undefined);
     expect(xview.navigate).not.toHaveBeenCalled();
   });
@@ -62,7 +79,9 @@ describe('x_read_news_and_trends', () => {
   });
   it('view: "visible" only reads the user\'s window and reports what is there', async () => {
     const { c, xview, back } = ctx([trends]);
-    expect(await readNewsAndTrends.execute({ view: 'visible' }, c)).toEqual(ok({ source: 'visible', url: 'https://x.com/home', sections: [trends] }));
+    expect(await readNewsAndTrends.execute({ view: 'visible' }, c)).toEqual(
+      ok({ source: 'visible', url: 'https://x.com/home', sections: [trends] }),
+    );
     expect(xview.callPreload).toHaveBeenCalledWith('x_read_widgets', { timeoutMs: 8000 }, undefined);
     expect(back.navigate).not.toHaveBeenCalled();
   });

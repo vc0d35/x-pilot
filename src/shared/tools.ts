@@ -18,7 +18,8 @@ export const ToolResultSchema = z.discriminatedUnion('success', [
 ]);
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
-export const ok = (content: unknown, warning?: string): ToolResult => (warning ? { success: true, content, warning } : { success: true, content });
+export const ok = (content: unknown, warning?: string): ToolResult =>
+  warning ? { success: true, content, warning } : { success: true, content };
 export const fail = (error: string): ToolResult => ({ success: false, error });
 
 /** A tool's arguments: one zod object, from which the JSON schema the model sees is derived. */
@@ -70,7 +71,7 @@ export function toolSpec(def: ToolDef): ToolSpec {
  * tool ignores it.
  */
 export function defineTool<Ctx, S extends z.ZodObject>(
-  def: ToolDef<S> & { execute(args: z.output<S>, ctx: Ctx, signal?: AbortSignal): Promise<ToolResult> },
+  def: ToolDef<S> & { execute: (args: z.output<S>, ctx: Ctx, signal?: AbortSignal) => Promise<ToolResult> },
 ): ToolModule<Ctx, z.output<S>> {
   return { spec: toolSpec(def), args: def.args, execute: def.execute };
 }

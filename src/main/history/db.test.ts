@@ -11,7 +11,14 @@ import { TasksStore } from './tasks';
 import type { Post } from '../../shared/page';
 
 const post = (id: string, text: string, handle = 'alice', extra: Partial<Post> = {}): Post => ({
-  id, url: `https://x.com/${handle}/status/${id}`, authorHandle: handle, authorName: handle.toUpperCase(), text, postedAt: null, kind: 'post', ...extra,
+  id,
+  url: `https://x.com/${handle}/status/${id}`,
+  authorHandle: handle,
+  authorName: handle.toUpperCase(),
+  text,
+  postedAt: null,
+  kind: 'post',
+  ...extra,
 });
 
 const tempFile = () => join(mkdtempSync(join(tmpdir(), 'xp-db-')), 'history.sqlite');
@@ -51,7 +58,8 @@ describe('schema migrations', () => {
     const file = tempFile();
     const old = new DatabaseSync(file);
     old.exec(OLD_SCHEMA);
-    old.prepare('INSERT INTO posts(id, url, author_handle, author_name, text, kind, liked_at, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    old
+      .prepare('INSERT INTO posts(id, url, author_handle, author_name, text, kind, liked_at, raw_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
       .run('1', 'https://x.com/a/status/1', 'alice', 'ALICE', 'kept across the upgrade', 'post', '2026-09-01T00:00:00Z', '{}');
     expect(userVersion(old)).toBe(0);
     old.close();
@@ -73,7 +81,8 @@ describe('schema migrations', () => {
     const old = new DatabaseSync(file);
     old.exec(OLD_SCHEMA);
     old.exec('PRAGMA user_version = 1');
-    old.prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at) VALUES (?, ?, ?, ?, ?)')
+    old
+      .prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at) VALUES (?, ?, ?, ?, ?)')
       .run('Weather', 'Post the weather', '{"every":"1h"}', 'resume', '2026-09-01T00:00:00Z');
     old.close();
 

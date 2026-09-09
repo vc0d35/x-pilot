@@ -53,5 +53,7 @@ export class UserInputBroker {
     this.emit({ type: 'input.resolved', id, answers });
   }
 
-  private emit(e: AgentEvent): void { for (const cb of this.listeners) cb(e); }
+  private emit(e: AgentEvent): void {
+    for (const cb of this.listeners) cb(e);
+  }
 }

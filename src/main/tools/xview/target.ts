@@ -7,7 +7,9 @@ export const VIEW_ARG = {
   view: z
     .enum(['background', 'visible'])
     .optional()
-    .describe('Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.'),
+    .describe(
+      'Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.',
+    ),
 };
 
 export const CANCELLED_BY_USER = 'Cancelled by the user';
@@ -19,8 +21,11 @@ export function parseView(args: { view?: ViewTarget }): ViewTarget {
 /** Resolves the view to drive, converting a background-window failure into a ToolResult. */
 export async function pickView(ctx: XViewToolCtx, target: ViewTarget): Promise<XViewLike | ToolResult> {
   if (target === 'visible') return ctx.xview;
-  try { return await ctx.background(); }
-  catch (err) { return fail(`Background window unavailable: ${err instanceof Error ? err.message : String(err)}`); }
+  try {
+    return await ctx.background();
+  } catch (err) {
+    return fail(`Background window unavailable: ${err instanceof Error ? err.message : String(err)}`);
+  }
 }
 
 export const isToolResult = (v: XViewLike | ToolResult): v is ToolResult => 'success' in v;
@@ -34,8 +39,9 @@ export const cancelled = (signal?: AbortSignal): ToolResult | null => (signal?.a
  */
 export async function navigateStep(view: XViewLike, url: string, signal?: AbortSignal): Promise<ToolResult | null> {
   if (signal?.aborted) return fail(CANCELLED_BY_USER);
-  try { await view.navigate(url, signal); }
-  catch (err) {
+  try {
+    await view.navigate(url, signal);
+  } catch (err) {
     if (signal?.aborted) return fail(CANCELLED_BY_USER);
     throw err;
   }
@@ -51,9 +57,14 @@ const queues = new WeakMap<XViewLike, Promise<void>>();
 
 export function lockView(view: XViewLike): Promise<() => void> {
   let release!: () => void;
-  const held = new Promise<void>((r) => { release = r; });
+  const held = new Promise<void>((r) => {
+    release = r;
+  });
   const previous = queues.get(view) ?? Promise.resolve();
-  queues.set(view, previous.then(() => held));
+  queues.set(
+    view,
+    previous.then(() => held),
+  );
   return previous.then(() => release);
 }
 
@@ -62,6 +73,9 @@ export async function withView(ctx: XViewToolCtx, target: ViewTarget, fn: (view:
   const view = await pickView(ctx, target);
   if (isToolResult(view)) return view;
   const release = await lockView(view);
-  try { return await fn(view); }
-  finally { release(); }
+  try {
+    return await fn(view);
+  } finally {
+    release();
+  }
 }

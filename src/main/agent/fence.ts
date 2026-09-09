@@ -12,13 +12,28 @@ const BREAKS = new Set([0x0a, CR, 0x2028, 0x2029]);
 /** C0 and C1 control characters. */
 const isControl = (code: number): boolean => code < 0x20 || (code >= 0x7f && code <= 0x9f);
 
+/** Anything but a primitive would render as "[object Object]", which tells the reader nothing. */
+function stringify(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number' || typeof value === 'bigint' || typeof value === 'boolean') return String(value);
+  if (value === null || value === undefined) return '';
+  return JSON.stringify(value) ?? '';
+}
+
 /** Drops control characters; a line break becomes a newline (block) or a space (single line). */
 function sanitize(value: unknown, multiline: boolean): string {
   let out = '';
-  for (const ch of String(value ?? '')) {
+  for (const ch of stringify(value)) {
     const code = ch.codePointAt(0) ?? 0;
-    if (BREAKS.has(code)) { if (multiline && code !== CR) out += '\n'; else if (!multiline) out += ' '; continue; }
-    if (isControl(code)) { if (multiline && code === TAB) out += ch; continue; }
+    if (BREAKS.has(code)) {
+      if (multiline && code !== CR) out += '\n';
+      else if (!multiline) out += ' ';
+      continue;
+    }
+    if (isControl(code)) {
+      if (multiline && code === TAB) out += ch;
+      continue;
+    }
     out += ch;
   }
   return out;

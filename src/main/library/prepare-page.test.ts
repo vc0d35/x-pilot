@@ -14,13 +14,13 @@ describe('prepare-page script', () => {
     document.title = 'Alice on X: "Main post"';
     let clicks = 0;
     document.querySelector<HTMLElement>('[data-testid="tweet-text-show-more-link"]')!.addEventListener('click', () => clicks++);
-    const result = await (new Function(`return (${source.replace(/^\s*\/\/.*$/gm, '')})`)())({ timeoutMs: 500 });
+    const result = await new Function(`return (${source.replace(/^\s*\/\/.*$/gm, '')})`)()({ timeoutMs: 500 });
     expect(result).toEqual({ title: 'Alice on X: "Main post"', author: 'alice', id: '111' });
     expect(clicks).toBe(1);
     expect(document.getElementById('xpilot-print-css')).not.toBeNull();
   });
   it('rejects when nothing renders', async () => {
     document.body.innerHTML = '<div>empty</div>';
-    await expect((new Function(`return (${source.replace(/^\s*\/\/.*$/gm, '')})`)())({ timeoutMs: 50 })).rejects.toThrow('No post rendered');
+    await expect(new Function(`return (${source.replace(/^\s*\/\/.*$/gm, '')})`)()({ timeoutMs: 50 })).rejects.toThrow('No post rendered');
   });
 });

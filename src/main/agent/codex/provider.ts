@@ -18,7 +18,11 @@ export { buildTurnText } from './turn-text';
 export { inputQuestions, wrapToolOutput } from './events';
 
 /** The little we need of the detached watchdog child: enough for a test double. */
-export interface DetachedProcess { pid?: number; unref(): void; kill(signal?: NodeJS.Signals): boolean }
+export interface DetachedProcess {
+  pid?: number;
+  unref(): void;
+  kill(signal?: NodeJS.Signals): boolean;
+}
 
 export interface CodexProviderDeps {
   /** `signal` aborts when the turn is interrupted, times out, or ends: long tools should honour it. */
@@ -76,7 +80,9 @@ export class CodexProvider implements AgentProvider {
     return () => this.listeners.delete(cb);
   }
 
-  isRunning(): boolean { return this.running; }
+  isRunning(): boolean {
+    return this.running;
+  }
 
   stderrSummary(limit = STDERR_IN_MESSAGE): string {
     return this.stderrTail.replace(/\s+/g, ' ').trim().slice(-limit);
@@ -93,7 +99,9 @@ export class CodexProvider implements AgentProvider {
     this.startWatchdog(proc.pid);
     // An unread stderr pipe fills at 64 KB and blocks the child forever, so always drain it.
     proc.stderr.setEncoding('utf8');
-    proc.stderr.on('data', (chunk: string) => { this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_KEEP); });
+    proc.stderr.on('data', (chunk: string) => {
+      this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_KEEP);
+    });
     proc.stderr.on('error', () => {});
     const rpc = new JsonRpcStdio(proc.stdin, proc.stdout);
     this.rpc = rpc;
@@ -132,7 +140,12 @@ export class CodexProvider implements AgentProvider {
     });
     rpc.notify('initialized');
 
-    const dynamicTools = opts.tools.map((t) => ({ type: 'function', name: t.name, description: t.description, inputSchema: t.inputSchema }));
+    const dynamicTools = opts.tools.map((t) => ({
+      type: 'function',
+      name: t.name,
+      description: t.description,
+      inputSchema: t.inputSchema,
+    }));
     const common = {
       cwd: opts.workspaceDir,
       model: opts.settings.model,
@@ -149,7 +162,9 @@ export class CodexProvider implements AgentProvider {
       try {
         res = await rpc.request('thread/resume', { threadId: opts.threadId, ...common });
       } catch (err) {
-        console.warn(`[xpilot] thread/resume ${opts.threadId} failed, starting a new thread: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+        console.warn(
+          `[xpilot] thread/resume ${opts.threadId} failed, starting a new thread: ${err instanceof Error ? err.message : JSON.stringify(err)}`,
+        );
         res = await rpc.request('thread/start', { ...common, dynamicTools });
       }
     } else {
@@ -205,8 +220,15 @@ export class CodexProvider implements AgentProvider {
 
   async listModels(): Promise<ModelInfo[]> {
     if (!this.rpc) return [];
-    const res = await this.rpc.request<{ data: Array<{ id: string; displayName: string; isDefault: boolean; supportedReasoningEfforts: Array<{ reasoningEffort: string }> }> }>('model/list', {});
-    return res.data.map((m) => ({ id: m.id, displayName: m.displayName, isDefault: m.isDefault, reasoningEfforts: m.supportedReasoningEfforts.map((e) => e.reasoningEffort) }));
+    const res = await this.rpc.request<{
+      data: Array<{ id: string; displayName: string; isDefault: boolean; supportedReasoningEfforts: Array<{ reasoningEffort: string }> }>;
+    }>('model/list', {});
+    return res.data.map((m) => ({
+      id: m.id,
+      displayName: m.displayName,
+      isDefault: m.isDefault,
+      reasoningEfforts: m.supportedReasoningEfforts.map((e) => e.reasoningEffort),
+    }));
   }
 
   async stop(): Promise<void> {
@@ -217,9 +239,18 @@ export class CodexProvider implements AgentProvider {
     if (proc && proc.exitCode === null) {
       // Wait for the process to actually exit so a following thread/resume never races its rollout writes.
       const exited = new Promise<void>((resolve) => {
-        const kill = setTimeout(() => { if (proc.exitCode === null) proc.kill('SIGKILL'); }, SIGKILL_AFTER_MS);
-        const giveUp = setTimeout(() => { clearTimeout(kill); resolve(); }, EXIT_WAIT_MS);
-        proc.once('exit', () => { clearTimeout(kill); clearTimeout(giveUp); resolve(); });
+        const kill = setTimeout(() => {
+          if (proc.exitCode === null) proc.kill('SIGKILL');
+        }, SIGKILL_AFTER_MS);
+        const giveUp = setTimeout(() => {
+          clearTimeout(kill);
+          resolve();
+        }, EXIT_WAIT_MS);
+        proc.once('exit', () => {
+          clearTimeout(kill);
+          clearTimeout(giveUp);
+          resolve();
+        });
       });
       proc.kill();
       await exited;
@@ -248,7 +279,11 @@ export class CodexProvider implements AgentProvider {
   private stopWatchdog(): void {
     const dog = this.watchdog;
     this.watchdog = null;
-    try { dog?.kill('SIGTERM'); } catch { /* it may have exited on its own already */ }
+    try {
+      dog?.kill('SIGTERM');
+    } catch {
+      /* it may have exited on its own already */
+    }
   }
 
   private abortTurn(reason: Error): void {
@@ -323,7 +358,9 @@ export class CodexProvider implements AgentProvider {
     this.touchIdle();
     handleNotification(method, params, this.phases, {
       emit: (e) => this.emit(e),
-      turnStarted: (turnId) => { this.turnId = turnId; },
+      turnStarted: (turnId) => {
+        this.turnId = turnId;
+      },
       turnCompleted: (turnId, status, error) => this.finishTurn(status, error, turnId),
     });
   }
@@ -353,5 +390,11 @@ export class CodexProvider implements AgentProvider {
  * into the script.
  */
 export function watchdogArgs(parentPid: number, childPid: number): string[] {
-  return ['-c', 'while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 2; done; kill -TERM "$2" 2>/dev/null', 'sh', String(parentPid), String(childPid)];
+  return [
+    '-c',
+    'while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 2; done; kill -TERM "$2" 2>/dev/null',
+    'sh',
+    String(parentPid),
+    String(childPid),
+  ];
 }

@@ -10,7 +10,13 @@ export const readWidgets = defineTool({
   ...readWidgetsDef,
   execute: async (args, _ctx: PreloadCtx) => {
     const sel = `${SEL.trend}, ${SEL.newsArticle}`;
-    if (args.timeoutMs > 0) { try { await waitFor(() => document.querySelector(sel), args.timeoutMs); } catch { /* report whatever is there */ } }
+    if (args.timeoutMs > 0) {
+      try {
+        await waitFor(() => document.querySelector(sel), args.timeoutMs);
+      } catch {
+        /* report whatever is there */
+      }
+    }
     return ok({ url: location.href, sections: extractWidgets(document) });
   },
 });

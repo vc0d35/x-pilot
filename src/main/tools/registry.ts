@@ -9,10 +9,16 @@ export interface ToolSource {
 
 export class AppToolSource<Ctx> implements ToolSource {
   private readonly byName = new Map<string, ToolModule<Ctx>>();
-  constructor(public readonly id: string, modules: ToolModule<Ctx>[], private readonly ctx: Ctx) {
+  constructor(
+    public readonly id: string,
+    modules: ToolModule<Ctx>[],
+    private readonly ctx: Ctx,
+  ) {
     for (const m of modules) this.byName.set(m.spec.name, m);
   }
-  list(): ToolSpec[] { return [...this.byName.values()].map((m) => m.spec); }
+  list(): ToolSpec[] {
+    return [...this.byName.values()].map((m) => m.spec);
+  }
   async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const m = this.byName.get(name);
     if (!m) return fail(`Unknown tool: ${name}`);
@@ -27,7 +33,11 @@ export class ToolRegistry {
 
   addSource(src: ToolSource): () => void {
     this.sources.push(src);
-    if (src.onChange) this.unsubscribers.set(src, src.onChange(() => this.emit()));
+    if (src.onChange)
+      this.unsubscribers.set(
+        src,
+        src.onChange(() => this.emit()),
+      );
     this.emit();
     return () => {
       const i = this.sources.indexOf(src);
@@ -47,7 +57,9 @@ export class ToolRegistry {
   }
 
   /** True even for internal tools: `has` reflects registration, not callability. */
-  has(name: string): boolean { return this.resolve(name) !== undefined; }
+  has(name: string): boolean {
+    return this.resolve(name) !== undefined;
+  }
 
   async call(name: string, args: Record<string, unknown>, opts?: { allowInternal?: boolean; signal?: AbortSignal }): Promise<ToolResult> {
     const src = this.resolve(name);
@@ -73,5 +85,7 @@ export class ToolRegistry {
     return undefined;
   }
 
-  private emit() { for (const cb of this.listeners) cb(); }
+  private emit() {
+    for (const cb of this.listeners) cb();
+  }
 }

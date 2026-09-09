@@ -1,4 +1,15 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  statSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
 
@@ -13,7 +24,9 @@ export const THREAD_STATE_FILE = 'agent-state.json';
 
 const EMPTY: ThreadStateData = { threadId: null, threadToolsHash: null };
 
-function isObj(v: unknown): v is Record<string, unknown> { return typeof v === 'object' && v !== null && !Array.isArray(v); }
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
 
 function readState(raw: unknown): ThreadStateData {
   const r = isObj(raw) ? raw : {};
@@ -35,7 +48,9 @@ export class ThreadState {
     return new ThreadState(join(dirname(settingsPath), THREAD_STATE_FILE));
   }
 
-  get(): ThreadStateData { return this.current; }
+  get(): ThreadStateData {
+    return this.current;
+  }
 
   set(patch: Partial<ThreadStateData>): ThreadStateData {
     this.current = { ...this.current, ...patch };
@@ -49,11 +64,19 @@ export class ThreadState {
     const tmp = `${this.filePath}.${randomUUID()}.tmp`;
     try {
       const fd = openSync(tmp, 'wx', 0o600);
-      try { writeFileSync(fd, JSON.stringify(this.current, null, 2)); } finally { closeSync(fd); }
+      try {
+        writeFileSync(fd, JSON.stringify(this.current, null, 2));
+      } finally {
+        closeSync(fd);
+      }
       renameSync(tmp, this.filePath);
       chmodSync(this.filePath, 0o600);
     } catch (err) {
-      try { unlinkSync(tmp); } catch { /* nothing to clean up */ }
+      try {
+        unlinkSync(tmp);
+      } catch {
+        /* nothing to clean up */
+      }
       throw err;
     }
   }
@@ -64,7 +87,9 @@ export class ThreadState {
       try {
         return readState(JSON.parse(readFileSync(this.filePath, 'utf8')));
       } catch (err) {
-        console.warn(`[xpilot] ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}); starting without a thread`);
+        console.warn(
+          `[xpilot] ${this.filePath} could not be read (${err instanceof Error ? err.message : String(err)}); starting without a thread`,
+        );
         return { ...EMPTY };
       }
     }

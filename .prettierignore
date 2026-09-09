@@ -1,0 +1,13 @@
+out
+dist
+node_modules
+package-lock.json
+test-results
+playwright-report
+*.icns
+*.png
+docs/licenses
+
+# Prettier always explodes a CSS rule onto one line per declaration; this stylesheet is written
+# as one line per rule on purpose, and expanding it grows 140 lines into 640 for no gain.
+src/renderer/styles.css

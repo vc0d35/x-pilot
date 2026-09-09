@@ -22,7 +22,11 @@ export function parseSchedule(input: Partial<Record<'every' | 'cron', unknown>>)
   if (typeof input.cron === 'string') {
     const expr = input.cron.trim();
     let cron: Cron;
-    try { cron = new Cron(expr); } catch (err) { throw new Error(`Invalid cron expression "${expr}": ${err instanceof Error ? err.message : String(err)}`); }
+    try {
+      cron = new Cron(expr);
+    } catch (err) {
+      throw new Error(`Invalid cron expression "${expr}": ${err instanceof Error ? err.message : String(err)}`, { cause: err });
+    }
     const first = cron.nextRun();
     if (!first) throw new Error(`cron "${expr}" never runs`);
     // The same 5-minute floor as "every": a cron expression is just another way to say how often.

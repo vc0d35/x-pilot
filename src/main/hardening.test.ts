@@ -11,10 +11,32 @@ function fakeContents() {
   let handler: ((d: { url: string }) => { action: string }) | null = null;
   return {
     on: (ev: string, l: (...args: never[]) => void) => em.on(ev, l as never),
-    setWindowOpenHandler: (h: (d: { url: string }) => { action: string }) => { handler = h; },
+    setWindowOpenHandler: (h: (d: { url: string }) => { action: string }) => {
+      handler = h;
+    },
     open: (url: string) => handler!({ url }),
-    attachWebview: () => { const e = { prevented: false, preventDefault() { this.prevented = true; } }; em.emit('will-attach-webview', e); return e.prevented; },
-    navigate: (url: string, isMainFrame = true) => { const d = { url, isMainFrame, prevented: false, preventDefault() { this.prevented = true; } }; em.emit('will-navigate', d); return d.prevented; },
+    attachWebview: () => {
+      const e = {
+        prevented: false,
+        preventDefault() {
+          this.prevented = true;
+        },
+      };
+      em.emit('will-attach-webview', e);
+      return e.prevented;
+    },
+    navigate: (url: string, isMainFrame = true) => {
+      const d = {
+        url,
+        isMainFrame,
+        prevented: false,
+        preventDefault() {
+          this.prevented = true;
+        },
+      };
+      em.emit('will-navigate', d);
+      return d.prevented;
+    },
   };
 }
 
@@ -34,7 +56,7 @@ describe('hardenWebContents', () => {
   it('attaches the navigation policy it is handed, so a WebContents nobody wired up is still guarded', () => {
     const c = fakeContents();
     const openExternal = vi.fn();
-    hardenWebContents(c as never, (contents) => attachNavigationPolicy(contents as never, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal }));
+    hardenWebContents(c as never, (contents) => attachNavigationPolicy(contents, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal }));
     expect(c.navigate('https://evil.example/phish')).toBe(true);
     expect(openExternal).toHaveBeenCalledWith('https://evil.example/phish');
     expect(c.navigate('https://x.com/home')).toBe(false);
@@ -43,7 +65,7 @@ describe('hardenWebContents', () => {
   it('is superseded by a per-site window-open handler attached afterwards', () => {
     const c = fakeContents();
     hardenWebContents(c as never);
-    attachNavigationPolicy(c as never, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal: () => {} });
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal: () => {} });
     expect(c.open('https://accounts.google.com/x').action).toBe('allow');
     expect(c.attachWebview()).toBe(true);
   });
@@ -58,10 +80,14 @@ describe('reviveOnCrash', () => {
       contents: {
         on: (ev: string, l: (e: unknown, d: { reason: string }) => void) => em.on(ev, l),
         isDestroyed: () => false,
-        reload: () => { reloads.push(clock); },
+        reload: () => {
+          reloads.push(clock);
+        },
       },
       crash: (reason = 'crashed') => em.emit('render-process-gone', {}, { reason }),
-      advance: (ms: number) => { clock += ms; },
+      advance: (ms: number) => {
+        clock += ms;
+      },
       now: () => clock,
       reloads,
     };
@@ -71,7 +97,10 @@ describe('reviveOnCrash', () => {
     const c = crashable();
     const log = vi.fn();
     reviveOnCrash(c.contents, 'X view', { now: c.now, log });
-    for (let i = 0; i < 5; i++) { c.crash(); c.advance(1_000); }
+    for (let i = 0; i < 5; i++) {
+      c.crash();
+      c.advance(1_000);
+    }
     expect(c.reloads).toEqual([0, 1_000, 2_000]);
     expect(log).toHaveBeenCalledWith(expect.stringContaining('leaving it down'));
   });
@@ -117,8 +146,10 @@ describe('resolveSidebarAsset', () => {
   const under = (...parts: string[]) => [root, ...parts].join(sep);
 
   it('maps a path under the sidebar host onto the renderer directory', () => {
-    expect(resolveSidebarAsset(root, 'xpilot://sidebar/index.html'))
-      .toEqual({ path: under('index.html'), contentType: 'text/html; charset=utf-8' });
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/index.html')).toEqual({
+      path: under('index.html'),
+      contentType: 'text/html; charset=utf-8',
+    });
     expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/index-abc.js')?.path).toBe(under('assets', 'index-abc.js'));
   });
 

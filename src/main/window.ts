@@ -16,8 +16,8 @@ export interface MainWindow {
   win: BaseWindow;
   xView: WebContentsView;
   sidebar: WebContentsView;
-  setSidebarCollapsed(collapsed: boolean): void;
-  isSidebarCollapsed(): boolean;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  isSidebarCollapsed: () => boolean;
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
@@ -25,7 +25,9 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   let saveTimer: NodeJS.Timeout | null = null;
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => { if (!win.isDestroyed()) opts.onBoundsChanged(win.getBounds()); }, 400);
+    saveTimer = setTimeout(() => {
+      if (!win.isDestroyed()) opts.onBoundsChanged(win.getBounds());
+    }, 400);
   };
   win.on('move', scheduleSave);
 
@@ -58,9 +60,22 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
     sidebar.setBounds(l.sidebar);
   };
   layout();
-  win.on('resize', () => { layout(); scheduleSave(); });
+  win.on('resize', () => {
+    layout();
+    scheduleSave();
+  });
 
   void sidebar.webContents.loadURL(opts.sidebarUrl);
 
-  return { win, xView, sidebar, setSidebarCollapsed: (c) => { collapsed = c; layout(); if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.sidebarCollapsed, c); }, isSidebarCollapsed: () => collapsed };
+  return {
+    win,
+    xView,
+    sidebar,
+    setSidebarCollapsed: (c) => {
+      collapsed = c;
+      layout();
+      if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.sidebarCollapsed, c);
+    },
+    isSidebarCollapsed: () => collapsed,
+  };
 }

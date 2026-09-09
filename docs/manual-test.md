@@ -3,10 +3,12 @@
 Run `npm run dev`, logged into x.com in the X view.
 
 ## Navigation
+
 - [ ] Clicking a t.co link in a post opens the target in the system browser; the X view stays on x.com.
 - [ ] Google/Apple sign-in popups (if used) open in-app; other popups go external.
 
 ## Agent
+
 - [ ] Header reaches `ready`; an error banner appears if `codex login` is needed.
 - [ ] "Which page am I on?" → `x_get_page_state` tool row, correct answer.
 - [ ] Stop button interrupts a long answer.
@@ -17,10 +19,12 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 
 ## Focus context
+
 - [ ] Open a post; "is this true?" is answered about that post (the focused post is sent with the turn; no chip is shown).
 - [ ] Reply dialog on the timeline → questions refer to the post being replied to.
 
 ## Reading
+
 - [ ] "Summarise the visible posts" on Home.
 - [ ] "Read <post url>" returns the thread text WITHOUT moving the visible window (it runs in the hidden session window).
 - [ ] "Search X for electron and show me" → the visible window navigates to the results (view: visible).
@@ -29,44 +33,53 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Open an X Article directly by URL (not from the timeline): "summarise this article" works and the chip shows the article title.
 
 ## Liked history
+
 - [ ] Like two posts; "what did I like about <word>?" finds them.
 - [ ] Unlike one; it still shows up with `unlikedAt`.
 - [ ] Settings → Clear history → 0 results.
 
 ## Posting
+
 - [ ] Confirm mode: draft appears in composer, sidebar card shows the exact text; Cancel returns home; Post publishes.
 - [ ] Reply: "reply to <url> with 'thanks'" → reply is threaded correctly.
 - [ ] Autonomous mode: posts without a card; header toggle shows the warning colour.
 
 ## PDF
+
 - [ ] "Save this as a PDF" on a long post and on an X Article → file in the library folder, no nav chrome, text expanded.
 - [ ] Library panel lists it; Open PDF works; Change folder persists across restart.
 - [ ] Change the library folder, then Open PDF on an item saved under the old folder still works.
 
 ## Passkeys (needs XPILOT_TEAM_ID + `npm run sign-dev`, see docs/passkeys.md)
+
 - [ ] Startup log shows `passkeys enabled with keychain group …`.
 - [ ] Adding a security key/passkey in X settings triggers a Touch ID prompt titled "XPilot".
 - [ ] Sign out, sign in with the passkey: Touch ID prompt appears and login completes.
 
 ## Conversations and scheduled tasks
+
 - [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
 - [ ] Pause/Resume/Delete work; a paused task has no next run.
 
 ## Liking and timeline reading
+
 - [ ] "Like the first post" → the post on screen gets liked without navigation; it appears in liked history.
 - [ ] "Like <url of a post not on screen>" → liked via the hidden window; the visible window does not move.
 - [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
 - [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.
 
 ## News, trends and new posts
+
 - [ ] On Home: "what's trending?" → answered from the sidebar widget on screen (source: visible), no navigation.
 - [ ] On Home: "what's in Today's News?" → the hidden window loads Explore (source: background); the visible window does not move.
 - [ ] Wait for the "Show N posts" pill on Home, then "show me the new posts" → x_show_new_posts clicks it and the timeline refreshes on screen.
 
 ## Security
+
 Open DevTools on the X view (`XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs x "…"`)
 for the first two checks; both must fail to do anything.
+
 - [ ] Synthetic like: run
       `document.querySelector('button[data-testid="like"]').click()` in the X view console → no new row in
       liked history ("what did I like about …?" and Settings → history count are unchanged). Then like the
@@ -84,13 +97,14 @@ for the first two checks; both must fail to do anything.
       the system browser (never in the X view).
 
 ## Inspecting the live app
+
 Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --list` and
 `node scripts/inspect.mjs x "document.title"` (targets: x, bg, sidebar, or a URL substring;
 `--screenshot file.png` captures the page).
 
 ## First run and setup
+
 - [ ] Fresh profile (`XPILOT_USER_DATA=$(mktemp -d) npm run dev`): the onboarding card shows above the composer; "Got it" dismisses it for good; History, Library and Tasks show their empty states.
 - [ ] Settings → Codex binary → a bogus path, then reconnect: the setup card says Codex was not found, with install and login commands and a Try again button; clearing the path and Try again removes the card.
 - [ ] `codex logout` in a terminal, then send a message: the card says you are logged out and shows `codex login`; log in, Try again, card disappears.
 - [ ] Packaged build (`npm run dist`, open `dist/mac-arm64/XPilot.app`) from Finder: Codex is found without a terminal PATH.
-

@@ -41,5 +41,7 @@ export class ApprovalBroker {
     this.emit({ type: 'approval.resolved', id, decision });
   }
 
-  private emit(e: AgentEvent): void { for (const cb of this.listeners) cb(e); }
+  private emit(e: AgentEvent): void {
+    for (const cb of this.listeners) cb(e);
+  }
 }

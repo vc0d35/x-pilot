@@ -5,7 +5,8 @@ import { VIEW_ARG, navigateStep, parseView, withView } from './target';
 
 export const search = defineTool({
   name: 'x_search',
-  description: 'Runs an x.com search (supports X search operators like from:user, since:YYYY-MM-DD) and returns the first page of results. Runs in a hidden window by default; pass view: "visible" only when the user wants to see the results on screen.',
+  description:
+    'Runs an x.com search (supports X search operators like from:user, since:YYYY-MM-DD) and returns the first page of results. Runs in a hidden window by default; pass view: "visible" only when the user wants to see the results on screen.',
   args: z.strictObject({ query: z.string(), ...VIEW_ARG }),
   execute: async (args, ctx: XViewToolCtx, signal) => {
     const q = args.query.trim();

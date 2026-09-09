@@ -34,8 +34,7 @@ describe('exportPdf', () => {
     const win = fakeWindow({ loadURL: vi.fn(() => new Promise<void>(() => {})) });
     const dir = outDir();
     const start = Date.now();
-    await expect(exportPdf({ url: POST, outDir: dir, timeoutMs: 50 }, { createWindow: () => win }))
-      .rejects.toThrow('timed out');
+    await expect(exportPdf({ url: POST, outDir: dir, timeoutMs: 50 }, { createWindow: () => win })).rejects.toThrow('timed out');
     expect(Date.now() - start).toBeLessThan(150);
     expect(win.destroy).toHaveBeenCalledTimes(1);
   });
@@ -43,7 +42,10 @@ describe('exportPdf', () => {
   it('aborts when the window navigated away while the page was being prepared', async () => {
     let url = POST;
     const win = fakeWindow({
-      executeJavaScript: vi.fn(async () => { url = 'https://x.com/messages'; return { title: 'Direct messages with Alice', author: 'attacker', id: '111' }; }),
+      executeJavaScript: vi.fn(async () => {
+        url = 'https://x.com/messages';
+        return { title: 'Direct messages with Alice', author: 'attacker', id: '111' };
+      }),
       getURL: () => url,
     });
     const dir = outDir();
@@ -54,18 +56,28 @@ describe('exportPdf', () => {
   });
 
   it('aborts when the page reports metadata for another post', async () => {
-    const win = fakeWindow({ executeJavaScript: vi.fn(async () => ({ title: 'Direct messages with Alice', author: 'attacker', id: '999' })) });
+    const win = fakeWindow({
+      executeJavaScript: vi.fn(async () => ({ title: 'Direct messages with Alice', author: 'attacker', id: '999' })),
+    });
     const dir = outDir();
     await expect(exportPdf({ url: POST, outDir: dir }, { createWindow: () => win })).rejects.toThrow('different post');
     expect(readdirSync(dir)).toEqual([]);
   });
 
   it('names the file from the requested post, not from page-chosen author, id or whitespace-padded title', async () => {
-    const win = fakeWindow({ executeJavaScript: vi.fn(async () => ({ title: `  Alice:\n\n title  ${'x'.repeat(400)}`, author: '../../../etc/passwd', id: '../../../etc/passwd' })) });
+    const win = fakeWindow({
+      executeJavaScript: vi.fn(async () => ({
+        title: `  Alice:\n\n title  ${'x'.repeat(400)}`,
+        author: '../../../etc/passwd',
+        id: '../../../etc/passwd',
+      })),
+    });
     const dir = outDir();
     await expect(exportPdf({ url: POST, outDir: dir }, { createWindow: () => win })).rejects.toThrow('different post');
 
-    const clean = fakeWindow({ executeJavaScript: vi.fn(async () => ({ title: '  Alice:\n\n title  ', author: '../../../etc/passwd', id: '111' })) });
+    const clean = fakeWindow({
+      executeJavaScript: vi.fn(async () => ({ title: '  Alice:\n\n title  ', author: '../../../etc/passwd', id: '111' })),
+    });
     const result = await exportPdf({ url: POST, outDir: dir }, { createWindow: () => clean });
     expect(result.title).toBe('Alice: title');
     expect(result.path.startsWith(dir + '/')).toBe(true);
@@ -76,7 +88,10 @@ describe('exportPdf', () => {
 
   it('exports an X Article by its /i/article/ URL', async () => {
     const url = 'https://x.com/i/article/555';
-    const win = fakeWindow({ executeJavaScript: vi.fn(async () => ({ title: 'On Compilers', author: 'alice', id: '555' })), getURL: () => url });
+    const win = fakeWindow({
+      executeJavaScript: vi.fn(async () => ({ title: 'On Compilers', author: 'alice', id: '555' })),
+      getURL: () => url,
+    });
     const dir = outDir();
     const result = await exportPdf({ url, outDir: dir }, { createWindow: () => win });
     expect(result.path).toContain('-alice-on-compilers-555.pdf');
@@ -84,13 +99,18 @@ describe('exportPdf', () => {
 
   it('refuses a URL that is not a post URL at all', async () => {
     const dir = outDir();
-    await expect(exportPdf({ url: 'https://evil.com/alice/status/111', outDir: dir }, { createWindow: () => fakeWindow() }))
-      .rejects.toThrow('Not a post or article URL');
+    await expect(
+      exportPdf({ url: 'https://evil.com/alice/status/111', outDir: dir }, { createWindow: () => fakeWindow() }),
+    ).rejects.toThrow('Not a post or article URL');
     expect(readdirSync(dir)).toEqual([]);
   });
 
   it('tolerates an ERR_ABORTED rejection from loadURL', async () => {
-    const win = fakeWindow({ loadURL: vi.fn(async () => { throw new Error('ERR_ABORTED (-3)'); }) });
+    const win = fakeWindow({
+      loadURL: vi.fn(async () => {
+        throw new Error('ERR_ABORTED (-3)');
+      }),
+    });
     const dir = outDir();
     const result = await exportPdf({ url: POST, outDir: dir }, { createWindow: () => win });
     expect(result.title).toBe('Alice: title');

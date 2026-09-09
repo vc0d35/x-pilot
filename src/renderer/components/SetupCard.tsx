@@ -14,7 +14,8 @@ const COMMANDS: Record<SetupProblem, string[]> = {
 };
 
 const HINT: Record<SetupProblem, string> = {
-  missing: 'Run these in Terminal, then Try again. Already installed? Codex may live outside the app’s PATH: set its full path in Settings.',
+  missing:
+    'Run these in Terminal, then Try again. Already installed? Codex may live outside the app’s PATH: set its full path in Settings.',
   'logged-out': 'Run this in Terminal, sign in, then Try again.',
   other: 'Try again restarts Codex and resumes this conversation.',
 };
@@ -22,14 +23,22 @@ const HINT: Record<SetupProblem, string> = {
 function Command({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = () => {
-    const done = navigator.clipboard?.writeText(text);
-    if (!done) return;
-    void done.then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }, () => {});
+    const clipboard = navigator.clipboard as Clipboard | undefined;
+    if (!clipboard) return;
+    void clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => {},
+    );
   };
   return (
     <div className="setup-cmd">
       <code>{text}</code>
-      <button className="link" onClick={copy}>{copied ? 'copied' : 'copy'}</button>
+      <button className="link" onClick={copy}>
+        {copied ? 'copied' : 'copy'}
+      </button>
     </div>
   );
 }
@@ -38,12 +47,16 @@ export function SetupCard({ issue, onRetry, onOpenSettings }: { issue: SetupIssu
   return (
     <div className="setup">
       <div className="setup-title">{HEADLINE[issue.problem]}</div>
-      {COMMANDS[issue.problem].map((c) => <Command key={c} text={c} />)}
+      {COMMANDS[issue.problem].map((c) => (
+        <Command key={c} text={c} />
+      ))}
       {issue.problem === 'other' && <pre className="setup-detail">{issue.message}</pre>}
       <p className="hint">{HINT[issue.problem]}</p>
       <div className="row">
         <button onClick={onRetry}>Try again</button>
-        <button className="link" onClick={onOpenSettings}>Codex binary path in Settings</button>
+        <button className="link" onClick={onOpenSettings}>
+          Codex binary path in Settings
+        </button>
       </div>
     </div>
   );

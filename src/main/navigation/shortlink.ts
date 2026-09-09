@@ -4,7 +4,11 @@ import { decideNavigation } from './policy';
 export const SHORT_LINK_HOSTS = ['t.co'];
 
 export function isShortLinkHost(url: string): boolean {
-  try { return SHORT_LINK_HOSTS.includes(new URL(url).hostname.toLowerCase()); } catch { return false; }
+  try {
+    return SHORT_LINK_HOSTS.includes(new URL(url).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
 }
 
 export type HeadFetch = (url: string) => Promise<{ status: number; location: string | null }>;
@@ -17,7 +21,11 @@ const PRIVATE_HOST = /^(localhost|127\.|0\.0\.0\.0$|10\.|169\.254\.|192\.168\.|1
  */
 export function isFollowableHop(url: string): boolean {
   let parsed: URL;
-  try { parsed = new URL(url); } catch { return false; }
+  try {
+    parsed = new URL(url);
+  } catch {
+    return false;
+  }
   if (parsed.protocol !== 'https:') return false;
   return !PRIVATE_HOST.test(parsed.hostname.toLowerCase()) && !parsed.hostname.toLowerCase().endsWith('.local');
 }

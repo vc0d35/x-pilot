@@ -16,18 +16,26 @@ function trustedDispatch(el: Element, type: string): void {
     }
   };
   window.addEventListener(type, trust, true);
-  try { el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true })); }
-  finally { window.removeEventListener(type, trust, true); }
+  try {
+    el.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+  } finally {
+    window.removeEventListener(type, trust, true);
+  }
 }
 
 describe('installLikeCapture', () => {
-  beforeEach(() => { document.body.innerHTML = fixture('x-timeline.html'); });
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-timeline.html');
+  });
 
   it('sends liked with the post on like click and unliked on unlike click', () => {
     const send = vi.fn();
     installLikeCapture(document, () => 'https://x.com/home', send);
     trustedDispatch(document.querySelector('button[data-testid="like"]')!, 'click');
-    expect(send).toHaveBeenCalledWith('history:liked', { post: expect.objectContaining({ id: '111', text: 'Hello 🌍world' }), likedAt: expect.any(String) });
+    expect(send).toHaveBeenCalledWith('history:liked', {
+      post: expect.objectContaining({ id: '111', text: 'Hello 🌍world' }),
+      likedAt: expect.any(String),
+    });
     trustedDispatch(document.querySelector('button[data-testid="unlike"]')!, 'click');
     expect(send).toHaveBeenCalledWith('history:unliked', { id: '222', at: expect.any(String) });
   });
@@ -54,13 +62,16 @@ describe('installLikeCapture', () => {
   it('ignores the reported forgery: a scripted click on a hidden, injected article', () => {
     const send = vi.fn();
     installLikeCapture(document, () => 'https://x.com/home', send);
-    document.body.insertAdjacentHTML('beforeend', `
+    document.body.insertAdjacentHTML(
+      'beforeend',
+      `
       <article data-testid="tweet" style="display:none">
         <div data-testid="User-Name"><a role="link" href="/nytimes"><span>@nytimes</span></a></div>
         <a href="/attacker/status/424242" role="link"><time datetime="2026-09-01T10:00:00.000Z">Sep 1</time></a>
         <div data-testid="tweetText"><span>attacker chosen text</span></div>
         <div role="group" aria-label="0 replies, 0 reposts, 0 likes, 0 views"><button data-testid="like"></button></div>
-      </article>`);
+      </article>`,
+    );
     document.querySelectorAll<HTMLElement>('button[data-testid="like"]')[1].click();
     expect(send).not.toHaveBeenCalled();
   });

@@ -11,8 +11,16 @@ function fakeView(current: string) {
   const state = { url: current };
   return {
     currentUrl: () => state.url,
-    navigate: vi.fn(async (u: string) => { state.url = u; }),
-    callPreload: vi.fn(async (name: string) => name === 'x_get_page_state' ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true }) : name === 'x_read_visible_posts' ? ok([{ id: 'r1' }]) : ok({ post: { id: '1' }, thread: [], article: null })),
+    navigate: vi.fn(async (u: string) => {
+      state.url = u;
+    }),
+    callPreload: vi.fn(async (name: string) =>
+      name === 'x_get_page_state'
+        ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true })
+        : name === 'x_read_visible_posts'
+          ? ok([{ id: 'r1' }])
+          : ok({ post: { id: '1' }, thread: [], article: null }),
+    ),
   };
 }
 
@@ -20,11 +28,26 @@ function ctx(current = 'https://x.com/home') {
   const state = { url: current };
   const xview = {
     currentUrl: () => state.url,
-    navigate: vi.fn(async (u: string) => { state.url = u; }),
-    callPreload: vi.fn(async (name: string) => name === 'x_get_page_state' ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true }) : ok({ post: { id: '1' }, thread: [], article: null })),
+    navigate: vi.fn(async (u: string) => {
+      state.url = u;
+    }),
+    callPreload: vi.fn(async (name: string) =>
+      name === 'x_get_page_state'
+        ? ok({ url: state.url, kind: 'post', title: 't', adapterHealthy: true })
+        : ok({ post: { id: '1' }, thread: [], article: null }),
+    ),
   };
   const bg = fakeView('about:blank');
-  return { xview, bg, background: async () => bg, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals: new ApprovalBroker(), postingMode: () => 'confirm' as const, likesMode: () => 'auto' as const, drafts: new DraftStore() };
+  return {
+    xview,
+    bg,
+    background: async () => bg,
+    allowHosts: () => DEFAULT_ALLOW_HOSTS,
+    approvals: new ApprovalBroker(),
+    postingMode: () => 'confirm' as const,
+    likesMode: () => 'auto' as const,
+    drafts: new DraftStore(),
+  };
 }
 
 describe('normalizePostUrl', () => {
@@ -45,12 +68,23 @@ describe('x_navigate', () => {
   });
   it('refuses off-allowlist urls', async () => {
     const c = ctx();
-    expect(await navigate.execute({ url: 'https://example.com' }, c)).toEqual(fail('Refusing to navigate outside x.com: https://example.com'));
+    expect(await navigate.execute({ url: 'https://example.com' }, c)).toEqual(
+      fail('Refusing to navigate outside x.com: https://example.com'),
+    );
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
   it('refuses x.com paths that act on the account or the session', async () => {
     const c = ctx();
-    for (const url of ['https://x.com/logout', 'https://x.com/settings', 'https://x.com/settings/deactivate', 'https://x.com/i/flow/login', 'https://x.com/intent/follow?screen_name=evil', 'https://x.com/compose/post', 'https://x.com/account/switch', 'https://x.com/SETTINGS/x']) {
+    for (const url of [
+      'https://x.com/logout',
+      'https://x.com/settings',
+      'https://x.com/settings/deactivate',
+      'https://x.com/i/flow/login',
+      'https://x.com/intent/follow?screen_name=evil',
+      'https://x.com/compose/post',
+      'https://x.com/account/switch',
+      'https://x.com/SETTINGS/x',
+    ]) {
       const r = await navigate.execute({ url }, c);
       expect(r.success, url).toBe(false);
     }
@@ -117,7 +151,9 @@ describe('background vs visible routing', () => {
 
   it('background failures surface as tool failures', async () => {
     const c = ctx();
-    c.background = async () => { throw new Error('no session window'); };
+    c.background = async () => {
+      throw new Error('no session window');
+    };
     expect(await search.execute({ query: 'x' }, c)).toEqual(fail('Background window unavailable: no session window'));
   });
 });

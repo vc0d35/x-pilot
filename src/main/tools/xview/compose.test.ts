@@ -20,21 +20,38 @@ function ctx(mode: 'confirm' | 'autonomous', composerText = 'hello world') {
       return fail('unexpected ' + name);
     }),
   };
-  return { c: { xview, background: async () => xview, allowHosts: () => DEFAULT_ALLOW_HOSTS, approvals, postingMode: () => mode, likesMode: () => 'auto' as const, drafts: new DraftStore() }, events, approvals };
+  return {
+    c: {
+      xview,
+      background: async () => xview,
+      allowHosts: () => DEFAULT_ALLOW_HOSTS,
+      approvals,
+      postingMode: () => mode,
+      likesMode: () => 'auto' as const,
+      drafts: new DraftStore(),
+    },
+    events,
+    approvals,
+  };
 }
 
 describe('buildIntentUrl', () => {
   it('encodes text, reply id and quote url', () => {
     expect(buildIntentUrl('hi there')).toBe('https://x.com/intent/post?text=hi%20there');
     expect(buildIntentUrl('hi', 'https://x.com/a/status/42')).toBe('https://x.com/intent/post?text=hi&in_reply_to=42');
-    expect(buildIntentUrl('look', undefined, 'https://twitter.com/a/status/42?s=1')).toBe('https://x.com/intent/post?text=look%20https%3A%2F%2Fx.com%2Fa%2Fstatus%2F42');
+    expect(buildIntentUrl('look', undefined, 'https://twitter.com/a/status/42?s=1')).toBe(
+      'https://x.com/intent/post?text=look%20https%3A%2F%2Fx.com%2Fa%2Fstatus%2F42',
+    );
   });
 });
 
 describe('x_compose_post', () => {
   it('opens the intent url and returns a draft from the composer text', async () => {
     const { c } = ctx('confirm');
-    const r = (await composePost.execute({ text: 'hello world' }, c)) as { success: true; content: { draftId: string; preview: string; target: string } };
+    const r = (await composePost.execute({ text: 'hello world' }, c)) as {
+      success: true;
+      content: { draftId: string; preview: string; target: string };
+    };
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/intent/post?text=hello%20world', undefined);
     expect(r.content.preview).toBe('hello world');
     expect(r.content.target).toBe('new post');
@@ -48,7 +65,9 @@ describe('x_compose_post', () => {
   });
   it('rejects an invalid replyToUrl', async () => {
     const { c } = ctx('confirm');
-    expect(await composePost.execute({ text: 'x', replyToUrl: 'https://x.com/a' }, c)).toEqual(fail('replyToUrl is not a post URL: https://x.com/a'));
+    expect(await composePost.execute({ text: 'x', replyToUrl: 'https://x.com/a' }, c)).toEqual(
+      fail('replyToUrl is not a post URL: https://x.com/a'),
+    );
   });
 });
 
@@ -71,7 +90,14 @@ describe('x_submit_post', () => {
     const p = submitPost.execute({ draftId: draft.id }, c);
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'cancel');
-    expect(await p).toEqual(ok({ posted: false, status: 'cancelled_by_user', url: null, reason: 'The user reviewed the draft and chose not to post it; the draft was discarded.' }));
+    expect(await p).toEqual(
+      ok({
+        posted: false,
+        status: 'cancelled_by_user',
+        url: null,
+        reason: 'The user reviewed the draft and chose not to post it; the draft was discarded.',
+      }),
+    );
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/home', undefined);
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything());
   });
@@ -79,7 +105,10 @@ describe('x_submit_post', () => {
     const { c, events, approvals } = ctx('confirm');
     let reads = 0;
     c.xview.callPreload.mockImplementation(async (name: string) => {
-      if (name === 'x_read_composer') { reads += 1; return ok({ present: true, text: reads === 1 ? 'hello world' : 'buy my coin', canSubmit: true }); }
+      if (name === 'x_read_composer') {
+        reads += 1;
+        return ok({ present: true, text: reads === 1 ? 'hello world' : 'buy my coin', canSubmit: true });
+      }
       if (name === 'x_click_post_button') return ok({ clicked: true, toast: 'sent', url: 'https://x.com/me/status/1' });
       return fail('unexpected ' + name);
     });

@@ -1,8 +1,22 @@
 import type { AgentEvent, AgentStatus, ApprovalRequest, UserInputAnswers, UserInputRequest } from '../shared/agent';
 
-export interface Message { id: string; role: 'user' | 'agent' | 'system'; text: string; streaming?: boolean }
-export interface ToolCall { id: string; name: string; args: unknown; status: 'running' | 'done' | 'failed'; output?: string }
-export interface ThinkingStep { id: string; text: string }
+export interface Message {
+  id: string;
+  role: 'user' | 'agent' | 'system';
+  text: string;
+  streaming?: boolean;
+}
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: unknown;
+  status: 'running' | 'done' | 'failed';
+  output?: string;
+}
+export interface ThinkingStep {
+  id: string;
+  text: string;
+}
 export type Entry =
   | { kind: 'message'; message: Message }
   | { kind: 'thinking'; id: string; steps: ThinkingStep[] }
@@ -25,7 +39,16 @@ export interface State {
   everSucceeded: boolean;
 }
 
-export const initialState: State = { status: 'starting', threadId: null, running: false, entries: [], activity: null, turnId: null, failure: null, everSucceeded: false };
+export const initialState: State = {
+  status: 'starting',
+  threadId: null,
+  running: false,
+  entries: [],
+  activity: null,
+  turnId: null,
+  failure: null,
+  everSucceeded: false,
+};
 
 let seq = 0;
 const localId = () => `local-${++seq}`;
@@ -37,9 +60,12 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'status': {
       // 'starting' is the one status that means a fresh attempt, so it is what clears a failure:
       // 'ready' follows a failed turn (Codex reports auth errors there) and must not clear it.
-      const failure = e.status === 'error' || e.status === 'disconnected'
-        ? { message: e.message ?? `Agent ${e.status}` }
-        : e.status === 'starting' ? null : state.failure;
+      const failure =
+        e.status === 'error' || e.status === 'disconnected'
+          ? { message: e.message ?? `Agent ${e.status}` }
+          : e.status === 'starting'
+            ? null
+            : state.failure;
       return { ...state, status: e.status, statusMessage: e.message, running: e.status === 'running', failure };
     }
     case 'thread':
@@ -56,7 +82,13 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     case 'turn.completed': {
       const failed = e.status === 'failed';
       const entries = failed
-        ? [...state.entries, { kind: 'message' as const, message: { id: localId(), role: 'system' as const, text: `Turn failed: ${e.error ?? 'unknown error'}` } }]
+        ? [
+            ...state.entries,
+            {
+              kind: 'message' as const,
+              message: { id: localId(), role: 'system' as const, text: `Turn failed: ${e.error ?? 'unknown error'}` },
+            },
+          ]
         : state.entries;
       return {
         ...state,
@@ -69,7 +101,11 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
     }
     case 'message.delta': {
       const idx = state.entries.findIndex((en) => en.kind === 'message' && en.message.id === e.itemId);
-      if (idx < 0) return { ...state, entries: [...state.entries, { kind: 'message', message: { id: e.itemId, role: 'agent', text: e.delta, streaming: true } }] };
+      if (idx < 0)
+        return {
+          ...state,
+          entries: [...state.entries, { kind: 'message', message: { id: e.itemId, role: 'agent', text: e.delta, streaming: true } }],
+        };
       const entry = state.entries[idx] as { kind: 'message'; message: Message };
       const updated = { ...entry, message: { ...entry.message, text: entry.message.text + e.delta } };
       return { ...state, entries: state.entries.map((en, i) => (i === idx ? updated : en)) };
@@ -80,20 +116,41 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
       return { ...state, entries: idx < 0 ? [...state.entries, final] : state.entries.map((en, i) => (i === idx ? final : en)) };
     }
     case 'tool.started':
-      return { ...state, entries: [...state.entries, { kind: 'tool', call: { id: e.itemId, name: e.name, args: e.args, status: 'running' } }] };
+      return {
+        ...state,
+        entries: [...state.entries, { kind: 'tool', call: { id: e.itemId, name: e.name, args: e.args, status: 'running' } }],
+      };
     case 'tool.completed': {
       const idx = state.entries.findIndex((en) => en.kind === 'tool' && en.call.id === e.itemId);
-      const call: ToolCall = { id: e.itemId, name: e.name, args: idx >= 0 ? (state.entries[idx] as { call: ToolCall }).call.args : undefined, status: e.success ? 'done' : 'failed', output: e.output };
-      return { ...state, entries: idx < 0 ? [...state.entries, { kind: 'tool', call }] : state.entries.map((en, i) => (i === idx ? { kind: 'tool', call } : en)) };
+      const call: ToolCall = {
+        id: e.itemId,
+        name: e.name,
+        args: idx >= 0 ? (state.entries[idx] as { call: ToolCall }).call.args : undefined,
+        status: e.success ? 'done' : 'failed',
+        output: e.output,
+      };
+      return {
+        ...state,
+        entries:
+          idx < 0 ? [...state.entries, { kind: 'tool', call }] : state.entries.map((en, i) => (i === idx ? { kind: 'tool', call } : en)),
+      };
     }
     case 'approval.requested':
       return { ...state, entries: [...state.entries, { kind: 'approval', request: e.request }] };
     case 'approval.resolved':
-      return { ...state, entries: state.entries.map((en) => (en.kind === 'approval' && en.request.id === e.id ? { ...en, decision: e.decision } : en)) };
+      return {
+        ...state,
+        entries: state.entries.map((en) => (en.kind === 'approval' && en.request.id === e.id ? { ...en, decision: e.decision } : en)),
+      };
     case 'input.requested':
       return { ...state, entries: [...state.entries, { kind: 'input', request: e.request }] };
     case 'input.resolved':
-      return { ...state, entries: state.entries.map((en) => (en.kind === 'input' && en.request.id === e.id ? { ...en, resolved: { answers: e.answers } } : en)) };
+      return {
+        ...state,
+        entries: state.entries.map((en) =>
+          en.kind === 'input' && en.request.id === e.id ? { ...en, resolved: { answers: e.answers } } : en,
+        ),
+      };
     default:
       return state;
   }
@@ -110,7 +167,11 @@ export function reportsBrokenAdapter(output: string | undefined): boolean {
 
 function parseJson(text: string | undefined): unknown {
   if (typeof text !== 'string' || text === '') return undefined;
-  try { return JSON.parse(text) as unknown; } catch { return undefined; }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 function hasBrokenAdapter(value: unknown, depth = 0): boolean {
@@ -123,13 +184,19 @@ function hasBrokenAdapter(value: unknown, depth = 0): boolean {
   return Object.values(record).some((v) => hasBrokenAdapter(v, depth + 1));
 }
 
-function applyThinking(entries: Entry[], turnId: string, e: Extract<AgentEvent, { type: 'thinking.delta' | 'thinking.completed' }>): Entry[] {
+function applyThinking(
+  entries: Entry[],
+  turnId: string,
+  e: Extract<AgentEvent, { type: 'thinking.delta' | 'thinking.completed' }>,
+): Entry[] {
   const idx = entries.findIndex((en) => en.kind === 'thinking' && en.id === turnId);
-  const entry: Extract<Entry, { kind: 'thinking' }> = idx >= 0 ? (entries[idx] as Extract<Entry, { kind: 'thinking' }>) : { kind: 'thinking', id: turnId, steps: [] };
+  const entry: Extract<Entry, { kind: 'thinking' }> =
+    idx >= 0 ? (entries[idx] as Extract<Entry, { kind: 'thinking' }>) : { kind: 'thinking', id: turnId, steps: [] };
   const steps = entry.steps.slice();
   const si = steps.findIndex((st) => st.id === e.itemId);
   const text = e.type === 'thinking.completed' ? e.text : (si >= 0 ? steps[si].text : '') + e.delta;
-  if (si >= 0) steps[si] = { id: e.itemId, text }; else steps.push({ id: e.itemId, text });
+  if (si >= 0) steps[si] = { id: e.itemId, text };
+  else steps.push({ id: e.itemId, text });
   const updated = { ...entry, steps };
   return idx >= 0 ? entries.map((en, i) => (i === idx ? updated : en)) : [...entries, updated];
 }

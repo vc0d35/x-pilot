@@ -24,8 +24,14 @@ describe('ToolRegistry', () => {
   it('rejects arguments that do not match the tool schema, before the tool runs', async () => {
     const reg = new ToolRegistry();
     reg.addSource(new AppToolSource('app', [echo], { prefix: '>' }));
-    await expect(reg.call('xpilot_echo', { s: 7 })).resolves.toEqual({ success: false, error: 'Invalid arguments for xpilot_echo: s: Invalid input: expected string, received number' });
-    await expect(reg.call('xpilot_echo', { s: 'hi', extra: 1 })).resolves.toEqual({ success: false, error: 'Invalid arguments for xpilot_echo: Unrecognized key: "extra"' });
+    await expect(reg.call('xpilot_echo', { s: 7 })).resolves.toEqual({
+      success: false,
+      error: 'Invalid arguments for xpilot_echo: s: Invalid input: expected string, received number',
+    });
+    await expect(reg.call('xpilot_echo', { s: 'hi', extra: 1 })).resolves.toEqual({
+      success: false,
+      error: 'Invalid arguments for xpilot_echo: Unrecognized key: "extra"',
+    });
   });
 
   it('returns a failure for unknown tools instead of throwing', async () => {
@@ -35,7 +41,13 @@ describe('ToolRegistry', () => {
 
   it('converts thrown errors into failures', async () => {
     const reg = new ToolRegistry();
-    const boom: ToolModule<void> = { spec: { name: 'xpilot_boom', description: 'b', inputSchema: {} }, args: z.strictObject({}), execute: async () => { throw new Error('kaboom'); } };
+    const boom: ToolModule<void> = {
+      spec: { name: 'xpilot_boom', description: 'b', inputSchema: {} },
+      args: z.strictObject({}),
+      execute: async () => {
+        throw new Error('kaboom');
+      },
+    };
     reg.addSource(new AppToolSource('app', [boom], undefined));
     await expect(reg.call('xpilot_boom', {})).resolves.toEqual({ success: false, error: 'kaboom' });
   });
@@ -86,10 +98,20 @@ describe('ToolRegistry', () => {
     const watcher: ToolModule<void> = {
       spec: { name: 'xpilot_watch', description: 'w', inputSchema: {} },
       args: z.strictObject({}),
-      execute: async (_args, _ctx, signal) => { seen.push(signal); return ok(signal?.aborted ?? null); },
+      execute: async (_args, _ctx, signal) => {
+        seen.push(signal);
+        return ok(signal?.aborted ?? null);
+      },
     };
     reg.addSource(new AppToolSource('app', [watcher], undefined));
-    const src: ToolSource = { id: 's', list: () => [{ name: 'x_direct', description: 'd', inputSchema: {} }], call: async (_n, _a, signal) => { seen.push(signal); return ok(null); } };
+    const src: ToolSource = {
+      id: 's',
+      list: () => [{ name: 'x_direct', description: 'd', inputSchema: {} }],
+      call: async (_n, _a, signal) => {
+        seen.push(signal);
+        return ok(null);
+      },
+    };
     reg.addSource(src);
     const ac = new AbortController();
     ac.abort();
@@ -102,10 +124,18 @@ describe('ToolRegistry', () => {
   it('propagates change notifications from sources', () => {
     const reg = new ToolRegistry();
     let notify = () => {};
-    const src: ToolSource = { id: 's', list: () => [], call: async () => ok(null), onChange: (cb) => { notify = cb; return () => {}; } };
+    const src: ToolSource = {
+      id: 's',
+      list: () => [],
+      call: async () => ok(null),
+      onChange: (cb) => {
+        notify = cb;
+        return () => {};
+      },
+    };
     const spy = vi.fn();
     reg.onChange(spy);
-    reg.addSource(src);          // adding a source counts as a change
+    reg.addSource(src); // adding a source counts as a change
     notify();
     expect(spy).toHaveBeenCalledTimes(2);
   });
@@ -121,7 +151,8 @@ describe('the JSON schema the model sees', () => {
   const VIEW = {
     type: 'string',
     enum: ['background', 'visible'],
-    description: 'Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.',
+    description:
+      'Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.',
   };
 
   it('x_read_timeline: an enum, a bounded integer and the shared view argument', () => {
@@ -158,7 +189,11 @@ describe('the JSON schema the model sees', () => {
       description: 'Internal: like or unlike a post rendered in this window by post URL or id.',
       inputSchema: {
         type: 'object',
-        properties: { url: { type: 'string' }, action: { type: 'string', enum: ['like', 'unlike'] }, timeoutMs: { type: 'integer', default: 8000 } },
+        properties: {
+          url: { type: 'string' },
+          action: { type: 'string', enum: ['like', 'unlike'] },
+          timeoutMs: { type: 'integer', default: 8000 },
+        },
         required: ['url'],
         additionalProperties: false,
       },

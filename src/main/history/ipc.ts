@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { IPC } from '../../shared/ipc';
 import { PostSchema } from '../../shared/page';
 import type { BridgeIpc } from '../adapter/bridge';
-import type { HistoryStore } from './store';
+import type { AppStore } from './store';
 
 const POST_ID = /^\d{1,32}$/;
 const STATUS_URL = /^https:\/\/(?:x|twitter)\.com\/[A-Za-z0-9_]{1,15}\/status\/\d{1,32}$/;
@@ -23,7 +23,7 @@ const RATE = { max: 10, windowMs: 10_000 };
 
 interface Registration {
   /** Sender ids allowed to write, and the store each writes to; X windows are recreated, listeners are not. */
-  senders: Map<number, HistoryStore>;
+  senders: Map<number, AppStore>;
   hits: Map<number, number[]>;
   now: () => number;
   warn: (message: string) => void;
@@ -44,12 +44,18 @@ function allow(reg: Registration, senderId: number): boolean {
   return true;
 }
 
-export function registerHistoryIpc(deps: { ipc: BridgeIpc; xContentsId: number; store: HistoryStore; now?: () => number; warn?: (message: string) => void }): void {
+export function registerHistoryIpc(deps: {
+  ipc: BridgeIpc;
+  xContentsId: number;
+  store: AppStore;
+  now?: () => number;
+  warn?: (message: string) => void;
+}): void {
   let reg = registrations.get(deps.ipc);
   if (!reg) {
     reg = { senders: new Map(), hits: new Map(), now: deps.now ?? Date.now, warn: deps.warn ?? ((m) => console.warn(m)) };
     registrations.set(deps.ipc, reg);
-    const accept = (event: { sender: { id: number } }): HistoryStore | null => {
+    const accept = (event: { sender: { id: number } }): AppStore | null => {
       const store = reg!.senders.get(event.sender.id);
       if (!store) return null;
       return allow(reg!, event.sender.id) ? store : null;

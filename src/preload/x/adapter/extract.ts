@@ -3,7 +3,11 @@ import { RESERVED_TOP_LEVEL, SEL } from './selectors';
 
 export function pageKindFromUrl(url: string): PageKind {
   let u: URL;
-  try { u = new URL(url); } catch { return 'other'; }
+  try {
+    u = new URL(url);
+  } catch {
+    return 'other';
+  }
   const parts = u.pathname.split('/').filter(Boolean);
   if (parts.length === 0 || parts[0] === 'home') return 'home';
   if (parts[0] === 'search') return 'search';
@@ -20,11 +24,20 @@ export function textWithEmoji(el: Element | null): string {
   if (!el) return '';
   let out = '';
   const walk = (n: Node) => {
-    if (n.nodeType === Node.TEXT_NODE) { out += n.textContent ?? ''; return; }
+    if (n.nodeType === Node.TEXT_NODE) {
+      out += n.textContent ?? '';
+      return;
+    }
     if (n.nodeType !== Node.ELEMENT_NODE) return;
     const e = n as Element;
-    if (e.tagName === 'IMG') { out += e.getAttribute('alt') ?? ''; return; }
-    if (e.tagName === 'BR') { out += '\n'; return; }
+    if (e.tagName === 'IMG') {
+      out += e.getAttribute('alt') ?? '';
+      return;
+    }
+    if (e.tagName === 'BR') {
+      out += '\n';
+      return;
+    }
     for (const c of e.childNodes) walk(c);
   };
   walk(el);
@@ -38,7 +51,10 @@ export function parseStats(label: string): NonNullable<Post['stats']> {
   for (const m of label.matchAll(/([\d,]+)\s+(repl|repost|like|view)/gi)) {
     const n = toNumber(m[1]);
     const k = m[2].toLowerCase();
-    if (k === 'repl') stats.replies = n; else if (k === 'repost') stats.reposts = n; else if (k === 'like') stats.likes = n; else stats.views = n;
+    if (k === 'repl') stats.replies = n;
+    else if (k === 'repost') stats.reposts = n;
+    else if (k === 'like') stats.likes = n;
+    else stats.views = n;
   }
   return stats;
 }
@@ -52,7 +68,11 @@ const ARTICLE_PERMALINK = /^\/(?:i\/article|([A-Za-z0-9_]{1,15})\/article)\/(\d{
 /** Fallback for X Article pages that render no `article[data-testid="tweet"]`: synthesises the post from the URL alone. */
 export function postFromArticleUrl(url: string, title = ''): Post | null {
   let path: string;
-  try { path = new URL(url).pathname; } catch { return null; }
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    return null;
+  }
   const m = ARTICLE_PERMALINK.exec(path);
   if (!m) return null;
   const handle = m[1] ?? '';
@@ -111,12 +131,19 @@ export function isRendered(el: Element): boolean {
 
 export function extractPost(article: Element, fallbackUrl?: string): Post | null {
   const link = permalinkOf(article);
-  let id: string; let handle: string; let postedAt: string | null;
-  if (link) { id = link.id; handle = link.handle; postedAt = link.postedAt; }
-  else {
+  let id: string;
+  let handle: string;
+  let postedAt: string | null;
+  if (link) {
+    id = link.id;
+    handle = link.handle;
+    postedAt = link.postedAt;
+  } else {
     const m = fallbackUrl ? PERMALINK.exec(new URL(fallbackUrl).pathname) : null;
     if (!m) return null;
-    handle = m[1]; id = m[2]; postedAt = null;
+    handle = m[1];
+    id = m[2];
+    postedAt = null;
   }
   const text = textWithEmoji(article.querySelector(SEL.tweetText));
   const statsLabel = article.querySelector(SEL.statsGroup)?.getAttribute('aria-label') ?? '';
@@ -137,7 +164,10 @@ export function extractVisiblePosts(root: ParentNode): Post[] {
   const out: Post[] = [];
   for (const a of root.querySelectorAll(SEL.article)) {
     const p = extractPost(a);
-    if (p && !seen.has(p.id)) { seen.add(p.id); out.push(p); }
+    if (p && !seen.has(p.id)) {
+      seen.add(p.id);
+      out.push(p);
+    }
   }
   return out;
 }

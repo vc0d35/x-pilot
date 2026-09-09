@@ -41,10 +41,18 @@ export function contentTypeFor(path: string): string {
  */
 export function resolveSidebarAsset(root: string, requestUrl: string): { path: string; contentType: string } | null {
   let url: URL;
-  try { url = new URL(requestUrl); } catch { return null; }
+  try {
+    url = new URL(requestUrl);
+  } catch {
+    return null;
+  }
   if (url.protocol !== `${APP_SCHEME}:` || url.hostname !== SIDEBAR_HOST) return null;
   let pathname: string;
-  try { pathname = decodeURIComponent(url.pathname); } catch { return null; }
+  try {
+    pathname = decodeURIComponent(url.pathname);
+  } catch {
+    return null;
+  }
   if (pathname.includes('\0')) return null;
   if (pathname === '' || pathname.endsWith('/')) pathname += 'index.html';
   const base = resolve(root);
@@ -111,7 +119,8 @@ export function reviveOnCrash(
   });
 }
 
-const BANNED_SWITCH = /^--(remote-debugging-(port|pipe|address)|inspect(-brk|-port)?|js-flags|user-data-dir|host-rules|host-resolver-rules|proxy-server|proxy-pac-url|ignore-certificate-errors|disable-web-security|allow-running-insecure-content|load-extension|enable-logging|renderer-cmd-prefix)(=|$)/;
+const BANNED_SWITCH =
+  /^--(remote-debugging-(port|pipe|address)|inspect(-brk|-port)?|js-flags|user-data-dir|host-rules|host-resolver-rules|proxy-server|proxy-pac-url|ignore-certificate-errors|disable-web-security|allow-running-insecure-content|load-extension|enable-logging|renderer-cmd-prefix)(=|$)/;
 
 /** Chromium parses these before any app code runs, so a packaged app can only refuse to continue. */
 export function hasBannedSwitch(argv: readonly string[]): boolean {

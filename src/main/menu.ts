@@ -4,12 +4,10 @@ const RELEASES_URL = 'https://github.com/vc0d35/x-pilot/releases';
 const ISSUES_URL = 'https://github.com/vc0d35/x-pilot/issues';
 
 /** Standard macOS menus plus View → Toggle Sidebar (⌘\\), the way back from a fully collapsed sidebar. */
-export function installAppMenu(deps: {
-  toggleSidebar(): void;
-  focusAgentInput(): void;
-  openExternal(url: string): void;
-}): void {
-  const devItems: MenuItemConstructorOptions[] = app.isPackaged ? [] : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }];
+export function installAppMenu(deps: { toggleSidebar(): void; focusAgentInput(): void; openExternal(url: string): void }): void {
+  const devItems: MenuItemConstructorOptions[] = app.isPackaged
+    ? []
+    : [{ type: 'separator' }, { role: 'reload' }, { role: 'toggleDevTools' }];
   const menu = Menu.buildFromTemplate([
     { role: 'appMenu' },
     { role: 'editMenu' },
@@ -19,7 +17,8 @@ export function installAppMenu(deps: {
         { label: 'Toggle Sidebar', accelerator: 'CommandOrControl+\\', click: () => deps.toggleSidebar() },
         { label: 'Focus Agent Input', accelerator: 'Ctrl+D', click: () => deps.focusAgentInput() },
         ...devItems,
-        { type: 'separator' }, { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
       ],
     },
     { role: 'windowMenu' },

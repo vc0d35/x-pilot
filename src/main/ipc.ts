@@ -8,7 +8,7 @@ import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
 import type { UserInputBroker } from './user-input';
 import type { SettingsStore } from './settings';
-import type { HistoryStore } from './history/store';
+import type { AppStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import { SettingsPatchSchema } from '../shared/settings';
 import { isSafeExecutable } from './agent/codex/binary';
@@ -18,16 +18,16 @@ import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
   sidebar: WebContents;
-  setSidebarCollapsed(collapsed: boolean): void;
-  openLink(url: string): void;
+  setSidebarCollapsed: (collapsed: boolean) => void;
+  openLink: (url: string) => void;
   agent: AgentController;
   approvals: ApprovalBroker;
   userInput: UserInputBroker;
   settings: SettingsStore;
-  history: HistoryStore;
+  store: AppStore;
   tasks: TaskManager;
-  libraryDir(): string;
-  openPath(p: string): Promise<string>;
+  libraryDir: () => string;
+  openPath: (p: string) => Promise<string>;
 }
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
@@ -39,61 +39,168 @@ const ResolveInputSchema = z.object({
 });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, userInput, settings, history, libraryDir, openPath } = deps;
-  const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
+  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, userInput, settings, store, libraryDir, openPath } = deps;
+  const push = (e: AgentEvent) => {
+    if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e);
+  };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
-  agent.onEvent((e) => { if (e.type === 'status') lastStatus = e; if (e.type === 'thread') lastThread = e; push(e); });
+  agent.onEvent((e) => {
+    if (e.type === 'status') lastStatus = e;
+    if (e.type === 'thread') lastThread = e;
+    push(e);
+  });
   approvals.onEvent(push);
   userInput.onEvent(push);
-  sidebar.on('did-finish-load', () => { if (lastThread) push(lastThread); if (lastStatus) push(lastStatus); });
+  sidebar.on('did-finish-load', () => {
+    if (lastThread) push(lastThread);
+    if (lastStatus) push(lastStatus);
+  });
 
   /** Only the sidebar renderer may drive these channels; the X view shares the same ipcMain. */
-  const guarded = <A extends unknown[], R>(fn: (event: IpcMainInvokeEvent, ...args: A) => R) => (event: IpcMainInvokeEvent, ...args: A): R => {
-    if (event.sender.id !== sidebar.id) throw new Error('unauthorized');
-    return fn(event, ...args);
-  };
+  const guarded =
+    <A extends unknown[], R>(fn: (event: IpcMainInvokeEvent, ...args: A) => R) =>
+    (event: IpcMainInvokeEvent, ...args: A): R => {
+      if (event.sender.id !== sidebar.id) throw new Error('unauthorized');
+      return fn(event, ...args);
+    };
 
-  ipcMain.handle(IPC.agentSend, guarded(async (_e, raw) => { const { text, pageContext } = SendSchema.parse(raw); await agent.send(text, pageContext); }));
-  ipcMain.handle(IPC.agentInterrupt, guarded(() => agent.interrupt()));
-  ipcMain.handle(IPC.agentNewThread, guarded(() => agent.start({ resume: false })));
-  ipcMain.handle(IPC.agentReconnect, guarded(() => agent.start({ resume: true })));
-  ipcMain.handle(IPC.agentResolveApproval, guarded((_e, raw) => { const { id, decision } = ResolveSchema.parse(raw); approvals.resolve(id, decision); }));
-  ipcMain.handle(IPC.agentResolveInput, guarded((_e, raw) => {
-    const { id, answers } = ResolveInputSchema.parse(raw);
-    if (answers) userInput.resolve(id, answers); else userInput.cancel(id);
-  }));
-  ipcMain.handle(IPC.agentListModels, guarded(() => agent.listModels()));
-  ipcMain.handle(IPC.settingsGet, guarded(() => settings.get()));
-  ipcMain.handle(IPC.settingsSet, guarded((_e, raw) => settings.update(SettingsPatchSchema.parse(raw))));
-  settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
-  ipcMain.handle(IPC.linkOpen, guarded((_e, raw) => { openLink(z.object({ url: z.string().max(2048) }).parse(raw).url); }));
-  ipcMain.handle(IPC.sidebarSetCollapsed, guarded((_e, raw) => { setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed); }));
-  ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
-  ipcMain.handle(IPC.historyStats, guarded(() => history.stats()));
-  ipcMain.handle(IPC.conversationsList, guarded(() => agent.listConversations()));
-  ipcMain.handle(IPC.conversationsOpen, guarded((_e, raw) => agent.openConversation(z.object({ threadId: z.string() }).parse(raw).threadId)));
-  ipcMain.handle(IPC.tasksList, guarded(() => tasks.list()));
-  ipcMain.handle(IPC.tasksUpdate, guarded((_e, raw) => { const { id, enabled } = z.object({ id: z.number().int(), enabled: z.boolean().optional() }).parse(raw); return tasks.update(id, { enabled }); }));
-  ipcMain.handle(IPC.tasksDelete, guarded((_e, raw) => { tasks.delete(z.object({ id: z.number().int() }).parse(raw).id); }));
-  ipcMain.handle(IPC.tasksRunNow, guarded((_e, raw) => tasks.runNow(z.object({ id: z.number().int() }).parse(raw).id)));
-  ipcMain.handle(IPC.libraryList, guarded(() => history.listLibrary()));
-  ipcMain.handle(IPC.libraryOpen, guarded(async (_e, raw) => {
-    const { path } = z.object({ path: z.string() }).parse(raw);
-    if (!isOpenablePdf(path, libraryDir(), (p) => history.hasLibraryPath(p))) throw new Error('not a library PDF');
-    await openPath(path);
-  }));
-  ipcMain.handle(IPC.settingsCodexBinary, guarded(async (_e, raw) => {
-    const { action } = CodexBinaryActionSchema.parse(raw);
-    if (action === 'clear') { settings.update({ agent: { codex: { binPath: null } } }); return null; }
-    const r = await dialog.showOpenDialog({ properties: ['openFile'], message: 'Choose the codex executable' });
-    const path = r.canceled ? null : r.filePaths[0];
-    if (!path) return settings.get().agent.codex.binPath;
-    if (!isSafeExecutable(path)) throw new Error('That file is not a safe executable: it must be a regular file you or root own that nobody else can write');
-    settings.update({ agent: { codex: { binPath: path } } });
-    return path;
-  }));
-  ipcMain.handle(IPC.libraryChooseDir, guarded(async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; }));
+  ipcMain.handle(
+    IPC.agentSend,
+    guarded(async (_e, raw) => {
+      const { text, pageContext } = SendSchema.parse(raw);
+      await agent.send(text, pageContext);
+    }),
+  );
+  ipcMain.handle(
+    IPC.agentInterrupt,
+    guarded(() => agent.interrupt()),
+  );
+  ipcMain.handle(
+    IPC.agentNewThread,
+    guarded(() => agent.start({ resume: false })),
+  );
+  ipcMain.handle(
+    IPC.agentReconnect,
+    guarded(() => agent.start({ resume: true })),
+  );
+  ipcMain.handle(
+    IPC.agentResolveApproval,
+    guarded((_e, raw) => {
+      const { id, decision } = ResolveSchema.parse(raw);
+      approvals.resolve(id, decision);
+    }),
+  );
+  ipcMain.handle(
+    IPC.agentResolveInput,
+    guarded((_e, raw) => {
+      const { id, answers } = ResolveInputSchema.parse(raw);
+      if (answers) userInput.resolve(id, answers);
+      else userInput.cancel(id);
+    }),
+  );
+  ipcMain.handle(
+    IPC.agentListModels,
+    guarded(() => agent.listModels()),
+  );
+  ipcMain.handle(
+    IPC.settingsGet,
+    guarded(() => settings.get()),
+  );
+  ipcMain.handle(
+    IPC.settingsSet,
+    guarded((_e, raw) => settings.update(SettingsPatchSchema.parse(raw))),
+  );
+  settings.onChange((s) => {
+    if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s);
+  });
+  ipcMain.handle(
+    IPC.linkOpen,
+    guarded((_e, raw) => {
+      openLink(z.object({ url: z.string().max(2048) }).parse(raw).url);
+    }),
+  );
+  ipcMain.handle(
+    IPC.sidebarSetCollapsed,
+    guarded((_e, raw) => {
+      setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed);
+    }),
+  );
+  ipcMain.handle(
+    IPC.historyClear,
+    guarded(() => store.clear()),
+  );
+  ipcMain.handle(
+    IPC.historyStats,
+    guarded(() => store.stats()),
+  );
+  ipcMain.handle(
+    IPC.conversationsList,
+    guarded(() => agent.listConversations()),
+  );
+  ipcMain.handle(
+    IPC.conversationsOpen,
+    guarded((_e, raw) => agent.openConversation(z.object({ threadId: z.string() }).parse(raw).threadId)),
+  );
+  ipcMain.handle(
+    IPC.tasksList,
+    guarded(() => tasks.list()),
+  );
+  ipcMain.handle(
+    IPC.tasksUpdate,
+    guarded((_e, raw) => {
+      const { id, enabled } = z.object({ id: z.number().int(), enabled: z.boolean().optional() }).parse(raw);
+      return tasks.update(id, { enabled });
+    }),
+  );
+  ipcMain.handle(
+    IPC.tasksDelete,
+    guarded((_e, raw) => {
+      tasks.delete(z.object({ id: z.number().int() }).parse(raw).id);
+    }),
+  );
+  ipcMain.handle(
+    IPC.tasksRunNow,
+    guarded((_e, raw) => tasks.runNow(z.object({ id: z.number().int() }).parse(raw).id)),
+  );
+  ipcMain.handle(
+    IPC.libraryList,
+    guarded(() => store.listLibrary()),
+  );
+  ipcMain.handle(
+    IPC.libraryOpen,
+    guarded(async (_e, raw) => {
+      const { path } = z.object({ path: z.string() }).parse(raw);
+      if (!isOpenablePdf(path, libraryDir(), (p) => store.hasLibraryPath(p))) throw new Error('not a library PDF');
+      await openPath(path);
+    }),
+  );
+  ipcMain.handle(
+    IPC.settingsCodexBinary,
+    guarded(async (_e, raw) => {
+      const { action } = CodexBinaryActionSchema.parse(raw);
+      if (action === 'clear') {
+        settings.update({ agent: { codex: { binPath: null } } });
+        return null;
+      }
+      const r = await dialog.showOpenDialog({ properties: ['openFile'], message: 'Choose the codex executable' });
+      const path = r.canceled ? null : r.filePaths[0];
+      if (!path) return settings.get().agent.codex.binPath;
+      if (!isSafeExecutable(path))
+        throw new Error('That file is not a safe executable: it must be a regular file you or root own that nobody else can write');
+      settings.update({ agent: { codex: { binPath: path } } });
+      return path;
+    }),
+  );
+  ipcMain.handle(
+    IPC.libraryChooseDir,
+    guarded(async () => {
+      const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      settings.update({ library: { dir: r.filePaths[0] } });
+      return r.filePaths[0];
+    }),
+  );
 }
 
 export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {

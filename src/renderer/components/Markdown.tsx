@@ -22,8 +22,16 @@ export function Markdown({ text }: { text: string }) {
           // The link text is model-written: when it names a destination, show where the link really goes.
           const realHost = href ? deceptiveLinkHost(plainText(children), href) : null;
           return (
-            <a href={href} title={href} onClick={(e) => { e.preventDefault(); if (href) void window.xpilot.openLink(href); }}>
-              {children}{realHost ? <span className="link-host"> ({realHost})</span> : null}
+            <a
+              href={href}
+              title={href}
+              onClick={(e) => {
+                e.preventDefault();
+                if (href) void window.xpilot.openLink(href);
+              }}
+            >
+              {children}
+              {realHost ? <span className="link-host"> ({realHost})</span> : null}
             </a>
           );
         },

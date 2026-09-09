@@ -36,7 +36,9 @@ describe('handleNotification: turn state', () => {
   });
 
   it('passes a completed turn on without an error', () => {
-    expect(feed(['turn/completed', { turn: { id: 't2', status: 'completed', error: null } }]).completed).toEqual([['t2', 'completed', undefined]]);
+    expect(feed(['turn/completed', { turn: { id: 't2', status: 'completed', error: null } }]).completed).toEqual([
+      ['t2', 'completed', undefined],
+    ]);
   });
 
   it('surfaces a server error as a status event and ignores anything it does not know', () => {
@@ -99,7 +101,19 @@ describe('handleNotification: tool calls', () => {
   it('maps a dynamic tool call to activity, tool.started and tool.completed', () => {
     const { events } = feed(
       ['item/started', item({ type: 'dynamicToolCall', id: 'd1', tool: 'x_get_page_state', arguments: { a: 1 } })],
-      ['item/completed', item({ type: 'dynamicToolCall', id: 'd1', tool: 'x_get_page_state', success: true, contentItems: [{ type: 'inputText', text: 'one' }, { type: 'inputText', text: 'two' }] })],
+      [
+        'item/completed',
+        item({
+          type: 'dynamicToolCall',
+          id: 'd1',
+          tool: 'x_get_page_state',
+          success: true,
+          contentItems: [
+            { type: 'inputText', text: 'one' },
+            { type: 'inputText', text: 'two' },
+          ],
+        }),
+      ],
     );
     expect(events).toEqual([
       { type: 'activity', activity: 'tool', detail: 'x_get_page_state' },
@@ -151,33 +165,62 @@ describe('handleServerRequest: tool calls', () => {
   const approvals = () => new ApprovalBroker();
 
   it('wraps a successful result as untrusted tool output', async () => {
-    const res = await handleServerRequest('item/tool/call', { tool: 'x_read_post', arguments: { url: 'u' } }, {
-      callTool: async (name, args) => ok({ name, args }),
-      approvals: approvals(),
+    const res = await handleServerRequest(
+      'item/tool/call',
+      { tool: 'x_read_post', arguments: { url: 'u' } },
+      {
+        callTool: async (name, args) => ok({ name, args }),
+        approvals: approvals(),
+      },
+    );
+    expect(res).toEqual({
+      contentItems: [{ type: 'inputText', text: wrapToolOutput('{"name":"x_read_post","args":{"url":"u"}}') }],
+      success: true,
     });
-    expect(res).toEqual({ contentItems: [{ type: 'inputText', text: wrapToolOutput('{"name":"x_read_post","args":{"url":"u"}}') }], success: true });
   });
 
   it('reports a failed tool result, and a throwing tool, as failed output rather than crashing', async () => {
-    const failed = await handleServerRequest('item/tool/call', { tool: 't' }, { callTool: async () => fail('nope'), approvals: approvals() });
+    const failed = await handleServerRequest(
+      'item/tool/call',
+      { tool: 't' },
+      { callTool: async () => fail('nope'), approvals: approvals() },
+    );
     expect(failed).toEqual({ contentItems: [{ type: 'inputText', text: wrapToolOutput('Error: nope') }], success: false });
-    const threw = await handleServerRequest('item/tool/call', { tool: 't' }, { callTool: async () => { throw new Error('boom'); }, approvals: approvals() });
+    const threw = await handleServerRequest(
+      'item/tool/call',
+      { tool: 't' },
+      {
+        callTool: async () => {
+          throw new Error('boom');
+        },
+        approvals: approvals(),
+      },
+    );
     expect(threw).toEqual({ contentItems: [{ type: 'inputText', text: wrapToolOutput('Error: boom') }], success: false });
   });
 
   it('hands the turn signal and defaulted arguments to the tool', async () => {
     const seen: Array<[string, unknown, AbortSignal | undefined]> = [];
     const controller = new AbortController();
-    await handleServerRequest('item/tool/call', { tool: 't' }, {
-      callTool: async (name, args, signal) => { seen.push([name, args, signal]); return ok({}); },
-      approvals: approvals(), signal: controller.signal,
-    });
+    await handleServerRequest(
+      'item/tool/call',
+      { tool: 't' },
+      {
+        callTool: async (name, args, signal) => {
+          seen.push([name, args, signal]);
+          return ok({});
+        },
+        approvals: approvals(),
+        signal: controller.signal,
+      },
+    );
     expect(seen).toEqual([['t', {}, controller.signal]]);
   });
 
   it('refuses a method it does not implement', async () => {
-    await expect(handleServerRequest('item/nonsense', {}, { callTool: async () => ok({}), approvals: approvals() }))
-      .rejects.toThrow('Unsupported server request: item/nonsense');
+    await expect(handleServerRequest('item/nonsense', {}, { callTool: async () => ok({}), approvals: approvals() })).rejects.toThrow(
+      'Unsupported server request: item/nonsense',
+    );
   });
 });
 
@@ -185,23 +228,43 @@ describe('handleServerRequest: approvals', () => {
   it('asks the broker about a command and returns the decision', async () => {
     const approvals = new ApprovalBroker();
     const seen: Array<{ id: string; kind: string; detail: string; options: unknown }> = [];
-    approvals.onEvent((e) => { if (e.type === 'approval.requested') seen.push(e.request as never); });
-    const pending = handleServerRequest('item/commandExecution/requestApproval', { command: 'ls -l', cwd: '/tmp', reason: 'why not' }, {
-      callTool: async () => ok({}), approvals,
+    approvals.onEvent((e) => {
+      if (e.type === 'approval.requested') seen.push(e.request);
     });
+    const pending = handleServerRequest(
+      'item/commandExecution/requestApproval',
+      { command: 'ls -l', cwd: '/tmp', reason: 'why not' },
+      {
+        callTool: async () => ok({}),
+        approvals,
+      },
+    );
     approvals.resolve(seen[0].id, 'acceptForSession');
     await expect(pending).resolves.toEqual({ decision: 'acceptForSession' });
     expect(seen[0].kind).toBe('command');
     expect(seen[0].detail).toBe('ls -l\n(cwd: /tmp)\nwhy not');
-    expect(seen[0].options).toEqual([{ id: 'accept', label: 'Allow' }, { id: 'acceptForSession', label: 'Allow for session' }, { id: 'decline', label: 'Deny' }]);
+    expect(seen[0].options).toEqual([
+      { id: 'accept', label: 'Allow' },
+      { id: 'acceptForSession', label: 'Allow for session' },
+      { id: 'decline', label: 'Deny' },
+    ]);
   });
 
   it('declines a file change the user cancelled, and caps the diff it shows', async () => {
     const approvals = new ApprovalBroker();
     const ids: string[] = [];
     const details: string[] = [];
-    approvals.onEvent((e) => { if (e.type === 'approval.requested') { ids.push(e.request.id); details.push(e.request.detail); } });
-    const pending = handleServerRequest('item/fileChange/requestApproval', { changes: { path: 'x'.repeat(5000) } }, { callTool: async () => ok({}), approvals });
+    approvals.onEvent((e) => {
+      if (e.type === 'approval.requested') {
+        ids.push(e.request.id);
+        details.push(e.request.detail);
+      }
+    });
+    const pending = handleServerRequest(
+      'item/fileChange/requestApproval',
+      { changes: { path: 'x'.repeat(5000) } },
+      { callTool: async () => ok({}), approvals },
+    );
     approvals.resolve(ids[0], 'cancel');
     await expect(pending).resolves.toEqual({ decision: 'cancel' });
     expect(details[0].length).toBe(2000);
@@ -214,29 +277,54 @@ describe('handleServerRequest: user input', () => {
 
   it('refuses with a JSON-RPC error when no broker is wired, without reading the params', async () => {
     let logged = false;
-    await expect(handleServerRequest('item/tool/requestUserInput', ask, { ...base, onUserInputParams: () => { logged = true; } }))
-      .rejects.toMatchObject({ code: -32601 });
+    await expect(
+      handleServerRequest('item/tool/requestUserInput', ask, {
+        ...base,
+        onUserInputParams: () => {
+          logged = true;
+        },
+      }),
+    ).rejects.toMatchObject({ code: -32601 });
     expect(logged).toBe(false);
   });
 
   it('refuses a request that carries no question at all', async () => {
-    await expect(handleServerRequest('item/tool/requestUserInput', { questions: [] }, { ...base, userInput: new UserInputBroker() }))
-      .rejects.toMatchObject({ code: -32602 });
+    await expect(
+      handleServerRequest('item/tool/requestUserInput', { questions: [] }, { ...base, userInput: new UserInputBroker() }),
+    ).rejects.toMatchObject({ code: -32602 });
   });
 
   it('answers with what the user typed, in the order the questions were asked', async () => {
     const userInput = new UserInputBroker();
     const ids: string[] = [];
-    userInput.onEvent((e) => { if (e.type === 'input.requested') ids.push(e.request.id); });
-    const pending = handleServerRequest('item/tool/requestUserInput', { questions: [{ id: 'q1', prompt: 'Which?' }, { id: 'q2', prompt: 'How fast?' }] }, { ...base, userInput });
+    userInput.onEvent((e) => {
+      if (e.type === 'input.requested') ids.push(e.request.id);
+    });
+    const pending = handleServerRequest(
+      'item/tool/requestUserInput',
+      {
+        questions: [
+          { id: 'q1', prompt: 'Which?' },
+          { id: 'q2', prompt: 'How fast?' },
+        ],
+      },
+      { ...base, userInput },
+    );
     userInput.resolve(ids[0], { q2: 'fast' });
-    await expect(pending).resolves.toEqual({ answers: [{ id: 'q1', answer: '' }, { id: 'q2', answer: 'fast' }] });
+    await expect(pending).resolves.toEqual({
+      answers: [
+        { id: 'q1', answer: '' },
+        { id: 'q2', answer: 'fast' },
+      ],
+    });
   });
 
   it('reports a skipped question as an error, so the model is not told the user said nothing', async () => {
     const userInput = new UserInputBroker();
     const ids: string[] = [];
-    userInput.onEvent((e) => { if (e.type === 'input.requested') ids.push(e.request.id); });
+    userInput.onEvent((e) => {
+      if (e.type === 'input.requested') ids.push(e.request.id);
+    });
     const pending = handleServerRequest('item/tool/requestUserInput', ask, { ...base, userInput });
     userInput.cancel(ids[0]);
     await expect(pending).rejects.toMatchObject({ code: -32001 });
@@ -253,13 +341,17 @@ describe('fencing tool output', () => {
 
 describe('inputQuestions', () => {
   it('reads ids, prompts, options and secrecy, and drops entries without a prompt', () => {
-    expect(inputQuestions({ questions: [
-      { id: 'a', prompt: 'Which account?' },
-      { question: 'How fast?', choices: [{ label: 'fast' }, 'slow'] },
-      { id: 'p', text: 'Passphrase', sensitive: true },
-      { id: 'nope' },
-      'A bare string question',
-    ] })).toEqual([
+    expect(
+      inputQuestions({
+        questions: [
+          { id: 'a', prompt: 'Which account?' },
+          { question: 'How fast?', choices: [{ label: 'fast' }, 'slow'] },
+          { id: 'p', text: 'Passphrase', sensitive: true },
+          { id: 'nope' },
+          'A bare string question',
+        ],
+      }),
+    ).toEqual([
       { id: 'a', prompt: 'Which account?' },
       { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] },
       { id: 'p', prompt: 'Passphrase', secret: true },
