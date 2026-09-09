@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { PostingMode, Settings } from '../../shared/settings';
 import { confirmPostingMode } from '../posting-mode';
-import type { HistoryStats, ModelInfo } from '../../shared/sidebar-api';
+import type { HistoryStats, ModelInfo, SelectorsInfo } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
 
 export function formatBytes(bytes: number): string {
@@ -19,6 +19,8 @@ export function formatBytes(bytes: number): string {
 export function SettingsPanel({ settings }: { settings: Settings }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [stats, setStats] = useState<HistoryStats | null>(null);
+  const [stylesPath, setStylesPath] = useState<string | null>(null);
+  const [selectors, setSelectors] = useState<SelectorsInfo | null>(null);
   useEffect(() => {
     void window.xpilot
       .listModels()
@@ -30,6 +32,18 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       .historyStats()
       .then(setStats)
       .catch(() => setStats(null));
+  }, []);
+  useEffect(() => {
+    void window.xpilot
+      .pageStylesPath()
+      .then(setStylesPath)
+      .catch(() => setStylesPath(null));
+  }, []);
+  useEffect(() => {
+    void window.xpilot
+      .selectorsInfo()
+      .then(setSelectors)
+      .catch(() => setSelectors(null));
   }, []);
   const codex = settings.agent.codex;
   const current = models.find((m) => m.id === (codex.model ?? models.find((x) => x.isDefault)?.id));
@@ -123,6 +137,44 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           <button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button>
         </div>
       </label>
+      <label>
+        Page styles
+        <div className="row">
+          <code>{stylesPath ?? 'page-styles.css'}</code>
+          <button onClick={() => void window.xpilot.openPageStyles()}>Open file</button>
+          <button
+            onClick={() => {
+              if (confirm('Remove every rule from the page stylesheet?')) void window.xpilot.resetPageStyles();
+            }}
+          >
+            Reset
+          </button>
+        </div>
+      </label>
+      <p className="hint">
+        Plain CSS applied to the X page in this window, and to nothing else. Edit the file or ask the agent to restyle the page; it is
+        re-applied as soon as it is saved.
+      </p>
+      <label>
+        Selectors
+        <div className="row">
+          <code>{selectors?.path ?? 'selectors.json'}</code>
+          <button onClick={() => void window.xpilot.openSelectors()}>Open file</button>
+          <button
+            onClick={() => {
+              if (confirm('Remove every selector override and go back to the ones XPilot ships?'))
+                void window.xpilot.resetSelectors().then(setSelectors);
+            }}
+          >
+            Reset all
+          </button>
+        </div>
+      </label>
+      <p className="hint">
+        {selectors ? `${selectors.overridden} overridden, ${selectors.stale} stale · ` : ''}
+        The CSS selectors XPilot uses to read x.com. Overrides survive app updates and are flagged stale when the selector XPilot ships
+        changes; ask the agent to repair one if a page read stops working.
+      </p>
       <fieldset className="settings-group">
         <legend>History</legend>
         <p className="hint">

@@ -40,9 +40,14 @@ test.afterAll(async () => {
 type Harness = {
   windowCount(): number;
   sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
-  registry: { list(): { name: string }[]; call(n: string, a: object): Promise<{ success: boolean; content?: unknown; error?: string }> };
+  registry: {
+    list(): { name: string }[];
+    call(n: string, a: object, o?: { allowInternal?: boolean }): Promise<{ success: boolean; content?: unknown; error?: string }>;
+  };
   openExternalCalls: string[];
   xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
+  styles: { set(css: string): { ok: boolean }; reset(): void };
+  selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
 };
 const inMain = <T>(fn: (t: Harness) => T | Promise<T>) =>
   app.evaluate(async (_electron, fnSrc: string) => {
@@ -61,9 +66,40 @@ test('x_get_page_state works on a non-x.com page', async () => {
   expect(r).toMatchObject({ success: true, content: { kind: 'other', adapterHealthy: true, title: 'fixture ready' } });
 });
 
+// Before the external-link test: the click there starts a main-frame navigation the policy then
+// cancels, which leaves the bridge waiting for a registration the page never sends again.
+test('a selector override reaches the X view and changes what the adapter reads', async () => {
+  // The fixture's pill is not the markup X ships, so no shipped selector finds it: the only way
+  // x_get_page_state can report it is if the override reached the preload's SEL object.
+  const pillCount = () =>
+    inMain(async (t) => {
+      const r = await t.registry.call('x_get_page_state', { timeoutMs: 0 });
+      return r.success ? ((r.content as { newPostsAvailable?: number }).newPostsAvailable ?? null) : r.error;
+    });
+  // The internal tool xpilot_set_selector checks a selector with, run in the view the user is looking at.
+  expect(await inMain((t) => t.registry.call('x_test_selector', { selector: '#pill' }, { allowInternal: true }))).toMatchObject({
+    success: true,
+    content: { valid: true, count: 1 },
+  });
+  expect(await pillCount()).toBeNull();
+  expect(await inMain((t) => t.selectors.set('newPostsButton', '#pill'))).toMatchObject({ ok: true });
+  await expect.poll(pillCount, { timeout: 15_000 }).toBe(3);
+  await inMain((t) => t.selectors.resetAll());
+  await expect.poll(pillCount, { timeout: 15_000 }).toBeNull();
+});
+
 test('external links are routed to the system browser', async () => {
   await inMain((t) => t.xView.webContents.executeJavaScript("document.getElementById('ext').click()"));
   await expect.poll(() => inMain((t) => t.openExternalCalls)).toContain('https://example.com/outside');
+});
+
+test('page styles reach the visible view and are taken back off', async () => {
+  const colour = () => inMain((t) => t.xView.webContents.executeJavaScript("getComputedStyle(document.getElementById('ext')).color"));
+  const before = await colour();
+  expect(await inMain((t) => t.styles.set('#ext { color: rgb(1, 2, 3) }'))).toMatchObject({ ok: true });
+  await expect.poll(colour, { timeout: 15_000 }).toBe('rgb(1, 2, 3)');
+  await inMain((t) => t.styles.reset());
+  await expect.poll(colour, { timeout: 15_000 }).toBe(before);
 });
 
 test('both preloads are self-contained bundles and the React header renders', async () => {

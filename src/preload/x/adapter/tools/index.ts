@@ -7,6 +7,7 @@ import { scroll } from './scroll';
 import { likeInPage, selectHomeTab } from './engage';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
 import { readWidgets, showNewPosts } from './widgets';
+import { testSelector } from './test-selector';
 
 export const adapterTools: ToolModule<PreloadCtx>[] = [
   pageState,
@@ -20,6 +21,7 @@ export const adapterTools: ToolModule<PreloadCtx>[] = [
   selectHomeTab,
   readWidgets,
   showNewPosts,
+  testSelector,
 ];
 
 const byName = new Map(adapterTools.map((t) => [t.spec.name, t]));

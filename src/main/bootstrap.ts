@@ -2,7 +2,7 @@ import { app, net, BrowserWindow, ipcMain, protocol, screen, session, shell } fr
 import { join } from 'node:path';
 import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import type { BaseWindow, WebContentsView } from 'electron';
+import type { BaseWindow, WebContents, WebContentsView } from 'electron';
 import { createMainWindow } from './window';
 import { IPC } from '../shared/ipc';
 import { fail } from '../shared/tools';
@@ -28,12 +28,16 @@ import { TaskManager } from './tasks/manager';
 import { TaskRunner } from './tasks/runner';
 import { CodexProvider } from './agent/codex/provider';
 import { registerSidebarIpc, registerFocusRelay } from './ipc';
+import { PageStyles, PAGE_STYLES_FILE } from './page-config/styles';
+import { SelectorOverrides, SELECTORS_FILE } from './page-config/selectors';
+import { registerPageConfigIpc } from './page-config/ipc';
 import { xviewTools } from './tools/xview';
 import type { XViewLike } from './tools/xview/context';
 import { DraftStore } from './tools/xview/drafts';
 import { AppStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
+import type { SelectorTest } from './tools/app/context';
 import { exportPdf } from './library/pdf';
 
 /** Tools that create or change scheduled tasks: a scheduled run may not reschedule itself or its peers. */
@@ -88,6 +92,8 @@ export interface XPilotApp {
   bridge: AdapterBridge;
   links: LinkRouter;
   settings: SettingsStore;
+  styles: PageStyles;
+  selectors: SelectorOverrides;
   /** In an e2e run, the links that would have gone to the system browser; null otherwise. */
   openExternalCalls: string[] | null;
   /** Loads the first page and, outside e2e, starts the agent and the task ticker. */
@@ -179,18 +185,44 @@ export function createApp(opts: AppOptions): XPilotApp {
     attachNavigationPolicy(child.webContents, { allowHosts: () => [...allowHosts(), ...POPUP_ONLY_HOSTS], openExternal });
   });
 
+  // The X views, visible and hidden, that may ask main for their page config and are pushed changes.
+  const xContents = new Map<number, WebContents>([[xView.webContents.id, xView.webContents]]);
+  const styles = new PageStyles(join(opts.userData, PAGE_STYLES_FILE));
+  const selectors = new SelectorOverrides(join(opts.userData, SELECTORS_FILE), { appVersion: app.getVersion() });
+  registerPageConfigIpc({
+    ipc: ipcMain,
+    isXContents: (id) => xContents.has(id),
+    isVisibleContents: (id) => id === xView.webContents.id,
+    styles,
+    selectors,
+    xContentsIds: () => [...xContents.keys()],
+    send: (id, channel, payload) => {
+      const contents = xContents.get(id);
+      if (contents && !contents.isDestroyed()) contents.send(channel, payload);
+    },
+  });
+  app.on('will-quit', () => {
+    styles.close();
+    selectors.close();
+  });
+
   const approvals = new ApprovalBroker();
   const userInput = new UserInputBroker();
   const registry = new ToolRegistry();
   const bridge = new AdapterBridge(ipcMain, xView.webContents, { staticSpecs: adapterToolSpecs });
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
+  const trackXContents = (contents: WebContents): void => {
+    xContents.set(contents.id, contents);
+    contents.once('destroyed', () => xContents.delete(contents.id));
+  };
   const backgroundOptions = { preload: preloadX, allowHosts, openExternal };
   const background = new BackgroundXView({
     ...backgroundOptions,
     onContents: (contents) => {
       reviveOnCrash(contents, 'background X view');
       registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store });
+      trackXContents(contents);
     },
   });
   // Scheduled runs get their own hidden window so a run and the user's agent never share one.
@@ -199,6 +231,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     onContents: (contents) => {
       reviveOnCrash(contents, 'scheduled-run X view');
       registerHistoryIpc({ ipc: ipcMain, xContentsId: contents.id, store });
+      trackXContents(contents);
     },
   });
   app.on('will-quit', () => {
@@ -267,6 +300,8 @@ export function createApp(opts: AppOptions): XPilotApp {
   const appCtx = {
     store,
     tasks,
+    styles,
+    selectors,
     libraryDir,
     exportPdf: (url: string, outDir: string) =>
       exportPdf(
@@ -299,7 +334,14 @@ export function createApp(opts: AppOptions): XPilotApp {
       ),
     openPath: (p: string) => shell.openPath(p),
   };
-  registry.addSource(new AppToolSource('app', appTools, appCtx));
+  // Only the interactive registry can try a selector on a page: it is the one with the user's window.
+  const testSelector = async (selector: string): Promise<SelectorTest | null> => {
+    const r = await registry.call('x_test_selector', { selector }, { allowInternal: true });
+    if (!r.success) return null;
+    const content = r.content as { valid?: unknown; count?: unknown };
+    return { valid: content.valid === true, count: typeof content.count === 'number' ? content.count : 0 };
+  };
+  registry.addSource(new AppToolSource('app', appTools, { ...appCtx, testSelector }));
 
   // A scheduled run gets the app tools but never the visible window, nor its adapter tools.
   const taskXview: XViewLike = {
@@ -319,7 +361,7 @@ export function createApp(opts: AppOptions): XPilotApp {
       drafts: new DraftStore(),
     }),
   );
-  taskRegistry.addSource(new AppToolSource('app', toolsForScheduledRuns(appTools), appCtx));
+  taskRegistry.addSource(new AppToolSource('app', toolsForScheduledRuns(appTools), { ...appCtx, testSelector: null }));
   app.on('will-quit', () => store.close());
 
   const agent = new AgentController({
@@ -355,6 +397,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     userInput,
     settings,
     store,
+    styles,
+    selectors,
     libraryDir,
     openPath: appCtx.openPath,
   });
@@ -408,6 +452,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     bridge,
     links,
     settings,
+    styles,
+    selectors,
     openExternalCalls,
     launch,
     shutdown,

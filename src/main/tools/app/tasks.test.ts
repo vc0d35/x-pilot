@@ -2,12 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { scheduleTask, listTasks, updateTask, deleteTask } from './tasks';
 import { TaskManager } from '../../tasks/manager';
 import { AppStore } from '../../history/store';
+import type { PageStyles } from '../../page-config/styles';
+import type { SelectorOverrides } from '../../page-config/selectors';
 import { fail } from '../../../shared/tools';
 
 function ctx() {
   const store = new AppStore(':memory:');
   const tasks = new TaskManager({ store, now: () => new Date('2026-09-08T10:00:00.000Z') });
-  return { store, tasks, libraryDir: () => '/lib', exportPdf: async () => ({ path: '', title: '' }), openPath: async () => '' };
+  const styles = {
+    path: '/profile/page-styles.css',
+    get: () => '',
+    set: () => ({ ok: true, bytes: 0 }),
+    reset: () => {},
+  } as unknown as PageStyles;
+  const selectors = { path: '/profile/selectors.json', list: () => [] } as unknown as SelectorOverrides;
+  return {
+    store,
+    tasks,
+    styles,
+    selectors,
+    testSelector: null,
+    libraryDir: () => '/lib',
+    exportPdf: async () => ({ path: '', title: '' }),
+    openPath: async () => '',
+  };
 }
 
 describe('task tools', () => {

@@ -89,6 +89,14 @@ export const showNewPostsDef = {
   args: z.strictObject({}),
 } satisfies ToolDef;
 
+export const testSelectorDef = {
+  name: 'x_test_selector',
+  description:
+    'Internal: runs a CSS selector against the page in this window and reports whether the browser can parse it and how many elements it matches.',
+  args: z.strictObject({ selector: z.string() }),
+  annotations: { readOnlyHint: true, internal: true },
+} satisfies ToolDef;
+
 /** The order the preload registers them in. */
 export const adapterToolSpecs: ToolSpec[] = [
   pageStateDef,
@@ -102,4 +110,5 @@ export const adapterToolSpecs: ToolSpec[] = [
   selectHomeTabDef,
   readWidgetsDef,
   showNewPostsDef,
+  testSelectorDef,
 ].map(toolSpec);

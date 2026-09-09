@@ -8,6 +8,8 @@ import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
 import type { UserInputBroker } from './user-input';
 import type { SettingsStore } from './settings';
+import type { PageStyles } from './page-config/styles';
+import type { SelectorOverrides } from './page-config/selectors';
 import type { AppStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import { SettingsPatchSchema } from '../shared/settings';
@@ -26,6 +28,8 @@ export interface SidebarIpcDeps {
   settings: SettingsStore;
   store: AppStore;
   tasks: TaskManager;
+  styles: PageStyles;
+  selectors: SelectorOverrides;
   libraryDir: () => string;
   openPath: (p: string) => Promise<string>;
 }
@@ -39,7 +43,21 @@ const ResolveInputSchema = z.object({
 });
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, userInput, settings, store, libraryDir, openPath } = deps;
+  const {
+    sidebar,
+    setSidebarCollapsed,
+    openLink,
+    tasks,
+    agent,
+    approvals,
+    userInput,
+    settings,
+    store,
+    styles,
+    selectors,
+    libraryDir,
+    openPath,
+  } = deps;
   const push = (e: AgentEvent) => {
     if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e);
   };
@@ -190,6 +208,44 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
         throw new Error('That file is not a safe executable: it must be a regular file you or root own that nobody else can write');
       settings.update({ agent: { codex: { binPath: path } } });
       return path;
+    }),
+  );
+  ipcMain.handle(
+    IPC.pageStylesPath,
+    guarded(() => styles.path),
+  );
+  ipcMain.handle(
+    IPC.pageStylesOpen,
+    guarded(async () => {
+      // Reading creates the file if it is not there yet, so the editor never opens on nothing.
+      styles.get();
+      const err = await openPath(styles.path);
+      if (err) throw new Error(err);
+    }),
+  );
+  ipcMain.handle(
+    IPC.pageStylesReset,
+    guarded(() => styles.reset()),
+  );
+  const selectorsInfo = () => ({ path: selectors.path, ...selectors.counts() });
+  ipcMain.handle(
+    IPC.selectorsInfo,
+    guarded(() => selectorsInfo()),
+  );
+  ipcMain.handle(
+    IPC.selectorsOpen,
+    guarded(async () => {
+      // Reading creates the file if it is not there yet, so the editor never opens on nothing.
+      selectors.list();
+      const err = await openPath(selectors.path);
+      if (err) throw new Error(err);
+    }),
+  );
+  ipcMain.handle(
+    IPC.selectorsReset,
+    guarded(() => {
+      selectors.resetAll();
+      return selectorsInfo();
     }),
   );
   ipcMain.handle(

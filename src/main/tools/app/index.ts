@@ -4,6 +4,8 @@ import { searchHistory } from './search-history';
 import { savePdf } from './save-pdf';
 import { listLibrary, openPdf } from './library';
 import { scheduleTask, listTasks, updateTask, deleteTask } from './tasks';
+import { readPageStyles, writePageStyles, resetPageStyles } from './styles';
+import { listSelectors, setSelector, resetSelector } from './selectors';
 export const appTools: ToolModule<AppToolCtx>[] = [
   searchHistory,
   savePdf,
@@ -13,4 +15,10 @@ export const appTools: ToolModule<AppToolCtx>[] = [
   listTasks,
   updateTask,
   deleteTask,
+  readPageStyles,
+  writePageStyles,
+  resetPageStyles,
+  listSelectors,
+  setSelector,
+  resetSelector,
 ];

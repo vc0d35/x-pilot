@@ -7,6 +7,9 @@ export const IPC = {
   focusChanged: 'focus:changed',
   // main -> X preload
   adapterCall: 'adapter:call',
+  pageConfigUpdate: 'page-config:update',
+  // X preload -> main, synchronously, before the page renders
+  pageConfigGet: 'page-config:get',
   // sidebar <-> main
   agentSend: 'agent:send',
   agentInterrupt: 'agent:interrupt',
@@ -36,4 +39,20 @@ export const IPC = {
   tasksUpdate: 'tasks:update',
   tasksDelete: 'tasks:delete',
   tasksRunNow: 'tasks:runNow',
+  pageStylesPath: 'page-styles:path',
+  pageStylesOpen: 'page-styles:open',
+  pageStylesReset: 'page-styles:reset',
+  selectorsInfo: 'selectors:info',
+  selectorsOpen: 'selectors:open',
+  selectorsReset: 'selectors:reset',
 } as const;
+
+/**
+ * What an X view is given at startup and on every change. Anything restricted to the view the user
+ * is looking at is null in the hidden windows, which must see the page as X ships it.
+ */
+export interface PageConfig {
+  styles: string | null;
+  /** The user's selector overrides only; the adapter's shipped defaults stand for every other key. */
+  selectors: Partial<Record<string, string>>;
+}

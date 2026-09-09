@@ -33,6 +33,12 @@ export interface ScheduledTask {
   /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
   webSearch: boolean;
 }
+/** The selector-override file as Settings shows it. */
+export interface SelectorsInfo {
+  path: string;
+  overridden: number;
+  stale: number;
+}
 export interface HistoryStats {
   conversations: number;
   events: number;
@@ -69,6 +75,14 @@ export interface XPilotApi {
   openConversation(threadId: string): Promise<AgentEvent[]>;
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;
+  /** The path of the user-editable stylesheet applied to the X page. */
+  pageStylesPath(): Promise<string>;
+  openPageStyles(): Promise<void>;
+  resetPageStyles(): Promise<void>;
+  /** Where the selector overrides live, and how many there are. */
+  selectorsInfo(): Promise<SelectorsInfo>;
+  openSelectors(): Promise<void>;
+  resetSelectors(): Promise<SelectorsInfo>;
   /** Picks the Codex binary with a file dialog, or clears it; returns the new path. */
   setCodexBinary(action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;

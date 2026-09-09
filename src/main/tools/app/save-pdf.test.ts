@@ -3,6 +3,8 @@ import { savePdf } from './save-pdf';
 import { listLibrary, openPdf } from './library';
 import { AppStore } from '../../history/store';
 import { TaskManager } from '../../tasks/manager';
+import type { PageStyles } from '../../page-config/styles';
+import type { SelectorOverrides } from '../../page-config/selectors';
 import { fail, ok, runTool } from '../../../shared/tools';
 
 function ctx() {
@@ -13,6 +15,14 @@ function ctx() {
     libraryDir: () => '/lib',
     exportPdf: vi.fn(async (url: string, outDir: string) => ({ path: `${outDir}/2026-09-07-alice-title-111.pdf`, title: 'Alice: title' })),
     openPath: vi.fn(async () => ''),
+    styles: {
+      path: '/profile/page-styles.css',
+      get: () => '',
+      set: () => ({ ok: true, bytes: 0 }),
+      reset: () => {},
+    } as unknown as PageStyles,
+    selectors: { path: '/profile/selectors.json', list: () => [] } as unknown as SelectorOverrides,
+    testSelector: null,
   };
 }
 

@@ -50,6 +50,14 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Library panel lists it; Open PDF works; Change folder persists across restart.
 - [ ] Change the library folder, then Open PDF on an item saved under the old folder still works.
 
+## Page styles
+
+- [ ] "Make the timeline text bigger" → the visible X page restyles at once; Settings → Page styles → Open file shows the CSS and editing it in an editor re-applies on save; Reset puts the page back, and a hidden-window read ("read <post url>") is unaffected either way.
+
+## Selectors
+
+- [ ] Settings → Selectors shows the file path and "0 overridden, 0 stale"; "Ask the agent to point the tweetText selector at .nonsense" → xpilot_set_selector reports a match count of 0, the count in Settings goes to 1 overridden, and a timeline read comes back with empty post text; "Reset all" (or xpilot_reset_selector with all) puts the reads back without a restart.
+
 ## Passkeys (needs XPILOT_TEAM_ID + `npm run sign-dev`, see docs/passkeys.md)
 
 - [ ] Startup log shows `passkeys enabled with keychain group …`.
