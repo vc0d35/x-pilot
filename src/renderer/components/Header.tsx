@@ -1,4 +1,5 @@
 import type { AgentStatus } from '../../shared/agent';
+import logo from '../assets/logo.png';
 
 export type Panel = 'chat' | 'library' | 'settings' | 'history';
 
@@ -35,7 +36,7 @@ export function Header(props: { status: AgentStatus; statusMessage?: string; onN
   const toggle = (p: Panel) => props.onPanel(props.panel === p ? 'chat' : p);
   return (
     <header className="header">
-      <div className="brand">XPilot</div>
+      <div className="brand"><img className="brand-mark" src={logo} alt="" width={18} height={18} />XPilot</div>
       <StatusDot status={props.status} message={props.statusMessage} onReconnect={props.onReconnect} />
       <div className="spacer" />
       <button className={`icon${props.panel === 'chat' ? ' icon-active' : ''}`} onClick={() => props.onPanel('chat')} title="Conversation" aria-label="Conversation"><Svg d={ICON.chat} title="Conversation" /></button>

@@ -11,7 +11,8 @@ Goal: someone downloads XPilot on a Mac, opens it, logs into X, and it works. Th
 
 ## Packaging and signing
 
-- [ ] **App icon.** `build/icon.icns` (1024×1024 source), plus the DMG background. The config already points at `build/icon.icns`; dropping the file in is enough. Until then electron-builder warns and uses the default Electron icon.
+- [x] **App icon.** `build/icon.icns` is generated from `build/icon.png` (1024×1024, transparent corners on Apple's icon grid); the same mark ships in the sidebar header as `src/renderer/assets/logo.png`.
+- [ ] **DMG background.** Optional; the DMG currently uses the plain Finder window.
 - [x] **Distributable targets.** `electron-builder.js` (replacing the YAML, so the config can branch on the environment) builds `dmg` and `zip` for `arm64` and `x64`, named `XPilot-<version>-<arch>.<ext>` into `dist/`. `npm run dist` works from a fresh clone: the provisioning profile is included only when `build/embedded.provisionprofile` exists, and `scripts/render-entitlements.mjs` renders without `XPILOT_TEAM_ID` by dropping the keychain group.
 - [ ] **Developer ID signing.** A "Developer ID Application" certificate (paid Apple Developer account). Hardened runtime is already on; review `build/entitlements.mac.plist.in` so it carries only what the app needs. The workflow consumes the certificate as `CSC_LINK` / `CSC_KEY_PASSWORD`; with no `CSC_LINK` it sets `CSC_IDENTITY_AUTO_DISCOVERY=false` and ships unsigned.
 - [ ] **Notarization and stapling.** `mac.notarize` turns itself on when `APPLE_KEYCHAIN_PROFILE`, or `APPLE_ID` + `APPLE_APP_SPECIFIC_PASSWORD` + `APPLE_TEAM_ID`, are in the environment, and stays off otherwise. Still to do: add the secrets and verify a real run with `spctl --assess` and a fresh-user-account launch (the Gatekeeper prompt should be the friendly one).
