@@ -1,6 +1,6 @@
 import { fail, type ToolModule } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
-import { VIEW_ARG, isToolResult, parseView, pickView } from './target';
+import { VIEW_ARG, navigateStep, parseView, withView } from './target';
 
 const POST_PATH = /^\/(?:[^/]+\/status\/\d+|i\/article\/\d+|[^/]+\/article\/\d+)/;
 
@@ -21,15 +21,18 @@ export const readPost: ToolModule<XViewToolCtx> = {
     inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...VIEW_ARG }, required: ['url'], additionalProperties: false },
     annotations: { readOnlyHint: true },
   },
-  execute: async (args, ctx) => {
+  execute: async (args, ctx, signal) => {
     const target = normalizePostUrl(String(args.url ?? ''));
     if (!target) return fail(`Not a post or article URL: ${String(args.url ?? '')}`);
     const requested = parseView(args);
-    const view = await pickView(ctx, requested);
-    if (isToolResult(view)) return view;
-    // A background read always navigates: the visible window's URL is page-controlled (history.pushState),
-    // so "the user is already on it" is not something the DOM gets to claim.
-    if (requested === 'background' || normalizePostUrl(view.currentUrl()) !== target) await view.navigate(target);
-    return view.callPreload('x_read_current_post', {});
+    return withView(ctx, requested, async (view) => {
+      // A background read always navigates: the visible window's URL is page-controlled (history.pushState),
+      // so "the user is already on it" is not something the DOM gets to claim.
+      if (requested === 'background' || normalizePostUrl(view.currentUrl()) !== target) {
+        const stopped = await navigateStep(view, target, signal);
+        if (stopped) return stopped;
+      }
+      return view.callPreload('x_read_current_post', {}, signal);
+    });
   },
 };

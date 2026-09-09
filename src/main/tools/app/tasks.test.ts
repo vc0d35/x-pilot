@@ -21,6 +21,16 @@ describe('task tools', () => {
     expect(await deleteTask.execute({ id: 1 }, c)).toEqual({ success: true, content: { deleted: 1 } });
     expect(((await listTasks.execute({}, c)) as { content: unknown[] }).content).toHaveLength(0);
   });
+  it('carries the web-search flag from the agent, defaulting it off', async () => {
+    const c = ctx();
+    const off = (await scheduleTask.execute({ title: 'A', prompt: 'p', schedule: { every: '1h' } }, c)) as { content: { id: number; webSearch: boolean } };
+    expect(off.content.webSearch).toBe(false);
+    const on = (await scheduleTask.execute({ title: 'B', prompt: 'p', schedule: { every: '1h' }, webSearch: true }, c)) as { content: { webSearch: boolean } };
+    expect(on.content.webSearch).toBe(true);
+    expect(await updateTask.execute({ id: off.content.id, webSearch: true }, c)).toMatchObject({ success: true, content: { webSearch: true } });
+    expect(scheduleTask.spec.inputSchema.properties).toHaveProperty('webSearch');
+    expect(updateTask.spec.inputSchema.properties).toHaveProperty('webSearch');
+  });
   it('turns validation errors into tool failures the agent can act on', async () => {
     const c = ctx();
     expect(await scheduleTask.execute({ title: 'x', prompt: 'y', schedule: { every: '1m' } }, c)).toEqual(fail('"every" must be at least 5 minutes'));

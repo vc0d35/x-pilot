@@ -6,6 +6,7 @@ import { isOpenablePdf } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
 import type { ApprovalBroker } from './approvals';
+import type { UserInputBroker } from './user-input';
 import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
@@ -21,6 +22,7 @@ export interface SidebarIpcDeps {
   openLink(url: string): void;
   agent: AgentController;
   approvals: ApprovalBroker;
+  userInput: UserInputBroker;
   settings: SettingsStore;
   history: HistoryStore;
   tasks: TaskManager;
@@ -30,14 +32,20 @@ export interface SidebarIpcDeps {
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
 const ResolveSchema = z.object({ id: z.string(), decision: z.string() });
+/** Answers by question id; null is a skip. The caps keep a wedged renderer from filling the turn. */
+const ResolveInputSchema = z.object({
+  id: z.string().max(200),
+  answers: z.record(z.string().max(200), z.string().max(4000)).nullable(),
+});
 
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
-  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, settings, history, libraryDir, openPath } = deps;
+  const { sidebar, setSidebarCollapsed, openLink, tasks, agent, approvals, userInput, settings, history, libraryDir, openPath } = deps;
   const push = (e: AgentEvent) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e); };
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
   agent.onEvent((e) => { if (e.type === 'status') lastStatus = e; if (e.type === 'thread') lastThread = e; push(e); });
   approvals.onEvent(push);
+  userInput.onEvent(push);
   sidebar.on('did-finish-load', () => { if (lastThread) push(lastThread); if (lastStatus) push(lastStatus); });
 
   /** Only the sidebar renderer may drive these channels; the X view shares the same ipcMain. */
@@ -51,6 +59,10 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.agentNewThread, guarded(() => agent.start({ resume: false })));
   ipcMain.handle(IPC.agentReconnect, guarded(() => agent.start({ resume: true })));
   ipcMain.handle(IPC.agentResolveApproval, guarded((_e, raw) => { const { id, decision } = ResolveSchema.parse(raw); approvals.resolve(id, decision); }));
+  ipcMain.handle(IPC.agentResolveInput, guarded((_e, raw) => {
+    const { id, answers } = ResolveInputSchema.parse(raw);
+    if (answers) userInput.resolve(id, answers); else userInput.cancel(id);
+  }));
   ipcMain.handle(IPC.agentListModels, guarded(() => agent.listModels()));
   ipcMain.handle(IPC.settingsGet, guarded(() => settings.get()));
   ipcMain.handle(IPC.settingsSet, guarded((_e, raw) => settings.update(SettingsPatchSchema.parse(raw))));
@@ -58,6 +70,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.linkOpen, guarded((_e, raw) => { openLink(z.object({ url: z.string().max(2048) }).parse(raw).url); }));
   ipcMain.handle(IPC.sidebarSetCollapsed, guarded((_e, raw) => { setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed); }));
   ipcMain.handle(IPC.historyClear, guarded(() => history.clear()));
+  ipcMain.handle(IPC.historyStats, guarded(() => history.stats()));
   ipcMain.handle(IPC.conversationsList, guarded(() => agent.listConversations()));
   ipcMain.handle(IPC.conversationsOpen, guarded((_e, raw) => agent.openConversation(z.object({ threadId: z.string() }).parse(raw).threadId)));
   ipcMain.handle(IPC.tasksList, guarded(() => tasks.list()));

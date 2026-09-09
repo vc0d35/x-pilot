@@ -11,7 +11,7 @@ function TasksTab() {
     <div>
       {tasks.map((t) => (
         <div key={t.id} className={`task${t.enabled ? '' : ' task-off'}`}>
-          <div className="task-title">{t.title} <span className="badge">{describeSchedule(t.schedule)}</span>{!t.enabled && <span className="badge">paused</span>}</div>
+          <div className="task-title">{t.title} <span className="badge">{describeSchedule(t.schedule)}</span>{t.webSearch && <span className="badge">web search</span>}{!t.enabled && <span className="badge">paused</span>}</div>
           <div className="task-prompt">{t.prompt}</div>
           <div className="conv-meta">
             {t.lastRunAt ? `last ${new Date(t.lastRunAt).toLocaleString()} · ${t.lastStatus ?? ''}` : 'never run'}

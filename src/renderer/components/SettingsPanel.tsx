@@ -1,10 +1,21 @@
 import { useEffect, useState } from 'react';
 import { confirmPostingMode, type PostingMode, type Settings } from '../../shared/settings';
-import type { ModelInfo } from '../../shared/sidebar-api';
+import type { HistoryStats, ModelInfo } from '../../shared/sidebar-api';
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const units = ['KB', 'MB', 'GB'];
+  let value = bytes / 1024;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit++; }
+  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
 
 export function SettingsPanel({ settings }: { settings: Settings }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
+  const [stats, setStats] = useState<HistoryStats | null>(null);
   useEffect(() => { void window.xpilot.listModels().then(setModels).catch(() => setModels([])); }, []);
+  useEffect(() => { void window.xpilot.historyStats().then(setStats).catch(() => setStats(null)); }, []);
   const codex = settings.agent.codex;
   const current = models.find((m) => m.id === (codex.model ?? models.find((x) => x.isDefault)?.id));
   const set = (patch: Parameters<typeof window.xpilot.setSettings>[0]) => void window.xpilot.setSettings(patch);
@@ -60,6 +71,23 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       <label>Library folder
         <div className="row"><code>{settings.library.dir ?? '~/Documents/X Pilot'}</code><button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button></div>
       </label>
+      <fieldset className="settings-group">
+        <legend>History</legend>
+        <p className="hint">
+          {stats
+            ? `${formatBytes(stats.dbBytes)} · ${stats.conversations} conversations, ${stats.posts} liked posts, ${stats.library} PDFs`
+            : 'Reading the database size…'}
+        </p>
+        <label>Conversations to keep
+          <input type="number" min={10} max={5000} step={10} value={settings.history.keepConversations}
+            onChange={(e) => { const keepConversations = Number(e.target.value); if (keepConversations >= 10 && keepConversations <= 5000) set({ history: { keepConversations } }); }} />
+        </label>
+        <label>Days to keep them
+          <input type="number" min={7} max={3650} value={settings.history.keepDays}
+            onChange={(e) => { const keepDays = Number(e.target.value); if (keepDays >= 7 && keepDays <= 3650) set({ history: { keepDays } }); }} />
+        </label>
+        <p className="hint">Older transcripts are deleted a few times a day. The open conversation and any thread a scheduled task resumes are always kept.</p>
+      </fieldset>
       <label>Liked-post index
         <div className="row"><button className="danger" onClick={() => { if (confirm('Delete the local index of liked posts? PDFs are kept.')) void window.xpilot.clearHistory(); }}>Clear history</button></div>
       </label>

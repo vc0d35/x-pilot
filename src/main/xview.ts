@@ -1,6 +1,6 @@
 import type { WebContents } from 'electron';
 import type { ToolResult } from '../shared/tools';
-import type { AdapterBridge } from './adapter/bridge';
+import { CANCELLED, type AdapterBridge } from './adapter/bridge';
 
 export class XViewController {
   constructor(private readonly contents: WebContents, private readonly bridge: AdapterBridge) {}
@@ -8,7 +8,8 @@ export class XViewController {
   currentUrl(): string { return this.contents.getURL(); }
 
   /** Full navigation of the X view; resolves once the new preload has registered its tools. */
-  async navigate(url: string): Promise<void> {
+  async navigate(url: string, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) throw new Error(CANCELLED);
     this.bridge.markNavigating();
     try {
       await this.contents.loadURL(url);
@@ -16,10 +17,11 @@ export class XViewController {
       // ERR_ABORTED happens when x.com immediately redirects (e.g. /i/... -> /...); the new load still completes.
       if (!(err instanceof Error && /ERR_ABORTED/.test(err.message))) throw err;
     }
-    await this.bridge.waitForReady();
+    if (signal?.aborted) throw new Error(CANCELLED);
+    await this.bridge.waitForReady(undefined, signal);
   }
 
-  callPreload(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-    return this.bridge.call(name, args);
+  callPreload(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    return this.bridge.call(name, args, signal);
   }
 }

@@ -3,14 +3,10 @@ import type { PreloadCtx } from '../../context';
 import { expandShowMore, sleep, waitFor } from '../dom';
 import { extractArticle, extractPost, extractThread, findMainArticle, pageKindFromUrl, postFromArticleUrl } from '../extract';
 import { SEL } from '../selectors';
+import { readCurrentPostSpec } from './specs';
 
 export const readCurrentPost: ToolModule<PreloadCtx> = {
-  spec: {
-    name: 'x_read_current_post',
-    description: 'Reads the post the page is currently showing (must be on a post or article page): full text, the author\'s own thread continuation, and the X Article title/body when present.',
-    inputSchema: { type: 'object', properties: { timeoutMs: { type: 'integer', default: 10000 } }, additionalProperties: false },
-    annotations: { readOnlyHint: true },
-  },
+  spec: readCurrentPostSpec,
   execute: async (args) => {
     const url = location.href;
     const timeoutMs = typeof args.timeoutMs === 'number' ? args.timeoutMs : 10_000;

@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentStatus, ApprovalRequest } from '../shared/agent';
+import type { AgentEvent, AgentStatus, ApprovalRequest, UserInputAnswers, UserInputRequest } from '../shared/agent';
 
 export interface Message { id: string; role: 'user' | 'agent' | 'system'; text: string; streaming?: boolean }
 export interface ToolCall { id: string; name: string; args: unknown; status: 'running' | 'done' | 'failed'; output?: string }
@@ -7,7 +7,8 @@ export type Entry =
   | { kind: 'message'; message: Message }
   | { kind: 'thinking'; id: string; steps: ThinkingStep[] }
   | { kind: 'tool'; call: ToolCall }
-  | { kind: 'approval'; request: ApprovalRequest; decision?: string };
+  | { kind: 'approval'; request: ApprovalRequest; decision?: string }
+  | { kind: 'input'; request: UserInputRequest; resolved?: { answers: UserInputAnswers } };
 
 export interface State {
   status: AgentStatus;
@@ -15,7 +16,7 @@ export interface State {
   threadId: string | null;
   running: boolean;
   entries: Entry[];
-  activity: { activity: 'thinking' | 'tool' | 'writing'; detail?: string } | null;
+  activity: { activity: 'thinking' | 'tool' | 'writing' | 'waiting'; detail?: string } | null;
   /** Id of the turn in progress; thinking events are folded into one entry per turn. */
   turnId: string | null;
   /** Last thing that went wrong (a failed status or a failed turn); cleared when the agent restarts. */
@@ -89,6 +90,10 @@ export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
       return { ...state, entries: [...state.entries, { kind: 'approval', request: e.request }] };
     case 'approval.resolved':
       return { ...state, entries: state.entries.map((en) => (en.kind === 'approval' && en.request.id === e.id ? { ...en, decision: e.decision } : en)) };
+    case 'input.requested':
+      return { ...state, entries: [...state.entries, { kind: 'input', request: e.request }] };
+    case 'input.resolved':
+      return { ...state, entries: state.entries.map((en) => (en.kind === 'input' && en.request.id === e.id ? { ...en, resolved: { answers: e.answers } } : en)) };
     default:
       return state;
   }

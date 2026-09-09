@@ -43,9 +43,14 @@ rl.on('line', async (line) => {
       return;
     }
     if (userText.includes('ASK_INPUT')) {
-      out({ jsonrpc: '2.0', id: 'req-input', method: 'item/tool/requestUserInput', params: { threadId, turnId, itemId: 'ask-1', questions: [{ id: 'q1', prompt: 'Which account?' }] } });
+      out({ jsonrpc: '2.0', id: 'req-input', method: 'item/tool/requestUserInput', params: { threadId, turnId, itemId: 'ask-1', questions: [
+        { id: 'q1', prompt: 'Which account?' },
+        { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] },
+      ] } });
       return;
     }
+    // A wedged model: the turn starts and then nothing else ever arrives.
+    if (userText.includes('SILENT')) return;
     if (userText.includes('APPROVE')) {
       out({ jsonrpc: '2.0', id: 'req-approve', method: 'item/commandExecution/requestApproval', params: { threadId, turnId, itemId: 'cmd-1', command: 'ls', cwd: '/tmp' } });
       return; // continues in the response branch below

@@ -37,7 +37,7 @@ describe('x_like_post', () => {
   it('falls back to the hidden window otherwise, without moving the visible one', async () => {
     const { c } = ctx('auto', [], ['222']);
     expect(await likePost.execute({ url: 'https://x.com/bob/status/222' }, c)).toEqual(ok({ postId: '222', liked: true, changed: true }));
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/222');
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/222', undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
   it('asks first in confirm mode and treats a decline as final', async () => {
@@ -81,8 +81,8 @@ describe('x_read_timeline', () => {
   it('scrolls the hidden window through the chosen tab and dedupes posts', async () => {
     const { c } = ctx('auto', [], []);
     const r = (await readTimeline.execute({ tab: 'following', pages: 3 }, c)) as { success: true; content: { tab: string; posts: { id: string }[] } };
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/home');
-    expect(c.bg.callPreload).toHaveBeenCalledWith('x_select_home_tab', { label: 'Following' });
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/home', undefined);
+    expect(c.bg.callPreload).toHaveBeenCalledWith('x_select_home_tab', { label: 'Following' }, undefined);
     expect(r.content.tab).toBe('following');
     expect(r.content.posts.map((p) => p.id)).toEqual(['a', 'b', 'c']);
     expect(c.xview.navigate).not.toHaveBeenCalled();

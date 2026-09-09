@@ -35,7 +35,7 @@ describe('x_compose_post', () => {
   it('opens the intent url and returns a draft from the composer text', async () => {
     const { c } = ctx('confirm');
     const r = (await composePost.execute({ text: 'hello world' }, c)) as { success: true; content: { draftId: string; preview: string; target: string } };
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/intent/post?text=hello%20world');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/intent/post?text=hello%20world', undefined);
     expect(r.content.preview).toBe('hello world');
     expect(r.content.target).toBe('new post');
     expect(c.drafts.get(r.content.draftId)?.text).toBe('hello world');
@@ -43,7 +43,7 @@ describe('x_compose_post', () => {
   it('types the text when the intent url did not prefill', async () => {
     const { c } = ctx('confirm', '');
     const r = (await composePost.execute({ text: 'x' }, c)) as { content: { preview: string } };
-    expect(c.xview.callPreload).toHaveBeenCalledWith('x_type_in_composer', { text: 'x' });
+    expect(c.xview.callPreload).toHaveBeenCalledWith('x_type_in_composer', { text: 'x' }, undefined);
     expect(r.content.preview).toBe('typed');
   });
   it('rejects an invalid replyToUrl', async () => {
@@ -72,7 +72,7 @@ describe('x_submit_post', () => {
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'cancel');
     expect(await p).toEqual(ok({ posted: false, status: 'cancelled_by_user', url: null, reason: 'The user reviewed the draft and chose not to post it; the draft was discarded.' }));
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/home');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/home', undefined);
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything());
   });
   it('re-reads the composer after approval and refuses to post when the text changed', async () => {

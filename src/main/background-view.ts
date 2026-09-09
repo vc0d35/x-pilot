@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain, type WebContents } from 'electron';
 import { attachNavigationPolicy } from './navigation/policy';
 import { AdapterBridge } from './adapter/bridge';
 import { XViewController } from './xview';
+import { adapterToolSpecs } from '../preload/x/adapter/tools/specs';
 
 /**
  * A hidden window on the `persist:x` session running the same X preload as the visible view, so
@@ -24,7 +25,7 @@ export class BackgroundXView {
     attachNavigationPolicy(contents, { allowHosts: this.opts.allowHosts, openExternal: () => { /* background reads never open external pages */ } });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
     this.opts.onContents?.(contents);
-    const bridge = new AdapterBridge(ipcMain, contents);
+    const bridge = new AdapterBridge(ipcMain, contents, { staticSpecs: adapterToolSpecs });
     this.win = win;
     this.controller = new XViewController(contents, bridge);
     win.on('closed', () => { this.win = null; this.controller = null; });

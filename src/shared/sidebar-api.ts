@@ -1,4 +1,4 @@
-import type { AgentEvent } from './agent';
+import type { AgentEvent, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
 
@@ -8,7 +8,10 @@ export type TaskSchedule = { every: string } | { cron: string };
 export interface ScheduledTask {
   id: number; title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; threadId: string | null;
   enabled: boolean; createdAt: string; lastRunAt: string | null; lastStatus: string | null; nextRunAt: string | null;
+  /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
+  webSearch: boolean;
 }
+export interface HistoryStats { conversations: number; events: number; posts: number; library: number; tasks: number; dbBytes: number }
 export interface LibraryItem { id: number; url: string; path: string; title: string; savedAt: string }
 
 export interface XPilotApi {
@@ -17,6 +20,8 @@ export interface XPilotApi {
   newThread(): Promise<void>;
   reconnect(): Promise<void>;
   resolveApproval(id: string, decision: string): Promise<void>;
+  /** Answers a clarifying question from the agent; null answers mean the user skipped it. */
+  resolveInput(id: string, answers: UserInputAnswers): Promise<void>;
   listModels(): Promise<ModelInfo[]>;
   getSettings(): Promise<Settings>;
   setSettings(patch: DeepPartial<Settings>): Promise<Settings>;
@@ -32,6 +37,7 @@ export interface XPilotApi {
   /** Picks the Codex binary with a file dialog, or clears it; returns the new path. */
   setCodexBinary(action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;
+  historyStats(): Promise<HistoryStats>;
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
   /** Opens a link the user clicked in the sidebar: x.com in the main window, anything else in the browser. */
   openLink(url: string): Promise<void>;

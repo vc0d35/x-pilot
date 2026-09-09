@@ -40,7 +40,7 @@ describe('x_navigate', () => {
   it('navigates within the allowlist and returns page state', async () => {
     const c = ctx();
     const r = await navigate.execute({ url: 'https://x.com/explore' }, c);
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/explore');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/explore', undefined);
     expect(r).toEqual(ok({ url: 'https://x.com/explore', kind: 'post', title: 't', adapterHealthy: true }));
   });
   it('refuses off-allowlist urls', async () => {
@@ -56,7 +56,7 @@ describe('x_navigate', () => {
     }
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(await navigate.execute({ url: 'https://x.com/alice/status/1' }, c)).toMatchObject({ success: true });
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/alice/status/1');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/alice/status/1', undefined);
   });
 });
 
@@ -64,8 +64,8 @@ describe('x_search', () => {
   it('opens the search page and reads results', async () => {
     const c = ctx();
     await search.execute({ query: 'rust lang' }, c);
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/search?q=rust%20lang&src=typed_query&f=top');
-    expect(c.bg.callPreload).toHaveBeenCalledWith('x_read_visible_posts', { limit: 20 });
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/search?q=rust%20lang&src=typed_query&f=top', undefined);
+    expect(c.bg.callPreload).toHaveBeenCalledWith('x_read_visible_posts', { limit: 20 }, undefined);
   });
 });
 
@@ -75,10 +75,10 @@ describe('x_read_post', () => {
     await readPost.execute({ url: 'https://x.com/alice/status/111?s=1' }, c);
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(c.xview.callPreload).not.toHaveBeenCalled();
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/alice/status/111');
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/alice/status/111', undefined);
     await readPost.execute({ url: 'https://x.com/bob/status/2' }, c);
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2');
-    expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {});
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
+    expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
   it('rejects non-post urls', async () => {
@@ -90,29 +90,29 @@ describe('background vs visible routing', () => {
   it('x_search runs in the background window by default and in the visible one on request', async () => {
     const c = ctx();
     const r = await search.execute({ query: 'dhh' }, c);
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/search?q=dhh&src=typed_query&f=top');
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/search?q=dhh&src=typed_query&f=top', undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(r).toEqual(ok([{ id: 'r1' }]));
     await search.execute({ query: 'dhh', view: 'visible' }, c);
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/search?q=dhh&src=typed_query&f=top');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/search?q=dhh&src=typed_query&f=top', undefined);
   });
 
   it('x_read_post reads a different post in the background and never moves the visible window', async () => {
     const c = ctx('https://x.com/alice/status/111');
     await readPost.execute({ url: 'https://x.com/bob/status/2' }, c);
-    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2');
-    expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {});
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
+    expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
 
   it('x_read_post uses the visible window only when asked, and stays put when it is already there', async () => {
     const c = ctx('https://x.com/alice/status/111');
     await readPost.execute({ url: 'https://x.com/alice/status/111', view: 'visible' }, c);
-    expect(c.xview.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {});
+    expect(c.xview.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(c.bg.navigate).not.toHaveBeenCalled();
     await readPost.execute({ url: 'https://x.com/bob/status/2', view: 'visible' }, c);
-    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2');
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
   });
 
   it('background failures surface as tool failures', async () => {

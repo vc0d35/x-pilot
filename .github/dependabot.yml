@@ -1,0 +1,23 @@
+version: 2
+
+updates:
+  # Actions are pinned by commit SHA; Dependabot rewrites the SHA and the version comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  # One pull request a week for the routine bumps; a major (a new Electron line, say) still comes
+  # on its own so it can be built and launched before it is taken.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]

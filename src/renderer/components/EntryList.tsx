@@ -3,6 +3,8 @@ import type { Entry, State, ToolCall } from '../state';
 import { collapseBlankLines } from '../display-safety';
 import { groupEntries } from '../grouping';
 import { Markdown } from './Markdown';
+import { UserInputCard } from './UserInputCard';
+import type { UserInputAnswers } from '../../shared/agent';
 
 function ToolRow({ call }: { call: ToolCall }) {
   const [open, setOpen] = useState(false);
@@ -66,10 +68,16 @@ function ThinkingRow({ steps }: { steps: { id: string; text: string }[] }) {
   );
 }
 
-export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; activity: State['activity']; onResolve: (id: string, d: string) => void }) {
+export function EntryList({ entries, activity, onResolve, onResolveInput }: {
+  entries: Entry[]; activity: State['activity'];
+  onResolve: (id: string, d: string) => void;
+  onResolveInput: (id: string, answers: UserInputAnswers) => void;
+}) {
   const endRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<HTMLDivElement>(null);
-  const pendingId = entries.filter((en): en is Extract<Entry, { kind: 'approval' }> => en.kind === 'approval' && !en.decision).at(-1)?.request.id;
+  const pendingId = entries
+    .filter((en): en is Extract<Entry, { kind: 'approval' | 'input' }> => (en.kind === 'approval' && !en.decision) || (en.kind === 'input' && !en.resolved))
+    .at(-1)?.request.id;
   // A pending card must never be scrolled past: an approval the user cannot see is one they cannot judge.
   useEffect(() => {
     if (pendingRef.current) pendingRef.current.scrollIntoView({ block: 'nearest' });
@@ -84,6 +92,7 @@ export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; 
         }
         if (en.kind === 'tools') return <ToolGroup key={en.key} calls={en.calls} />;
         if (en.kind === 'thinking') return <ThinkingRow key={'th-' + en.id} steps={en.steps} />;
+        if (en.kind === 'input') return <UserInputCard key={en.request.id} request={en.request} resolved={en.resolved} onResolve={onResolveInput} cardRef={en.request.id === pendingId ? pendingRef : undefined} />;
         return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} cardRef={en.request.id === pendingId ? pendingRef : undefined} />;
       })}
       <ActivityLine activity={activity} />
@@ -101,6 +110,7 @@ const TOOL_VERBS: Record<string, string> = {
 export function activityLabel(a: NonNullable<State['activity']>): string {
   if (a.activity === 'thinking') return 'thinking';
   if (a.activity === 'writing') return 'writing';
+  if (a.activity === 'waiting') return 'still waiting for Codex';
   return TOOL_VERBS[a.detail ?? ''] ?? `running ${a.detail ?? 'a tool'}`;
 }
 

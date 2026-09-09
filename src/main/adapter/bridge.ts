@@ -12,30 +12,43 @@ export interface BridgeTarget {
   on?(event: 'did-start-navigation', listener: (details: NavigationDetails) => void): unknown;
 }
 
+export interface BridgeOptions {
+  /** The adapter's tool surface as a compile-time constant, from `src/preload/x/adapter/tools/specs`. */
+  staticSpecs?: ToolSpec[];
+  timeoutMs?: number;
+  log?(message: string): void;
+}
+
 const RegisterSchema = z.object({ tools: z.array(ToolSpecSchema) });
 const ResultSchema = z.object({ callId: z.string(), result: ToolResultSchema });
 
 const CALL_READY_TIMEOUT_MS = 10_000;
+export const CANCELLED = 'Cancelled';
 
 export class AdapterBridge implements ToolSource {
   readonly id = 'adapter';
   /**
-   * Last-known specs, kept across navigations: the preload registers a compile-time constant tool
-   * set, so the list stays true while a page reloads. Agent threads snapshot the tool list once, at
-   * thread start, and would otherwise start with no adapter tools when they open mid-navigation.
+   * The tool list is a constant of this build, not something the page teaches us: an agent thread
+   * snapshots the tools once at thread start, and would otherwise start with none when it opens
+   * before the X view has loaded. Registration only says the preload is there to answer calls.
    */
-  private tools: ToolSpec[] = [];
+  private readonly specs: ToolSpec[];
+  private readonly timeoutMs: number;
+  private readonly log: (message: string) => void;
   private ready = false;
   private readonly pending = new Map<string, { resolve: (r: ToolResult) => void; timer: NodeJS.Timeout }>();
   private readonly listeners = new Set<() => void>();
   private readyWaiters: Array<() => void> = [];
 
-  constructor(ipc: BridgeIpc, private readonly target: BridgeTarget, private readonly timeoutMs = 20_000) {
+  constructor(ipc: BridgeIpc, private readonly target: BridgeTarget, opts: BridgeOptions = {}) {
+    this.specs = opts.staticSpecs ?? [];
+    this.timeoutMs = opts.timeoutMs ?? 20_000;
+    this.log = opts.log ?? ((m) => console.warn(m));
     ipc.on(IPC.adapterRegister, (event, payload) => {
       if (event.sender.id !== target.id) return;
       const parsed = RegisterSchema.safeParse(payload);
       if (!parsed.success) return;
-      this.tools = parsed.data.tools;
+      this.verify(parsed.data.tools);
       this.ready = true;
       for (const cb of this.listeners) cb();
       for (const w of this.readyWaiters.splice(0)) w();
@@ -57,18 +70,28 @@ export class AdapterBridge implements ToolSource {
     });
   }
 
-  list(): ToolSpec[] { return this.tools; }
+  list(): ToolSpec[] { return this.specs; }
 
-  async call(name: string, args: Record<string, unknown>): Promise<ToolResult> {
-    if (!this.tools.some((t) => t.name === name)) return fail(`Unknown tool: ${name}`);
+  async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+    if (!this.specs.some((t) => t.name === name)) return fail(`Unknown tool: ${name}`);
+    if (signal?.aborted) return fail(CANCELLED);
     if (!this.ready) {
-      const back = await this.waitForReady(CALL_READY_TIMEOUT_MS).then(() => true, () => false);
+      const back = await this.waitForReady(CALL_READY_TIMEOUT_MS, signal).then(() => true, () => false);
+      if (signal?.aborted) return fail(CANCELLED);
       if (!back) return fail(`The page is still loading and did not register its tools; ${name} was not run. Retry once it has loaded.`);
     }
     const callId = randomUUID();
     return new Promise<ToolResult>((resolve) => {
-      const timer = setTimeout(() => { this.pending.delete(callId); resolve(fail(`Adapter tool call timed out: ${name}`)); }, this.timeoutMs);
-      this.pending.set(callId, { resolve, timer });
+      const settle = (r: ToolResult) => {
+        if (!this.pending.delete(callId)) return;
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
+        resolve(r);
+      };
+      const timer = setTimeout(() => settle(fail(`Adapter tool call timed out: ${name}`)), this.timeoutMs);
+      const onAbort = () => settle(fail(CANCELLED));
+      this.pending.set(callId, { resolve: (r) => { signal?.removeEventListener('abort', onAbort); resolve(r); }, timer });
+      signal?.addEventListener('abort', onAbort, { once: true });
       this.target.send(IPC.adapterCall, { callId, name, args });
     });
   }
@@ -78,16 +101,29 @@ export class AdapterBridge implements ToolSource {
   /** Call right before loading a new URL so waitForReady waits for the fresh preload. */
   markNavigating(): void { this.ready = false; }
 
-  waitForReady(timeoutMs = 15_000): Promise<void> {
+  waitForReady(timeoutMs = 15_000, signal?: AbortSignal): Promise<void> {
     if (this.ready) return Promise.resolve();
+    if (signal?.aborted) return Promise.reject(new Error(CANCELLED));
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const stop = (fn: () => void) => {
+        clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         this.readyWaiters = this.readyWaiters.filter((w) => w !== done);
-        reject(new Error('X view did not register tools in time'));
-      }, timeoutMs);
-      const done = () => { clearTimeout(timer); resolve(); };
+        fn();
+      };
+      const timer = setTimeout(() => stop(() => reject(new Error('X view did not register tools in time'))), timeoutMs);
+      const onAbort = () => stop(() => reject(new Error(CANCELLED)));
+      const done = () => stop(resolve);
+      signal?.addEventListener('abort', onAbort, { once: true });
       this.readyWaiters.push(done);
     });
+  }
+
+  /** The preload registers the same constants; a mismatch means the two halves shipped out of step. */
+  private verify(registered: ToolSpec[]): void {
+    const want = [...this.specs.map((t) => t.name)].sort().join(',');
+    const got = [...registered.map((t) => t.name)].sort().join(',');
+    if (want !== got) this.log(`[xpilot] adapter tools differ from the compiled specs: page has [${got}], main expects [${want}]`);
   }
 
   private rejectPending(message: string): void {

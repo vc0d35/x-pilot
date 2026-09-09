@@ -4,8 +4,9 @@ import type { DraftStore } from './drafts';
 
 export interface XViewLike {
   currentUrl(): string;
-  navigate(url: string): Promise<void>;
-  callPreload(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+  /** Rejects with `Cancelled` when the signal aborts, instead of finishing the load. */
+  navigate(url: string, signal?: AbortSignal): Promise<void>;
+  callPreload(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>;
 }
 export type ViewTarget = 'background' | 'visible';
 

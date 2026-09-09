@@ -1,3 +1,58 @@
+import { extname, resolve, sep } from 'node:path';
+
+/**
+ * The sidebar is served from a privileged custom scheme instead of `file:` inside the asar, so the
+ * packaged build can ship with the `grantFileProtocolExtraPrivileges` fuse off. A standard, secure
+ * scheme also gives the renderer a real origin, which is what the production CSP's `'self'` means.
+ */
+export const APP_SCHEME = 'xpilot';
+export const SIDEBAR_HOST = 'sidebar';
+export const SIDEBAR_URL = `${APP_SCHEME}://${SIDEBAR_HOST}/index.html`;
+
+const CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/vnd.microsoft.icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.txt': 'text/plain; charset=utf-8',
+};
+
+export function contentTypeFor(path: string): string {
+  return CONTENT_TYPES[extname(path).toLowerCase()] ?? 'application/octet-stream';
+}
+
+/**
+ * Maps `xpilot://sidebar/<path>` onto a file under `root`. Everything else — another host, another
+ * scheme, an escape through `..` or an encoded separator — returns null, so the handler serving this
+ * can only ever read the built renderer directory.
+ */
+export function resolveSidebarAsset(root: string, requestUrl: string): { path: string; contentType: string } | null {
+  let url: URL;
+  try { url = new URL(requestUrl); } catch { return null; }
+  if (url.protocol !== `${APP_SCHEME}:` || url.hostname !== SIDEBAR_HOST) return null;
+  let pathname: string;
+  try { pathname = decodeURIComponent(url.pathname); } catch { return null; }
+  if (pathname.includes('\0')) return null;
+  if (pathname === '' || pathname.endsWith('/')) pathname += 'index.html';
+  const base = resolve(root);
+  const file = resolve(base, `.${pathname.startsWith('/') ? '' : '/'}${pathname}`);
+  if (file !== base && !file.startsWith(base + sep)) return null;
+  return { path: file, contentType: contentTypeFor(file) };
+}
+
 export interface HardenableContents {
   setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void;
   on(event: 'will-attach-webview', listener: (e: { preventDefault(): void }) => void): unknown;

@@ -32,6 +32,18 @@ describe('sidebar reducer', () => {
     expect(s.entries[1]).toEqual({ kind: 'approval', request: expect.objectContaining({ id: 'a1' }), decision: 'post' });
   });
 
+  it('shows a question from the agent and marks it once it is answered or skipped', () => {
+    const request = { id: 'in-1', questions: [{ id: 'q1', prompt: 'Which account?' }] };
+    const asked = run([{ type: 'input.requested', request }]);
+    expect(asked.entries).toEqual([{ kind: 'input', request }]);
+    const answered = run([{ type: 'input.resolved', id: 'in-1', answers: { q1: '@me' } }], asked);
+    expect(answered.entries).toEqual([{ kind: 'input', request, resolved: { answers: { q1: '@me' } } }]);
+    const skipped = run([{ type: 'input.resolved', id: 'in-1', answers: null }], asked);
+    expect(skipped.entries).toEqual([{ kind: 'input', request, resolved: { answers: null } }]);
+    // An answer for a question that is not on screen changes nothing.
+    expect(run([{ type: 'input.resolved', id: 'other', answers: null }], asked).entries).toEqual(asked.entries);
+  });
+
   it('records status, thread and failed turns', () => {
     const s = run([
       { type: 'status', status: 'error', message: 'codex missing' },

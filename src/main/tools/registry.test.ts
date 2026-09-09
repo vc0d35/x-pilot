@@ -67,6 +67,24 @@ describe('ToolRegistry', () => {
     await expect(reg.call('x_click_post_button', {}, { allowInternal: true })).resolves.toEqual(ok('x_click_post_button'));
   });
 
+  it('forwards the abort signal to the module and to plain sources', async () => {
+    const reg = new ToolRegistry();
+    const seen: Array<AbortSignal | undefined> = [];
+    const watcher: ToolModule<void> = {
+      spec: { name: 'xpilot_watch', description: 'w', inputSchema: {} },
+      execute: async (_args, _ctx, signal) => { seen.push(signal); return ok(signal?.aborted ?? null); },
+    };
+    reg.addSource(new AppToolSource('app', [watcher], undefined));
+    const src: ToolSource = { id: 's', list: () => [{ name: 'x_direct', description: 'd', inputSchema: {} }], call: async (_n, _a, signal) => { seen.push(signal); return ok(null); } };
+    reg.addSource(src);
+    const ac = new AbortController();
+    ac.abort();
+    await expect(reg.call('xpilot_watch', {}, { signal: ac.signal })).resolves.toEqual(ok(true));
+    await reg.call('x_direct', {}, { signal: ac.signal });
+    await reg.call('xpilot_watch', {});
+    expect(seen).toEqual([ac.signal, ac.signal, undefined]);
+  });
+
   it('propagates change notifications from sources', () => {
     const reg = new ToolRegistry();
     let notify = () => {};

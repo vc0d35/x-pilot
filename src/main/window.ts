@@ -6,8 +6,8 @@ import type { WindowBounds } from './window-state';
 export interface MainWindowOptions {
   preloadX: string;
   preloadSidebar: string;
-  rendererUrl?: string;   // dev server
-  rendererFile?: string;  // built index.html
+  /** The dev server in `npm run dev`, otherwise the built renderer on the app's own scheme. */
+  sidebarUrl: string;
   bounds: WindowBounds;
   onBoundsChanged(bounds: WindowBounds): void;
 }
@@ -60,8 +60,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   layout();
   win.on('resize', () => { layout(); scheduleSave(); });
 
-  if (opts.rendererUrl) void sidebar.webContents.loadURL(opts.rendererUrl);
-  else if (opts.rendererFile) void sidebar.webContents.loadFile(opts.rendererFile);
+  void sidebar.webContents.loadURL(opts.sidebarUrl);
 
   return { win, xView, sidebar, setSidebarCollapsed: (c) => { collapsed = c; layout(); if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.sidebarCollapsed, c); }, isSidebarCollapsed: () => collapsed };
 }

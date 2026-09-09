@@ -13,22 +13,22 @@ export class TaskManager {
 
   private now(): Date { return this.deps.now ? this.deps.now() : new Date(); }
 
-  create(input: { title: string; prompt: string; schedule: Partial<Record<'every' | 'cron', unknown>>; threadMode?: 'resume' | 'new' }): ScheduledTask {
+  create(input: { title: string; prompt: string; schedule: Partial<Record<'every' | 'cron', unknown>>; threadMode?: 'resume' | 'new'; webSearch?: boolean }): ScheduledTask {
     const title = input.title?.trim();
     const prompt = input.prompt?.trim();
     if (!title) throw new Error('title is required');
     if (!prompt) throw new Error('prompt is required');
     const schedule = parseSchedule(input.schedule);
-    return this.deps.store.createTask({ title, prompt, schedule, threadMode: input.threadMode === 'new' ? 'new' : 'resume', nextRunAt: nextRun(schedule, this.now()).toISOString() });
+    return this.deps.store.createTask({ title, prompt, schedule, threadMode: input.threadMode === 'new' ? 'new' : 'resume', webSearch: input.webSearch === true, nextRunAt: nextRun(schedule, this.now()).toISOString() });
   }
 
-  update(id: number, patch: { title?: string; prompt?: string; schedule?: Partial<Record<'every' | 'cron', unknown>>; threadMode?: 'resume' | 'new'; enabled?: boolean }): ScheduledTask {
+  update(id: number, patch: { title?: string; prompt?: string; schedule?: Partial<Record<'every' | 'cron', unknown>>; threadMode?: 'resume' | 'new'; enabled?: boolean; webSearch?: boolean }): ScheduledTask {
     const current = this.deps.store.getTask(id);
     if (!current) throw new Error(`No task with id ${id}`);
     const schedule: TaskSchedule | undefined = patch.schedule ? parseSchedule(patch.schedule) : undefined;
     const reenabled = patch.enabled === true && !current.enabled;
     const nextRunAt = schedule || reenabled ? nextRun(schedule ?? current.schedule, this.now()).toISOString() : undefined;
-    this.deps.store.updateTask(id, { title: patch.title?.trim() || undefined, prompt: patch.prompt?.trim() || undefined, schedule, threadMode: patch.threadMode, enabled: patch.enabled, nextRunAt });
+    this.deps.store.updateTask(id, { title: patch.title?.trim() || undefined, prompt: patch.prompt?.trim() || undefined, schedule, threadMode: patch.threadMode, enabled: patch.enabled, webSearch: patch.webSearch, nextRunAt });
     return this.deps.store.getTask(id)!;
   }
 

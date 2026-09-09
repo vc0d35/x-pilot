@@ -16,7 +16,7 @@ function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type:
   return p;
 }
 
-const task = { id: 3, title: 'Weather', prompt: 'Post the Amsterdam weather', schedule: { every: '1h' as const }, threadMode: 'resume' as const, threadId: null, enabled: true, createdAt: '', lastRunAt: null, lastStatus: null, nextRunAt: null };
+const task = { id: 3, title: 'Weather', prompt: 'Post the Amsterdam weather', schedule: { every: '1h' as const }, threadMode: 'resume' as const, threadId: null, enabled: true, createdAt: '', lastRunAt: null, lastStatus: null, nextRunAt: null, webSearch: false };
 
 describe('TaskRunner', () => {
   it('runs on a fresh provider, records a task conversation, stores the thread for resume, and stops', async () => {
@@ -52,6 +52,21 @@ describe('TaskRunner', () => {
     const recorded = store.listEvents('t-long').find((e) => e.type === 'tool.completed') as { output: string };
     expect(recorded.output.length).toBeLessThan(5000);
     expect(recorded.output.endsWith('… [truncated]')).toBe(true);
+  });
+
+  it('disables web search for a run unless the task asked for it', async () => {
+    const store = new HistoryStore(':memory:');
+    const p = fakeProvider();
+    const settings = { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'live' as const };
+    const r = new TaskRunner({ createProvider: () => p, tools: () => [], settings: () => settings, workspaceDir: '/tmp', store, timeoutMs: 2000 });
+    await r.run(task);
+    expect(p.starts[0].settings.webSearch).toBe('disabled');
+    await r.run({ ...task, webSearch: true });
+    expect(p.starts[1].settings.webSearch).toBe('live');
+    // The user's own setting still wins: a task cannot turn search on when it is off globally.
+    const r2 = new TaskRunner({ createProvider: () => p, tools: () => [], settings: () => ({ ...settings, webSearch: 'disabled' as const }), workspaceDir: '/tmp', store, timeoutMs: 2000 });
+    await r2.run({ ...task, webSearch: true });
+    expect(p.starts[2].settings.webSearch).toBe('disabled');
   });
 
   it('reports failed turns and times out hung runs', async () => {

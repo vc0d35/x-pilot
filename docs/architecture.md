@@ -25,11 +25,11 @@ XPilot is a desktop shell around x.com with an agent next to it. The agent runs 
 └──────────────────────┘   └────────────────────────┘   └───────────────────────┘
 ```
 
-One `BaseWindow` hosts two `WebContentsView`s: the X page on the left and our React sidebar on the right. `computeLayout` in `src/main/layout.ts` is a pure function of window size and collapsed state; when the sidebar is collapsed it shrinks to a floating handle so the page gets the whole width.
+One `BaseWindow` hosts two `WebContentsView`s: the X page on the left and our React sidebar on the right, served from a private `xpilot://sidebar` scheme so no `file://` privileges are needed. `computeLayout` in `src/main/layout.ts` is a pure function of window size and collapsed state; when the sidebar is collapsed it shrinks to a floating handle so the page gets the whole width.
 
 Reads that must not disturb the user go to a hidden `BrowserWindow` on the same `persist:x` session, so it shares the login. The interactive agent and scheduled task runs each get their own hidden window so they never race each other for the page. PDF export uses a third short-lived hidden window.
 
-Every Codex conversation is a separate `codex app-server` child process speaking newline-delimited JSON-RPC over stdio. The interactive sidebar owns one long-lived process; each scheduled task run spawns its own and tears it down afterwards.
+Every Codex conversation is a separate `codex app-server` child process speaking newline-delimited JSON-RPC over stdio. The interactive sidebar owns one long-lived process; each scheduled task run spawns its own and tears it down afterwards. A detached watchdog process kills a child whose parent died. Each turn carries an abort signal: Stop cancels in-flight tool calls, and a turn with no activity for five minutes is failed with a visible hint.
 
 ## 2. The X adapter
 
@@ -38,7 +38,7 @@ X offers nothing for agents, so we make the page agent-drivable ourselves. The X
 - **Registers adapter tools** with the main process over IPC. Each tool is a `ToolModule` with a JSON-schema `spec` and an `execute` that reads or drives the DOM. Reads use extractors in `src/preload/x/adapter/extract.ts` and `widgets.ts`; every CSS selector lives in `selectors.ts`, so an X markup change is a one-file fix. Fixtures captured from the real site in `tests/fixtures/` keep the extractors honest.
 - **Tracks focus.** `computeFocus` derives what the user is looking at (a post page, a reply dialog, the posts on screen) and sends a `PageContext` to the sidebar, which prepends it to the next message as a hint. Liking a post is captured with a pointerdown snapshot so the liked-posts index only ever stores posts the user chose to like.
 
-Health is reported rather than assumed: `x_get_page_state` waits for X's layout to render and returns `adapterHealthy: false` when it cannot find it, and the agent is told to say so.
+Health is reported rather than assumed: `x_get_page_state` waits for X's layout to render and returns per-extractor `health` signals (layout, posts, article) plus `adapterHealthy` as their conjunction, and the agent is told to say so when it is false.
 
 ## 3. The tool layer
 
@@ -53,6 +53,8 @@ Health is reported rather than assumed: `x_get_page_state` waits for X's layout 
 Two rules shape the xview tools. First, **background by default**: reading, searching and verifying happen in a hidden window, and only tools that the user's intent clearly points at the screen (`x_navigate`, `x_scroll`, `view: "visible"`) move the visible view. Second, **user decisions are final**: anything that writes to the account goes through the `ApprovalBroker` when the relevant setting says confirm, and a decline comes back as `status: 'cancelled_by_user'`, not as an error, so the model does not retry.
 
 Scheduled runs get a second registry whose "visible view" is a stub that refuses, so an unattended run can never hijack the user's screen.
+
+Tools that navigate a view and then read it run under a per-view lock, so parallel calls from the model never interleave on one hidden window. The preload's tool specs are compile-time constants shared with main, so the tool list, and the thread fingerprint derived from it, never depend on page timing.
 
 Adding a tool is one file: export a `ToolModule` and add it to the source's list. Adding a source is a class with `list()` and `call()`.
 
@@ -69,7 +71,7 @@ Scheduled tasks live in the `tasks` table with a schedule (`every` or cron), a p
 ## 5. Data
 
 - `settings.json` holds user settings, window bounds and the live thread id, validated with zod and written atomically.
-- `history.sqlite` (Node's built-in `node:sqlite`, WAL mode, versioned migrations) holds liked posts with an FTS5 index, the PDF library, conversations and their event logs, and scheduled tasks. Tool output in the transcript is capped so the log stays small.
+- `history.sqlite` (Node's built-in `node:sqlite`, WAL mode, versioned migrations) holds liked posts with an FTS5 index, the PDF library, conversations and their event logs, and scheduled tasks. Tool output in the transcript is capped, and a retention policy in Settings prunes old conversations; the database size is shown there.
 - PDFs go to `~/Documents/X Pilot` by default; paths are contained to that folder before anything is written or opened.
 - Nothing about the X account leaves Electron's session store. Codex authentication belongs to the Codex CLI.
 
@@ -114,7 +116,6 @@ The sidebar is a small React app. State is a reducer over `AgentEvent`s, so a li
 
 ## 9. Known limitations
 
-- Tool calls are not cancelled when a turn is interrupted; a navigation already in flight completes.
-- The interactive agent's own tools are not serialised against each other if the model issues parallel calls that both navigate the hidden window.
-- Adapter tool specs are learned from the preload at registration rather than being compile-time constants in main, so the first thread waits for the page to load.
+- A hard kill of the app relies on a detached watchdog to stop the Codex child; a normal quit stops it directly.
+- Web search inside Codex cannot be gated per query; interactive runs show every query in the sidebar, and scheduled tasks have web search off unless the task asks for it.
 - macOS only for now; passkeys need a signed build with a provisioning profile (see `docs/passkeys.md`).

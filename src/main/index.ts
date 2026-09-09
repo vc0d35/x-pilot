@@ -1,6 +1,7 @@
-import { app, net, BrowserWindow, dialog, ipcMain, screen, session, shell } from 'electron';
+import { app, net, BrowserWindow, dialog, ipcMain, protocol, screen, session, shell } from 'electron';
 import { join } from 'node:path';
 import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { createMainWindow } from './window';
 import { IPC } from '../shared/ipc';
 import { fail } from '../shared/tools';
@@ -9,14 +10,16 @@ import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { installPermissionHandlers } from './permissions';
-import { hardenWebContents, reviveOnCrash, hasBannedSwitch } from './hardening';
+import { APP_SCHEME, SIDEBAR_URL, hardenWebContents, resolveSidebarAsset, reviveOnCrash, hasBannedSwitch } from './hardening';
 import { createLinkRouter, rateLimit } from './links';
 import { SettingsStore } from './settings';
 import { AppToolSource, ToolRegistry } from './tools/registry';
 import { AdapterBridge } from './adapter/bridge';
+import { adapterToolSpecs } from '../preload/x/adapter/tools/specs';
 import { XViewController } from './xview';
 import { BackgroundXView } from './background-view';
 import { ApprovalBroker } from './approvals';
+import { UserInputBroker } from './user-input';
 import { AgentController } from './agent/controller';
 import { TaskManager } from './tasks/manager';
 import { TaskRunner } from './tasks/runner';
@@ -44,6 +47,12 @@ if (!DEV && hasBannedSwitch(process.argv.slice(1))) process.exit(1);
 
 app.enableSandbox();
 
+// Has to happen before the app is ready. A standard, secure scheme gives the sidebar a real origin,
+// so the production CSP's 'self' covers its bundle and fonts and the file: fuse can stay off.
+protocol.registerSchemesAsPrivileged([
+  { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+]);
+
 if (!app.requestSingleInstanceLock()) app.quit();
 else void start();
 
@@ -57,6 +66,17 @@ async function start(): Promise<void> {
     restrictDir(userData);
     const workspaceDir = join(userData, 'workspace');
     restrictDir(workspaceDir);
+
+    const rendererDir = join(__dirname, '../renderer');
+    protocol.handle(APP_SCHEME, async (request) => {
+      const asset = resolveSidebarAsset(rendererDir, request.url);
+      if (!asset) return new Response('Not found', { status: 404 });
+      try {
+        return new Response(await readFile(asset.path), { headers: { 'content-type': asset.contentType } });
+      } catch {
+        return new Response('Not found', { status: 404 });
+      }
+    });
 
     const settings = new SettingsStore(join(userData, 'settings.json'));
     const allowHosts = () => settings.get().navigation.allowHosts;
@@ -76,8 +96,7 @@ async function start(): Promise<void> {
       onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
       preloadX: join(__dirname, '../preload/x.js'),
       preloadSidebar: join(__dirname, '../preload/sidebar.js'),
-      rendererUrl: DEV ? process.env.ELECTRON_RENDERER_URL : undefined,
-      rendererFile: join(__dirname, '../renderer/index.html'),
+      sidebarUrl: (DEV && process.env.ELECTRON_RENDERER_URL) || SIDEBAR_URL,
     });
     app.on('second-instance', () => { if (win.isMinimized()) win.restore(); win.focus(); });
     configureTouchIdPasskeys({ app, onSelectAccount: (l) => { xView.webContents.session.on('select-webauthn-account', l); }, group: resolveKeychainGroup(process.env, process.platform, { packaged: app.isPackaged, bundleTeamId: bundleTeamId() }) });
@@ -95,8 +114,9 @@ async function start(): Promise<void> {
     });
 
     const approvals = new ApprovalBroker();
+    const userInput = new UserInputBroker();
     const registry = new ToolRegistry();
-    const bridge = new AdapterBridge(ipcMain, xView.webContents);
+    const bridge = new AdapterBridge(ipcMain, xView.webContents, { staticSpecs: adapterToolSpecs });
     registry.addSource(bridge);
     const xview = new XViewController(xView.webContents, bridge);
     const backgroundOptions = { preload: join(__dirname, '../preload/x.js'), allowHosts, openExternal };
@@ -118,9 +138,22 @@ async function start(): Promise<void> {
     // holds the same rows as the database, so all three are narrowed once they exist.
     for (const suffix of ['', '-wal', '-shm']) restrictFile(`${historyPath}${suffix}`);
     registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
+    // The transcript grows with every turn, so retention runs once at startup and then on a slow
+    // timer: an app left open for weeks prunes itself without waiting for a restart.
+    const applyRetention = () => {
+      try {
+        const removed = history.applyRetention({ ...settings.get().history, keepThreadId: settings.get().threadId });
+        if (removed.conversations) console.log(`[xpilot] history retention: removed ${removed.conversations} conversations (${removed.events} events)`);
+      } catch (err) {
+        console.warn('[xpilot] history retention failed', err);
+      }
+    };
+    applyRetention();
+    const retentionTimer = setInterval(applyRetention, 6 * 60 * 60 * 1000);
+    app.on('will-quit', () => clearInterval(retentionTimer));
     const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), 'X Pilot');
     const taskRunner = new TaskRunner({
-      createProvider: () => new CodexProvider({ callTool: (n, a) => taskRegistry.call(n, a), approvals, clientVersion: app.getVersion() }),
+      createProvider: () => new CodexProvider({ callTool: (n, a, signal) => taskRegistry.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
       tools: () => taskRegistry.list(), settings: () => settings.get().agent.codex, workspaceDir, store: history, log: (m) => console.log(m),
     });
     const tasks = new TaskManager({ store: history, run: (t) => taskRunner.run(t).then((status) => { if (taskRunner.lastThreadId) history.updateTask(t.id, { threadId: taskRunner.lastThreadId }); return status; }) });
@@ -156,7 +189,7 @@ async function start(): Promise<void> {
     const agent = new AgentController({
       history,
       registry, settings, workspaceDir,
-      createProvider: () => new CodexProvider({ callTool: (n, a) => registry.call(n, a), approvals, clientVersion: app.getVersion() }),
+      createProvider: () => new CodexProvider({ callTool: (n, a, signal) => registry.call(n, a, { signal }), approvals, userInput, clientVersion: app.getVersion() }),
     });
     installAppMenu({
       openExternal,
@@ -167,7 +200,7 @@ async function start(): Promise<void> {
         sidebar.webContents.send(IPC.sidebarFocusInput);
       },
     });
-    registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink: links.openLink, tasks, agent, approvals, settings, history, libraryDir, openPath: appCtx.openPath });
+    registerSidebarIpc({ sidebar: sidebar.webContents, setSidebarCollapsed, openLink: links.openLink, tasks, agent, approvals, userInput, settings, history, libraryDir, openPath: appCtx.openPath });
     registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
 
     let ticker: NodeJS.Timeout | null = null;
@@ -177,6 +210,7 @@ async function start(): Promise<void> {
       quitting = true;
       e.preventDefault();
       if (ticker) clearInterval(ticker);
+      clearInterval(retentionTimer);
       const deadline = new Promise((resolve) => setTimeout(resolve, 5_000));
       void Promise.race([Promise.all([agent.stop(), tasks.idle()]), deadline])
         .catch((err) => console.warn('[xpilot] shutdown failed', err))

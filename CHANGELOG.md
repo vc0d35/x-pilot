@@ -19,6 +19,8 @@ All notable changes to XPilot are documented here. The format follows
 - Help menu with "Check for Updates…" and "Report an Issue…".
 - `npm run dist` produces DMG and ZIP artifacts for arm64 and x64; tag pushes publish a draft GitHub release.
 
+- Stop cancels in-flight tool calls; turns idle for five minutes are failed with a hint. Codex clarifying questions appear as a card in the sidebar. Transcript retention and database size in Settings. Scheduled tasks opt in to web search per task. Page health reported per extractor.
+
 ### Security
 
 - Renderer sandbox and a production CSP for the x.com view, hardened `webContents` defaults, and dev-only switches gated on unpackaged builds.

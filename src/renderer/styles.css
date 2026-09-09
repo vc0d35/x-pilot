@@ -91,6 +91,8 @@ code { font: inherit; }
 .approval-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; max-height: 17.4em; overflow: auto; }
 .approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .approval-decision { color: var(--muted); font-size: 12px; }
+.input-question { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.input-prompt { overflow-wrap: anywhere; }
 
 .composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }
 .composer-row { display: flex; gap: 8px; align-items: flex-end; }
@@ -102,6 +104,9 @@ code { font: inherit; }
 .lib-error { color: var(--fg); font-size: 12px; margin-top: 6px; }
 .settings label { display: block; margin-bottom: 12px; }
 .settings select { display: block; width: 100%; margin-top: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 6px; }
+.settings input[type="number"] { display: block; width: 100%; margin-top: 4px; background: var(--raised); border: 1px solid var(--line); border-radius: 4px; padding: 6px; }
+.settings-group { border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin: 0 0 12px; }
+.settings-group legend { padding: 0 4px; font-weight: 700; }
 .row { display: flex; gap: 8px; align-items: center; margin-top: 4px; }
 .danger { border-color: var(--fg); }
 .hint { color: var(--muted); font-size: 12px; }

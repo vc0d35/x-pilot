@@ -1,7 +1,7 @@
 import { fail, ok, type ToolModule } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
-import { VIEW_ARG, isToolResult, parseView, pickView } from './target';
+import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
 
 const LIKE_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const EXCERPT_MAX = 280;
@@ -32,22 +32,27 @@ export const likePost: ToolModule<XViewToolCtx> = {
     inputSchema: { type: 'object', properties: { url: { type: 'string' }, action: { type: 'string', enum: ['like', 'unlike'] } }, required: ['url'], additionalProperties: false },
     annotations: { destructiveHint: true },
   },
-  execute: async (args, ctx) => {
+  execute: async (args, ctx, signal) => {
     const target = normalizePostUrl(String(args.url ?? ''));
     if (!target || !target.includes('/status/')) return fail(`Not a post URL: ${String(args.url ?? '')}`);
     const action = args.action === 'unlike' ? 'unlike' : 'like';
+    const stopped = cancelled(signal);
+    if (stopped) return stopped;
     if (ctx.likesMode() === 'confirm') {
       const detail = await likeDetail(ctx, target);
       const decision = await ctx.approvals.request({ kind: 'post', title: `${action === 'like' ? 'Like' : 'Unlike'} this post?`, detail, options: [{ id: 'yes', label: action === 'like' ? 'Like' : 'Unlike' }, { id: 'cancel', label: 'Cancel' }] }, LIKE_CONFIRM_TIMEOUT_MS);
       if (decision !== 'yes') return ok({ done: false, status: decision === 'timeout' ? 'confirmation_timed_out' : 'cancelled_by_user', reason: 'The user chose not to do this; their decision is final.' });
+      const afterApproval = cancelled(signal);
+      if (afterApproval) return afterApproval;
     }
     // Prefer the visible window when the post is already rendered there.
-    const onScreen = await ctx.xview.callPreload('x_like_in_page', { url: target, action });
+    const onScreen = await ctx.xview.callPreload('x_like_in_page', { url: target, action }, signal);
     if (onScreen.success) return onScreen;
-    const view = await pickView(ctx, 'background');
-    if (isToolResult(view)) return view;
-    await view.navigate(target);
-    return view.callPreload('x_like_in_page', { url: target, action });
+    return withView(ctx, 'background', async (view) => {
+      const gone = await navigateStep(view, target, signal);
+      if (gone) return gone;
+      return view.callPreload('x_like_in_page', { url: target, action }, signal);
+    });
   },
 };
 
@@ -58,20 +63,23 @@ export const readTimeline: ToolModule<XViewToolCtx> = {
     inputSchema: { type: 'object', properties: { tab: { type: 'string', enum: ['for_you', 'following'] }, pages: { type: 'integer', minimum: 1, maximum: 10, description: 'How many screens to scroll (default 3)' }, ...VIEW_ARG }, additionalProperties: false },
     annotations: { readOnlyHint: true },
   },
-  execute: async (args, ctx) => {
-    const view = await pickView(ctx, parseView(args));
-    if (isToolResult(view)) return view;
+  execute: async (args, ctx, signal) => withView(ctx, parseView(args), async (view) => {
     const pages = Math.min(10, Math.max(1, typeof args.pages === 'number' ? args.pages : 3));
-    await view.navigate('https://x.com/home');
-    const tab = await view.callPreload('x_select_home_tab', { label: args.tab === 'following' ? 'Following' : 'For you' });
+    const stopped = await navigateStep(view, 'https://x.com/home', signal);
+    if (stopped) return stopped;
+    const tab = await view.callPreload('x_select_home_tab', { label: args.tab === 'following' ? 'Following' : 'For you' }, signal);
     if (!tab.success) return tab;
     const seen = new Map<string, unknown>();
     for (let i = 0; i < pages; i++) {
-      const r = await view.callPreload('x_read_visible_posts', { limit: 100 });
+      const gone = cancelled(signal);
+      if (gone) return gone;
+      const r = await view.callPreload('x_read_visible_posts', { limit: 100 }, signal);
       if (!r.success) return r;
       for (const p of r.content as Array<{ id: string }>) seen.set(p.id, p);
-      if (i < pages - 1) await view.callPreload('x_scroll', { direction: 'down', amount: 2000 });
+      const stoppedMidRoll = cancelled(signal);
+      if (stoppedMidRoll) return stoppedMidRoll;
+      if (i < pages - 1) await view.callPreload('x_scroll', { direction: 'down', amount: 2000 }, signal);
     }
     return ok({ tab: args.tab === 'following' ? 'following' : 'for_you', pages, posts: [...seen.values()] });
-  },
+  }),
 };

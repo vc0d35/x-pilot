@@ -1,8 +1,9 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { AgentEvent } from '../../../shared/agent';
+import type { AgentEvent, UserInputQuestion } from '../../../shared/agent';
 import type { PageContext } from '../../../shared/page';
 import type { ToolResult, ToolSpec } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
+import type { UserInputBroker } from '../../user-input';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
 import { JsonRpcError, JsonRpcStdio } from './jsonrpc';
@@ -11,16 +12,33 @@ import { fence, fenceBlock, fenceLine, pageContentBlock } from '../fence';
 
 export { fence } from '../fence';
 
+/** The little we need of the detached watchdog child: enough for a test double. */
+export interface DetachedProcess { pid?: number; unref(): void; kill(signal?: NodeJS.Signals): boolean }
+
 export interface CodexProviderDeps {
-  callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
+  /** `signal` aborts when the turn is interrupted, times out, or ends: long tools should honour it. */
+  callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>;
   approvals: ApprovalBroker;
+  /** Clarifying questions from the agent; without it `requestUserInput` is refused as before. */
+  userInput?: UserInputBroker;
   spawn?: () => ChildProcessWithoutNullStreams;
+  /** Spawns the orphan watchdog; defaults to a detached `/bin/sh`. */
+  spawnDetached?: (command: string, args: string[], options: { detached: true; stdio: 'ignore' }) => DetachedProcess;
   /** Resolves the `codex` executable; defaults to the settings path plus auto-detection. */
   binary?: (explicit: string | null) => Promise<string | null>;
   clientVersion?: string;
+  /** Silence that fails the turn; the warning comes at `turnIdleWarnMs` before it. */
+  turnIdleTimeoutMs?: number;
+  turnIdleWarnMs?: number;
 }
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
+const USER_INPUT_TIMEOUT_MS = 5 * 60 * 1000;
+const TURN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
+const TURN_IDLE_WARN_MS = 2 * 60 * 1000;
+const WATCHDOG_SHELL = '/bin/sh';
+const QUESTION_MAX = 24;
+const OPTION_MAX = 32;
 const STDERR_KEEP = 8 * 1024;
 const STDERR_IN_MESSAGE = 400;
 const SIGKILL_AFTER_MS = 2000;
@@ -86,6 +104,13 @@ export class CodexProvider implements AgentProvider {
   /** agentMessage items with phase 'commentary' are the model's narration, shown as thinking. */
   private readonly commentaryIds = new Set<string>();
   private lastActivity: string | null = null;
+  /** Aborted when the turn is interrupted, times out, or ends; handed to every tool call of that turn. */
+  private turnAbort: AbortController | null = null;
+  private idleTimer: NodeJS.Timeout | null = null;
+  private idleWarned = false;
+  /** Detached `sh` that kills the codex child if this process dies without stopping it. */
+  private watchdog: DetachedProcess | null = null;
+  private loggedInputParams = false;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
 
   constructor(private readonly deps: CodexProviderDeps) {}
@@ -109,6 +134,7 @@ export class CodexProvider implements AgentProvider {
     this.emit({ type: 'status', status: 'starting' });
     const proc = this.deps.spawn ? this.deps.spawn() : await this.spawnCodex(opts);
     this.proc = proc;
+    this.startWatchdog(proc.pid);
     // An unread stderr pipe fills at 64 KB and blocks the child forever, so always drain it.
     proc.stderr.setEncoding('utf8');
     proc.stderr.on('data', (chunk: string) => { this.stderrTail = (this.stderrTail + chunk).slice(-STDERR_KEEP); });
@@ -129,6 +155,7 @@ export class CodexProvider implements AgentProvider {
       if (!this.stopping) {
         console.error(`[xpilot] ${message}`);
         this.deps.approvals.cancelAll('cancel');
+        this.deps.userInput?.cancelAll();
       }
       this.emit({ type: 'status', status: 'disconnected', message });
     };
@@ -197,7 +224,9 @@ export class CodexProvider implements AgentProvider {
     this.lastContextKey = contextKey(pageContext) ?? this.lastContextKey;
     this.emit({ type: 'user.message', text });
     this.running = true;
+    this.turnAbort = new AbortController();
     this.emit({ type: 'status', status: 'running' });
+    this.touchIdle();
     try {
       await this.rpc.request('turn/start', { threadId: this.threadId, input: [{ type: 'text', text: full, text_elements: [] }] });
     } catch (err) {
@@ -208,8 +237,14 @@ export class CodexProvider implements AgentProvider {
   }
 
   async interrupt(): Promise<void> {
-    if (!this.rpc || !this.threadId || !this.turnId) return;
-    await this.rpc.request('turn/interrupt', { threadId: this.threadId, turnId: this.turnId });
+    const controller = this.turnAbort;
+    try {
+      if (!this.rpc || !this.threadId || !this.turnId) return;
+      await this.rpc.request('turn/interrupt', { threadId: this.threadId, turnId: this.turnId });
+    } finally {
+      // Codex stops generating; the tool call already in flight only stops if we abort it.
+      controller?.abort(new Error('The turn was interrupted'));
+    }
   }
 
   async listModels(): Promise<ModelInfo[]> {
@@ -220,6 +255,8 @@ export class CodexProvider implements AgentProvider {
 
   async stop(): Promise<void> {
     this.stopping = true;
+    this.clearIdle();
+    this.abortTurn(new Error('The agent was stopped'));
     const proc = this.proc;
     if (proc && proc.exitCode === null) {
       // Wait for the process to actually exit so a following thread/resume never races its rollout writes.
@@ -231,8 +268,80 @@ export class CodexProvider implements AgentProvider {
       proc.kill();
       await exited;
     }
+    this.stopWatchdog();
     this.proc = null;
     this.rpc = null;
+  }
+
+  /**
+   * A SIGKILL of Electron leaves `codex app-server` running: it does not exit when its stdin
+   * closes. This detached shell outlives us and reaps it. `stop()` kills it on the way out.
+   */
+  private startWatchdog(childPid: number | undefined): void {
+    if (!childPid || process.platform === 'win32') return;
+    const spawnDetached = this.deps.spawnDetached ?? ((command, args, options) => nodeSpawn(command, args, options));
+    try {
+      const dog = spawnDetached(WATCHDOG_SHELL, watchdogArgs(process.pid, childPid), { detached: true, stdio: 'ignore' });
+      dog.unref();
+      this.watchdog = dog;
+    } catch (err) {
+      console.warn(`[xpilot] could not start the codex watchdog: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private stopWatchdog(): void {
+    const dog = this.watchdog;
+    this.watchdog = null;
+    try { dog?.kill('SIGTERM'); } catch { /* it may have exited on its own already */ }
+  }
+
+  private abortTurn(reason: Error): void {
+    const controller = this.turnAbort;
+    this.turnAbort = null;
+    controller?.abort(reason);
+  }
+
+  private idleLimits(): { warn: number; timeout: number } {
+    const timeout = this.deps.turnIdleTimeoutMs ?? TURN_IDLE_TIMEOUT_MS;
+    const warn = Math.min(this.deps.turnIdleWarnMs ?? TURN_IDLE_WARN_MS, timeout);
+    return { warn, timeout };
+  }
+
+  /** Anything from the server counts as progress; the countdown starts again from here. */
+  private touchIdle(): void {
+    if (!this.running) return;
+    this.idleWarned = false;
+    this.armIdle();
+  }
+
+  private armIdle(): void {
+    this.clearIdle();
+    const { warn, timeout } = this.idleLimits();
+    const timer = setTimeout(() => this.onIdle(), this.idleWarned ? Math.max(timeout - warn, 0) : warn);
+    timer.unref?.();
+    this.idleTimer = timer;
+  }
+
+  private clearIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer);
+    this.idleTimer = null;
+  }
+
+  private onIdle(): void {
+    if (!this.running) return;
+    if (!this.idleWarned) {
+      this.idleWarned = true;
+      this.emit({ type: 'activity', activity: 'waiting' });
+      this.armIdle();
+      return;
+    }
+    // The process is left alone on purpose: it may still be alive and useful, and killing it
+    // would throw away the thread. The user decides with Stop / Reconnect.
+    const { timeout } = this.idleLimits();
+    const message = `Codex sent nothing for ${Math.round(timeout / 1000)}s, so XPilot stopped waiting for this turn.`;
+    this.abortTurn(new Error(message));
+    this.finishTurn('failed', message);
+    this.emit({ type: 'status', status: 'error', message: `${message} Press Stop, then Reconnect, if the agent stays stuck.` });
   }
 
   private emit(e: AgentEvent): void {
@@ -248,11 +357,14 @@ export class CodexProvider implements AgentProvider {
   private finishTurn(status: 'completed' | 'interrupted' | 'failed', error?: string, turnId?: string): void {
     if (!this.running) return;
     this.running = false;
+    this.clearIdle();
+    this.abortTurn(new Error(`The turn ${status}`));
     this.emit({ type: 'turn.completed', turnId: turnId ?? this.turnId ?? '', status, error });
     if (!this.disconnected) this.emit({ type: 'status', status: 'ready' });
   }
 
   private onNotification(method: string, params: unknown): void {
+    this.touchIdle();
     const p = params as Record<string, unknown>;
     switch (method) {
       case 'turn/started': {
@@ -319,11 +431,12 @@ export class CodexProvider implements AgentProvider {
   }
 
   private async onServerRequest(method: string, params: unknown): Promise<unknown> {
+    this.touchIdle();
     const p = params as Record<string, unknown>;
     switch (method) {
       case 'item/tool/call': {
         try {
-          const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {});
+          const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {}, this.turnAbort?.signal);
           const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
           return { contentItems: [{ type: 'inputText', text: wrapToolOutput(text) }], success: result.success };
         } catch (err) {
@@ -349,13 +462,73 @@ export class CodexProvider implements AgentProvider {
         }, APPROVAL_TIMEOUT_MS);
         return { decision: decision === 'timeout' ? 'decline' : decision };
       }
-      case 'item/tool/requestUserInput':
+      case 'item/tool/requestUserInput': {
+        const broker = this.deps.userInput;
         // An empty answer set reads as "the user said nothing"; an error tells the model the channel is closed.
-        throw new JsonRpcError(-32601, 'requestUserInput is not supported by XPilot yet');
+        if (!broker) throw new JsonRpcError(-32601, 'requestUserInput is not supported by XPilot yet');
+        if (!this.loggedInputParams && process.env.NODE_ENV !== 'production') {
+          this.loggedInputParams = true;
+          console.log(`[xpilot] requestUserInput params: ${JSON.stringify(params).slice(0, 2000)}`);
+        }
+        const questions = inputQuestions(p);
+        if (questions.length === 0) throw new JsonRpcError(-32602, 'requestUserInput carried no questions');
+        const answers = await broker.request({ questions }, USER_INPUT_TIMEOUT_MS);
+        if (!answers) throw new JsonRpcError(-32001, 'The user did not answer the question');
+        return { answers: questions.map((q) => ({ id: q.id, answer: answers[q.id] ?? '' })) };
+      }
       default:
         throw new Error(`Unsupported server request: ${method}`);
     }
   }
+}
+
+/**
+ * A detached `sh` that polls both pids: while Electron and the codex child are both alive it
+ * sleeps; once Electron is gone - a SIGKILL leaves codex running, since it does not exit when
+ * its stdin closes - it sends the child SIGTERM. The pids are arguments, never interpolated
+ * into the script.
+ */
+export function watchdogArgs(parentPid: number, childPid: number): string[] {
+  return ['-c', 'while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 2; done; kill -TERM "$2" 2>/dev/null', 'sh', String(parentPid), String(childPid)];
+}
+
+function firstString(...values: unknown[]): string | null {
+  for (const v of values) if (typeof v === 'string' && v.trim()) return v;
+  return null;
+}
+
+function questionOptions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const out: string[] = [];
+  for (const o of value.slice(0, OPTION_MAX)) {
+    const label = typeof o === 'string' ? o : firstString((o as Record<string, unknown>)?.label, (o as Record<string, unknown>)?.value, (o as Record<string, unknown>)?.id);
+    if (label) out.push(label);
+  }
+  return out;
+}
+
+/**
+ * The app-server protocol ships no types with the CLI, and the field names vary between codex
+ * versions, so read the questions defensively: anything that carries a prompt is one question,
+ * and everything else about it is optional.
+ */
+export function inputQuestions(params: Record<string, unknown>): UserInputQuestion[] {
+  const raw = Array.isArray(params.questions) ? params.questions : [];
+  const out: UserInputQuestion[] = [];
+  raw.slice(0, QUESTION_MAX).forEach((entry, i) => {
+    const q = (entry !== null && typeof entry === 'object' ? entry : { prompt: entry }) as Record<string, unknown>;
+    const prompt = firstString(q.prompt, q.question, q.text, q.label, q.title);
+    if (!prompt) return;
+    const options = questionOptions(q.options ?? q.choices);
+    const secret = q.secret === true || q.sensitive === true || q.password === true;
+    out.push({
+      id: firstString(q.id, q.questionId, q.key) ?? `q${i + 1}`,
+      prompt,
+      ...(options.length > 0 ? { options } : {}),
+      ...(secret ? { secret: true } : {}),
+    });
+  });
+  return out;
 }
 
 function webSearchQueries(item: Record<string, unknown>): string[] {

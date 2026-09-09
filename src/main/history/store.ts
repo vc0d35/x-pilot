@@ -1,9 +1,18 @@
+import { statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import type { Post } from '../../shared/page';
 import type { Conversation, LibraryItem, ScheduledTask, TaskSchedule } from '../../shared/sidebar-api';
 import type { AgentEvent } from '../../shared/agent';
 
 export interface HistoryQuery { query: string; author?: string; since?: string; until?: string; limit?: number }
+export interface RetentionPolicy {
+  keepConversations: number;
+  keepDays: number;
+  /** The live thread, which is never deleted however old it looks. */
+  keepThreadId?: string | null;
+}
+export interface RetentionResult { conversations: number; events: number }
+export interface HistoryStats { conversations: number; events: number; posts: number; library: number; tasks: number; dbBytes: number }
 export interface HistoryHit { id: string; url: string; authorHandle: string; authorName: string; kind: string; snippet: string; likedAt: string; unlikedAt: string | null }
 
 /** Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a released entry: add a new one. */
@@ -39,6 +48,8 @@ CREATE TABLE IF NOT EXISTS tasks(
   thread_mode TEXT NOT NULL DEFAULT 'resume', thread_id TEXT, enabled INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL, last_run_at TEXT, last_status TEXT, next_run_at TEXT
 );
+`, `
+ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0;
 `];
 
 const V1_TABLES = ['posts', 'posts_fts', 'library', 'conversations', 'conversation_events', 'tasks'];
@@ -83,10 +94,13 @@ export function toFtsQuery(text: string): string {
   return text.split(/\s+/).map((t) => t.replace(/"/g, '').replace(/[^\p{L}\p{N}_@#]/gu, '')).filter(Boolean).slice(0, MAX_FTS_TOKENS).map((t) => `"${t}"*`).join(' ');
 }
 
+/** A conversation touched this recently is in use, so retention leaves it alone. */
+const RETENTION_GRACE_MS = 60 * 60 * 1000;
+
 export class HistoryStore {
   private readonly db: DatabaseSync;
 
-  constructor(path: string) {
+  constructor(private readonly path: string) {
     this.db = new DatabaseSync(path);
     if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL');
     migrate(this.db);
@@ -180,16 +194,17 @@ export class HistoryStore {
     return r ? rowToConversation(r) : null;
   }
 
-  createTask(t: { title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; nextRunAt: string | null }): ScheduledTask {
-    const res = this.db.prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(t.title, t.prompt, JSON.stringify(t.schedule), t.threadMode, new Date().toISOString(), t.nextRunAt);
+  createTask(t: { title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; webSearch?: boolean; nextRunAt: string | null }): ScheduledTask {
+    const res = this.db.prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, web_search, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(t.title, t.prompt, JSON.stringify(t.schedule), t.threadMode, t.webSearch ? 1 : 0, new Date().toISOString(), t.nextRunAt);
     return this.getTask(Number(res.lastInsertRowid))!;
   }
 
-  updateTask(id: number, patch: Partial<Pick<ScheduledTask, 'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'>>): void {
+  updateTask(id: number, patch: Partial<Pick<ScheduledTask, 'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'webSearch' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'>>): void {
     const cols: Record<string, unknown> = {
       title: patch.title, prompt: patch.prompt, schedule_json: patch.schedule === undefined ? undefined : JSON.stringify(patch.schedule),
       thread_mode: patch.threadMode, thread_id: patch.threadId, enabled: patch.enabled === undefined ? undefined : (patch.enabled ? 1 : 0),
+      web_search: patch.webSearch === undefined ? undefined : (patch.webSearch ? 1 : 0),
       last_run_at: patch.lastRunAt, last_status: patch.lastStatus, next_run_at: patch.nextRunAt,
     };
     const set = Object.entries(cols).filter(([, v]) => v !== undefined);
@@ -212,6 +227,59 @@ export class HistoryStore {
     return (this.db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(now) as Array<Record<string, unknown>>).map(rowToTask);
   }
 
+  /**
+   * Deletes conversations past either limit and their events. A conversation is kept when it is
+   * the live thread, when it was touched in the last hour, or when a scheduled task resumes it:
+   * retention must never break a thread the app is still using.
+   */
+  applyRetention(policy: RetentionPolicy): RetentionResult {
+    const cutoff = new Date(Date.now() - policy.keepDays * 24 * 60 * 60 * 1000).toISOString();
+    const recent = new Date(Date.now() - RETENTION_GRACE_MS).toISOString();
+    const victims = (this.db.prepare(`
+      WITH ranked AS (SELECT thread_id, updated_at, ROW_NUMBER() OVER (ORDER BY updated_at DESC, rowid DESC) AS rn FROM conversations)
+      SELECT thread_id FROM ranked
+      WHERE (rn > ? OR updated_at < ?)
+        AND updated_at < ?
+        AND (? IS NULL OR thread_id <> ?)
+        AND thread_id NOT IN (SELECT thread_id FROM tasks WHERE thread_id IS NOT NULL)
+    `).all(policy.keepConversations, cutoff, recent, policy.keepThreadId ?? null, policy.keepThreadId ?? null) as Array<{ thread_id: string }>).map((r) => r.thread_id);
+    if (victims.length === 0) return { conversations: 0, events: 0 };
+    const holes = victims.map(() => '?').join(', ');
+    const events = (this.db.prepare(`SELECT COUNT(*) AS n FROM conversation_events WHERE thread_id IN (${holes})`).get(...victims) as { n: number }).n;
+    this.db.exec('BEGIN');
+    try {
+      this.db.prepare(`DELETE FROM conversation_events WHERE thread_id IN (${holes})`).run(...victims);
+      this.db.prepare(`DELETE FROM conversations WHERE thread_id IN (${holes})`).run(...victims);
+      this.db.exec('COMMIT');
+    } catch (err) {
+      try { this.db.exec('ROLLBACK'); } catch { /* the failed statement may have aborted the transaction already */ }
+      throw err;
+    }
+    return { conversations: victims.length, events };
+  }
+
+  stats(): HistoryStats {
+    const n = (sql: string) => (this.db.prepare(sql).get() as { n: number }).n;
+    return {
+      conversations: n('SELECT COUNT(*) AS n FROM conversations'),
+      events: n('SELECT COUNT(*) AS n FROM conversation_events'),
+      posts: n('SELECT COUNT(*) AS n FROM posts'),
+      library: n('SELECT COUNT(*) AS n FROM library'),
+      tasks: n('SELECT COUNT(*) AS n FROM tasks'),
+      dbBytes: this.dbBytes(),
+    };
+  }
+
+  /** The file on disk, or - for an in-memory database, and if the file cannot be read - the pages SQLite holds. */
+  private dbBytes(): number {
+    if (this.path !== ':memory:') {
+      try { return statSync(this.path).size; } catch { /* fall through to the page count */ }
+    }
+    const pages = (this.db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
+    const size = (this.db.prepare('PRAGMA page_size').get() as { page_size: number }).page_size;
+    return pages * size;
+  }
+
   close(): void { this.db.close(); }
 }
 
@@ -223,6 +291,7 @@ function rowToTask(r: Record<string, unknown>): ScheduledTask {
   return {
     id: r.id as number, title: r.title as string, prompt: r.prompt as string, schedule: JSON.parse(r.schedule_json as string) as TaskSchedule,
     threadMode: r.thread_mode as 'resume' | 'new', threadId: (r.thread_id as string | null) ?? null, enabled: (r.enabled as number) === 1,
+    webSearch: (r.web_search as number | null) === 1,
     createdAt: r.created_at as string, lastRunAt: (r.last_run_at as string | null) ?? null, lastStatus: (r.last_status as string | null) ?? null, nextRunAt: (r.next_run_at as string | null) ?? null,
   };
 }

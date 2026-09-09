@@ -1,7 +1,8 @@
 import { hasBannedSwitch } from './hardening';
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { hardenWebContents, reviveOnCrash } from './hardening';
+import { sep } from 'node:path';
+import { hardenWebContents, resolveSidebarAsset, reviveOnCrash } from './hardening';
 import { attachNavigationPolicy } from './navigation/policy';
 import { DEFAULT_ALLOW_HOSTS } from '../shared/settings';
 
@@ -108,5 +109,52 @@ describe('hasBannedSwitch', () => {
   it('ignores ordinary arguments', () => {
     expect(hasBannedSwitch(['x'])).toBe(false);
     expect(hasBannedSwitch(['x', '--no-sandbox-warning', 'file.txt', '--inspector-off'])).toBe(false);
+  });
+});
+
+describe('resolveSidebarAsset', () => {
+  const root = process.platform === 'win32' ? 'C:\\app\\out\\renderer' : '/app/out/renderer';
+  const under = (...parts: string[]) => [root, ...parts].join(sep);
+
+  it('maps a path under the sidebar host onto the renderer directory', () => {
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/index.html'))
+      .toEqual({ path: under('index.html'), contentType: 'text/html; charset=utf-8' });
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/index-abc.js')?.path).toBe(under('assets', 'index-abc.js'));
+  });
+
+  it('serves index.html for the directory itself', () => {
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/')?.path).toBe(under('index.html'));
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar')?.path).toBe(under('index.html'));
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/')?.path).toBe(under('assets', 'index.html'));
+  });
+
+  it('names the content type from the extension and falls back to octet-stream', () => {
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/a.css')?.contentType).toBe('text/css; charset=utf-8');
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/a.woff2')?.contentType).toBe('font/woff2');
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/a.png')?.contentType).toBe('image/png');
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/assets/a.bin')?.contentType).toBe('application/octet-stream');
+  });
+
+  it('refuses to escape the renderer directory', () => {
+    for (const url of [
+      'xpilot://sidebar/../../../etc/passwd',
+      'xpilot://sidebar/assets/../../../../etc/passwd',
+      'xpilot://sidebar/..%2f..%2fetc%2fpasswd',
+      'xpilot://sidebar/%2e%2e%2f%2e%2e%2fsettings.json',
+      'xpilot://sidebar/index.html%00.png',
+    ]) {
+      const got = resolveSidebarAsset(root, url);
+      expect(got === null || got.path.startsWith(root + sep), url).toBe(true);
+      expect(got?.path.includes('..'), url).toBeFalsy();
+    }
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar/..%2f..%2fetc%2fpasswd')).toBeNull();
+  });
+
+  it('refuses another host or another scheme', () => {
+    expect(resolveSidebarAsset(root, 'xpilot://evil/index.html')).toBeNull();
+    expect(resolveSidebarAsset(root, 'xpilot://sidebar.evil.com/index.html')).toBeNull();
+    expect(resolveSidebarAsset(root, 'file:///etc/passwd')).toBeNull();
+    expect(resolveSidebarAsset(root, 'https://sidebar/index.html')).toBeNull();
+    expect(resolveSidebarAsset(root, 'not a url')).toBeNull();
   });
 });

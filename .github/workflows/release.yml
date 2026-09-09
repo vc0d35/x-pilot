@@ -17,6 +17,12 @@ permissions:
 jobs:
   release:
     runs-on: macos-latest
+    # contents: write publishes the draft release; the other two let the job mint a provenance
+    # attestation for the artifacts it just built.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -66,4 +72,17 @@ jobs:
           APP="dist/mac-arm64/XPilot.app"
           codesign --verify --deep --strict "$APP"
           codesign -dvvv "$APP" 2>&1 | grep -q 'flags=.*runtime'
-          npx @electron/fuses read --app "$APP" | grep -q 'EnableCookieEncryption is Enabled'
+          # @electron/fuses colours its output even when it is piped, so the codes come off first.
+          FUSES=$(npx @electron/fuses read --app "$APP" | sed $'s/\x1b\\[[0-9;]*m//g')
+          echo "$FUSES"
+          grep -q 'EnableCookieEncryption is Enabled' <<< "$FUSES"
+          grep -q 'GrantFileProtocolExtraPrivileges is Disabled' <<< "$FUSES"
+      # Binds each artifact's digest to this workflow run, so a download can be checked against the
+      # commit and workflow it claims to come from: gh attestation verify <file> --repo vc0d35/x-pilot
+      - name: Attest the build provenance
+        if: env.PUBLISH_MODE == 'always'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: |
+            dist/*.dmg
+            dist/*.zip

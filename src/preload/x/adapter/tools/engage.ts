@@ -3,6 +3,7 @@ import type { PreloadCtx } from '../../context';
 import { sleep, waitFor } from '../dom';
 import { extractPost } from '../extract';
 import { SEL } from '../selectors';
+import { likeInPageSpec, selectHomeTabSpec } from './specs';
 
 const POST_ID = /\/status\/(\d+)/;
 
@@ -13,12 +14,7 @@ export function findArticleByPostId(root: ParentNode, postId: string): Element |
 
 /** Internal: clicks like/unlike on a post that is rendered in this page. Main decides whether it may run. */
 export const likeInPage: ToolModule<PreloadCtx> = {
-  spec: {
-    name: 'x_like_in_page',
-    description: 'Internal: like or unlike a post rendered in this window by post URL or id.',
-    inputSchema: { type: 'object', properties: { url: { type: 'string' }, action: { type: 'string', enum: ['like', 'unlike'] }, timeoutMs: { type: 'integer', default: 8000 } }, required: ['url'], additionalProperties: false },
-    annotations: { destructiveHint: true, internal: true },
-  },
+  spec: likeInPageSpec,
   execute: async (args) => {
     const id = POST_ID.exec(String(args.url ?? ''))?.[1] ?? String(args.url ?? '');
     const action = args.action === 'unlike' ? 'unlike' : 'like';
@@ -38,12 +34,7 @@ export const likeInPage: ToolModule<PreloadCtx> = {
 };
 
 export const selectHomeTab: ToolModule<PreloadCtx> = {
-  spec: {
-    name: 'x_select_home_tab',
-    description: 'Internal: click the Home tab whose label matches (e.g. "For you", "Following").',
-    inputSchema: { type: 'object', properties: { label: { type: 'string' } }, required: ['label'], additionalProperties: false },
-    annotations: { internal: true },
-  },
+  spec: selectHomeTabSpec,
   execute: async (args) => {
     const label = String(args.label ?? '').trim().toLowerCase();
     try { await waitFor(() => document.querySelector(SEL.homeTab), 8000); } catch { return fail('No timeline tabs on this page'); }

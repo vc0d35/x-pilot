@@ -28,9 +28,9 @@ module.exports = {
     enableNodeCliInspectArguments: false,
     enableEmbeddedAsarIntegrityValidation: true,
     onlyLoadAppFromAsar: true,
-    // Left on: the sidebar renderer is loaded with loadFile out of the asar, and with this fuse off
-    // the packaged app cannot read it (ERR_FILE_NOT_FOUND on out/renderer/index.html).
-    grantFileProtocolExtraPrivileges: true,
+    // Off: the sidebar renderer is served from the app's own xpilot:// scheme (see hardening.ts),
+    // so nothing in the app needs file: to carry more privileges than Chromium's default.
+    grantFileProtocolExtraPrivileges: false,
     // Flipping fuses invalidates the ad-hoc signature an unsigned local build carries.
     resetAdHocDarwinSignature: true,
   },

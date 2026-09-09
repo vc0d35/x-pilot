@@ -39,14 +39,14 @@ describe('x_read_news_and_trends', () => {
   it('answers from the visible window when the widgets are on screen, without navigating anywhere', async () => {
     const { c, xview, back } = ctx([news, trends]);
     expect(await readNewsAndTrends.execute({}, c)).toEqual(ok({ source: 'visible', url: 'https://x.com/home', sections: [news, trends] }));
-    expect(xview.callPreload).toHaveBeenCalledWith('x_read_widgets', { timeoutMs: 0 });
+    expect(xview.callPreload).toHaveBeenCalledWith('x_read_widgets', { timeoutMs: 0 }, undefined);
     expect(xview.navigate).not.toHaveBeenCalled();
     expect(back.navigate).not.toHaveBeenCalled();
   });
   it('loads Explore in the hidden window when the visible page lacks what was asked for', async () => {
     const { c, xview, back } = ctx([trends]);
     expect(await readNewsAndTrends.execute({ section: 'news' }, c)).toEqual(ok({ source: 'background', url: 'https://x.com/explore', sections: [news, trends] }));
-    expect(back.navigate).toHaveBeenCalledWith('https://x.com/explore');
+    expect(back.navigate).toHaveBeenCalledWith('https://x.com/explore', undefined);
     expect(xview.navigate).not.toHaveBeenCalled();
   });
   it('is satisfied by trends alone when only trends were asked for', async () => {
@@ -63,7 +63,7 @@ describe('x_read_news_and_trends', () => {
   it('view: "visible" only reads the user\'s window and reports what is there', async () => {
     const { c, xview, back } = ctx([trends]);
     expect(await readNewsAndTrends.execute({ view: 'visible' }, c)).toEqual(ok({ source: 'visible', url: 'https://x.com/home', sections: [trends] }));
-    expect(xview.callPreload).toHaveBeenCalledWith('x_read_widgets', { timeoutMs: 8000 });
+    expect(xview.callPreload).toHaveBeenCalledWith('x_read_widgets', { timeoutMs: 8000 }, undefined);
     expect(back.navigate).not.toHaveBeenCalled();
   });
 });

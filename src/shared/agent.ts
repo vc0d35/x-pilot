@@ -9,6 +9,12 @@ export interface ApprovalRequest {
   options: ApprovalOption[];
 }
 
+/** One clarifying question Codex asked; `options` makes it a choice, `secret` hides what is typed. */
+export interface UserInputQuestion { id: string; prompt: string; options?: string[]; secret?: boolean }
+export interface UserInputRequest { id: string; questions: UserInputQuestion[] }
+/** Answers by question id; null means the user skipped, or nobody answered in time. */
+export type UserInputAnswers = Record<string, string> | null;
+
 export type AgentEvent =
   | { type: 'status'; status: AgentStatus; message?: string }
   | { type: 'thread'; threadId: string }
@@ -19,8 +25,10 @@ export type AgentEvent =
   | { type: 'thinking.completed'; itemId: string; text: string }
   | { type: 'message.delta'; itemId: string; delta: string }
   | { type: 'message.completed'; itemId: string; text: string }
-  | { type: 'activity'; activity: 'thinking' | 'tool' | 'writing'; detail?: string }
+  | { type: 'activity'; activity: 'thinking' | 'tool' | 'writing' | 'waiting'; detail?: string }
   | { type: 'tool.started'; itemId: string; name: string; args: unknown }
   | { type: 'tool.completed'; itemId: string; name: string; success: boolean; output: string }
   | { type: 'approval.requested'; request: ApprovalRequest }
-  | { type: 'approval.resolved'; id: string; decision: string };
+  | { type: 'approval.resolved'; id: string; decision: string }
+  | { type: 'input.requested'; request: UserInputRequest }
+  | { type: 'input.resolved'; id: string; answers: UserInputAnswers };

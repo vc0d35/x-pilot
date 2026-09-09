@@ -58,6 +58,20 @@ test('both preloads are self-contained bundles and the React header renders', as
   await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.brand')?.textContent ?? null")), { timeout: 15_000 }).toBe('XPilot');
 });
 
+test('the sidebar is served from the app scheme, with its stylesheet and fonts past the CSP', async () => {
+  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript('location.href'))).toBe('xpilot://sidebar/index.html');
+  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript('location.origin'))).toBe('xpilot://sidebar');
+  // The bundle, the stylesheet and a @font-face file all come back through the handler: a CSP that
+  // did not recognise the new origin as 'self', or a handler that refused a path, shows up here.
+  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript(
+    "[...document.styleSheets].some((s) => s.href?.startsWith('xpilot://sidebar/assets/') && s.cssRules.length > 0)"))).toBe(true);
+  await expect.poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript(
+    "document.fonts.ready.then(() => [...document.fonts].some((f) => f.status === 'loaded'))")), { timeout: 15_000 }).toBe(true);
+  // Containment: the handler serves the renderer directory and nothing above it.
+  expect(await inMain((t) => t.sidebar.webContents.executeJavaScript(
+    "fetch('xpilot://sidebar/../../package.json').then((r) => r.status).catch(() => 'blocked')"))).not.toBe(200);
+});
+
 // Network-dependent (set XPILOT_E2E_NETWORK=1 to run): loads x.com search (logged out) in the hidden session window.
 test('x_search runs in the hidden background window without moving the visible view', async () => {
   test.skip(!process.env.XPILOT_E2E_NETWORK, 'needs network');

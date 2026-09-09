@@ -55,7 +55,9 @@ export function App() {
             <OnboardingCard libraryDir={settings.library.dir ?? '~/Documents/X Pilot'} onOpenSettings={() => setPanel('settings')}
               onDismiss={() => void window.xpilot.setSettings({ ui: { onboarded: true } })} />
           )}
-          <EntryList entries={state.entries} activity={state.activity} onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)} />
+          <EntryList entries={state.entries} activity={state.activity}
+            onResolve={(id, d) => void window.xpilot.resolveApproval(id, d)}
+            onResolveInput={(id, answers) => void window.xpilot.resolveInput(id, answers)} />
           <Composer disabled={state.status !== 'ready' && state.status !== 'running'} running={state.running} focus={focus} onStop={() => void window.xpilot.interrupt()}
             onSend={(text, ctx) => window.xpilot.send(text, ctx).then(() => true, (err) => {
               dispatch({ type: 'turn.completed', turnId: '', status: 'failed', error: err instanceof Error ? err.message : String(err) });

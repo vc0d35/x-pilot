@@ -48,7 +48,11 @@ export class TaskRunner {
       });
     });
     try {
-      const started = await provider.start({ tools, settings: this.deps.settings(), threadId: task.threadMode === 'resume' ? task.threadId : null, workspaceDir: this.deps.workspaceDir });
+      // Web search is an egress channel and nobody is watching an unattended run, so it is off
+      // unless the task was created asking for it.
+      const codex = this.deps.settings();
+      const settings = { ...codex, webSearch: task.webSearch ? codex.webSearch : ('disabled' as const) };
+      const started = await provider.start({ tools, settings, threadId: task.threadMode === 'resume' ? task.threadId : null, workspaceDir: this.deps.workspaceDir });
       threadId = started.threadId;
       this.lastThreadId = threadId;
       this.deps.store.upsertConversation({ threadId, kind: 'task', taskId: task.id, toolsHash: toolsFingerprint(tools) });

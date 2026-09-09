@@ -22,7 +22,10 @@ export const PageStateSchema = z.object({
   url: z.string(),
   kind: PageKindSchema,
   title: z.string(),
+  /** True when every extractor this page kind depends on found something: `layout && (posts ?? true) && (article ?? true)`. */
   adapterHealthy: z.boolean(),
+  /** Per-extractor signals, so a markup change shows up as the one thing that broke. */
+  health: z.object({ layout: z.boolean(), posts: z.boolean().optional(), article: z.boolean().optional() }),
   /** Count announced by the "Show N posts" pill, when one is on screen. */
   newPostsAvailable: z.number().optional(),
 });

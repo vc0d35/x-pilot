@@ -29,6 +29,11 @@ export const SettingsSchema = z.object({
     }),
   }),
   navigation: z.object({ allowHosts: z.array(AllowHostSchema).max(32).default(DEFAULT_ALLOW_HOSTS) }),
+  /** Transcript retention: conversations beyond either limit are deleted, oldest first. */
+  history: z.object({
+    keepConversations: z.number().int().min(10).max(5000).default(200),
+    keepDays: z.number().int().min(7).max(3650).default(90),
+  }),
   /** One-time first-run card: false until the user dismisses it. */
   ui: z.object({ onboarded: z.boolean().default(false) }),
   threadId: z.string().nullable().default(null),
@@ -70,6 +75,7 @@ export const SettingsPatchSchema = z.strictObject({
     codex: patchOf(codexShape).optional(),
   }).optional(),
   navigation: patchOf(SettingsSchema.shape.navigation).optional(),
+  history: patchOf(SettingsSchema.shape.history).optional(),
   ui: patchOf(SettingsSchema.shape.ui).optional(),
   threadId: optionalField(SettingsSchema.shape.threadId),
   window: patchOf(SettingsSchema.shape.window).optional(),
@@ -99,6 +105,7 @@ export function normalizeSettings(raw: unknown): Settings {
     library: isObj(r.library) ? r.library : {},
     agent: { ...agent, codex },
     navigation: isObj(r.navigation) ? r.navigation : {},
+    history: isObj(r.history) ? r.history : {},
     ui: isObj(r.ui) ? r.ui : {},
     threadId: r.threadId ?? null,
     window: isObj(r.window) ? r.window : {},

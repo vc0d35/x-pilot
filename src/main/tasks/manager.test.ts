@@ -12,6 +12,14 @@ describe('TaskManager', () => {
     expect(() => m.create({ title: '', prompt: 'x', schedule: { every: '1h' } })).toThrow(/title/);
     expect(() => m.create({ title: 't', prompt: '', schedule: { every: '1h' } })).toThrow(/prompt/);
   });
+  it('creates a task with web search off, and turns it on only when asked', () => {
+    const m = new TaskManager({ store: new HistoryStore(':memory:'), now: () => now });
+    const t = m.create({ title: 'W', prompt: 'p', schedule: { every: '1h' } });
+    expect(t.webSearch).toBe(false);
+    expect(m.update(t.id, { webSearch: true }).webSearch).toBe(true);
+    expect(m.update(t.id, { enabled: false }).webSearch).toBe(true); // an unrelated patch leaves it alone
+    expect(m.create({ title: 'W2', prompt: 'p', schedule: { every: '1h' }, webSearch: true }).webSearch).toBe(true);
+  });
   it('recomputes the next run when the schedule changes or the task is re-enabled', () => {
     const m = new TaskManager({ store: new HistoryStore(':memory:'), now: () => now });
     const t = m.create({ title: 'W', prompt: 'p', schedule: { every: '1h' } });

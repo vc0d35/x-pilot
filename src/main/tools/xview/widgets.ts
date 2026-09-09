@@ -1,7 +1,7 @@
 import { ok, type ToolModule } from '../../../shared/tools';
 import type { WidgetSection } from '../../../shared/widgets';
 import type { XViewToolCtx } from './context';
-import { VIEW_ARG, isToolResult, parseView, pickView } from './target';
+import { VIEW_ARG, navigateStep, parseView, withView } from './target';
 
 export type { WidgetSection };
 
@@ -24,18 +24,21 @@ export const readNewsAndTrends: ToolModule<XViewToolCtx> = {
     inputSchema: { type: 'object', properties: { section: { type: 'string', enum: ['news', 'trends', 'both'], description: 'Which widget you need (default both)' }, ...VIEW_ARG }, additionalProperties: false },
     annotations: { readOnlyHint: true },
   },
-  execute: async (args, ctx) => {
+  execute: async (args, ctx, signal) => {
     const want = args.section === 'news' || args.section === 'trends' ? args.section : 'both';
     const explicit = typeof args.view === 'string';
     if (!explicit || args.view === 'visible') {
-      const onScreen = await ctx.xview.callPreload('x_read_widgets', { timeoutMs: explicit ? 8000 : 0 });
+      const onScreen = await ctx.xview.callPreload('x_read_widgets', { timeoutMs: explicit ? 8000 : 0 }, signal);
       if (onScreen.success && hasWanted((onScreen.content as WidgetsPayload).sections, want)) return ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) });
       if (args.view === 'visible') return onScreen.success ? ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) }) : onScreen;
     }
-    const view = await pickView(ctx, parseView(args));
-    if (isToolResult(view)) return view;
-    if (view.currentUrl() !== EXPLORE_URL) await view.navigate(EXPLORE_URL);
-    const r = await view.callPreload('x_read_widgets', {});
-    return r.success ? ok({ source: 'background', ...(r.content as WidgetsPayload) }) : r;
+    return withView(ctx, parseView(args), async (view) => {
+      if (view.currentUrl() !== EXPLORE_URL) {
+        const stopped = await navigateStep(view, EXPLORE_URL, signal);
+        if (stopped) return stopped;
+      }
+      const r = await view.callPreload('x_read_widgets', {}, signal);
+      return r.success ? ok({ source: 'background', ...(r.content as WidgetsPayload) }) : r;
+    });
   },
 };

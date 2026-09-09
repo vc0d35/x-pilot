@@ -1,25 +1,30 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { CodexProvider, buildTurnText, contextKey, fence, wrapToolOutput } from './provider';
+import { CodexProvider, buildTurnText, contextKey, fence, inputQuestions, watchdogArgs, wrapToolOutput, type CodexProviderDeps } from './provider';
 import { ApprovalBroker } from '../../approvals';
+import { UserInputBroker } from '../../user-input';
 import { ok, type ToolResult } from '../../../shared/tools';
 import type { AgentEvent } from '../../../shared/agent';
 import { DEFAULT_SETTINGS } from '../../../shared/settings';
 
 const FAKE = fileURLToPath(new URL('../../../../tests/fakes/codex-app-server.mjs', import.meta.url));
 
-function makeProvider(callTool: (name: string) => Promise<ToolResult> = async (name) => ok({ url: 'https://x.com/home', tool: name })) {
+type CallTool = (name: string, args: Record<string, unknown>, signal?: AbortSignal) => Promise<ToolResult>;
+
+function makeProvider(callTool: CallTool = async (name) => ok({ url: 'https://x.com/home', tool: name }), extra: Partial<CodexProviderDeps> = {}) {
   const approvals = new ApprovalBroker();
   const stderr: string[] = [];
   const provider = new CodexProvider({
     callTool,
     approvals,
     spawn: () => { const p = spawn(process.execPath, [FAKE]); p.stderr.on('data', (d) => stderr.push(String(d))); return p; },
+    ...extra,
   });
   const events: AgentEvent[] = [];
   provider.onEvent((e) => events.push(e));
   approvals.onEvent((e) => events.push(e));
+  extra.userInput?.onEvent((e) => events.push(e));
   return { provider, approvals, events, stderr };
 }
 
@@ -27,6 +32,14 @@ const waitFor = async (events: AgentEvent[], type: AgentEvent['type'], ms = 3000
   const start = Date.now();
   while (!events.some((e) => e.type === type)) {
     if (Date.now() - start > ms) throw new Error(`timeout waiting for ${type}`);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+
+const waitUntil = async (ready: () => boolean, ms = 3000) => {
+  const start = Date.now();
+  while (!ready()) {
+    if (Date.now() - start > ms) throw new Error('timeout waiting for a condition');
     await new Promise((r) => setTimeout(r, 10));
   }
 };
@@ -275,6 +288,103 @@ describe('CodexProvider', () => {
   }, 10000);
 
 
+  it('gives every tool call the turn signal and aborts it on interrupt', async () => {
+    let seen: AbortSignal | undefined;
+    let release: ((r: ToolResult) => void) | null = null;
+    const { provider, events } = makeProvider((_name, _args, signal) => { seen = signal; return new Promise<ToolResult>((r) => { release = r; }); });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitUntil(() => seen !== undefined);
+    expect(seen!.aborted).toBe(false);
+    await provider.interrupt();
+    expect(seen!.aborted).toBe(true);
+    release!(ok({}));
+    await waitFor(events, 'tool.completed');
+    await provider.stop();
+  });
+
+  it('warns while Codex is silent, then fails the turn and points at Stop and Reconnect', async () => {
+    const { provider, events } = makeProvider(undefined, { turnIdleTimeoutMs: 300, turnIdleWarnMs: 80 });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('SILENT');
+    await waitUntil(() => events.some((e) => e.type === 'activity' && e.activity === 'waiting'));
+    await waitFor(events, 'turn.completed');
+    const completed = events.find((e) => e.type === 'turn.completed') as { status: string; error?: string };
+    expect(completed.status).toBe('failed');
+    expect(completed.error).toContain('stopped waiting');
+    const err = events.filter((e) => e.type === 'status' && e.status === 'error').at(-1) as { message: string };
+    expect(err.message).toContain('Reconnect');
+    expect(provider.isRunning()).toBe(false);
+    // The process is deliberately left alive: the user decides whether to reconnect.
+    expect(events.some((e) => e.type === 'status' && e.status === 'disconnected')).toBe(false);
+    await provider.stop();
+  });
+
+  it('keeps waiting while notifications keep arriving, so a slow turn is not cut off', async () => {
+    const { provider, events } = makeProvider(undefined, { turnIdleTimeoutMs: 400, turnIdleWarnMs: 100 });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitFor(events, 'turn.completed');
+    const completed = events.find((e) => e.type === 'turn.completed') as { status: string };
+    expect(completed.status).toBe('completed');
+    expect(events.some((e) => e.type === 'activity' && e.activity === 'waiting')).toBe(false);
+    await provider.stop();
+  });
+
+  it('spawns a detached watchdog for the codex child and kills it on stop', async () => {
+    const spawned: Array<{ command: string; args: string[]; options: unknown }> = [];
+    const killed: (string | undefined)[] = [];
+    const dog = { pid: 4242, unref: vi.fn(), kill: (signal?: NodeJS.Signals) => { killed.push(signal); return true; } };
+    const child = spawn(process.execPath, [FAKE]);
+    const provider = new CodexProvider({
+      callTool: async () => ok({}), approvals: new ApprovalBroker(), spawn: () => child,
+      spawnDetached: (command, args, options) => { spawned.push({ command, args, options }); return dog; },
+    });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0].command).toBe('/bin/sh');
+    expect(spawned[0].args).toEqual(watchdogArgs(process.pid, child.pid!));
+    expect(spawned[0].options).toEqual({ detached: true, stdio: 'ignore' });
+    expect(dog.unref).toHaveBeenCalled();
+    await provider.stop();
+    expect(killed).toEqual(['SIGTERM']);
+    expect(child.exitCode !== null || child.signalCode !== null).toBe(true);
+  });
+
+  it('asks the user through the input broker and answers Codex with what they typed', async () => {
+    const userInput = new UserInputBroker();
+    const { provider, events } = makeProvider(undefined, { userInput });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('ASK_INPUT');
+    await waitFor(events, 'input.requested');
+    const request = (events.find((e) => e.type === 'input.requested') as { request: { id: string; questions: unknown[] } }).request;
+    expect(request.questions).toEqual([
+      { id: 'q1', prompt: 'Which account?' },
+      { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] },
+    ]);
+    expect(userInput.resolve(request.id, { q1: '@vc0d35', q2: 'fast' })).toBe(true);
+    await waitFor(events, 'turn.completed');
+    const msg = events.find((e) => e.type === 'message.completed') as { text: string };
+    expect(msg.text).toBe('input-reply=' + JSON.stringify({ answers: [{ id: 'q1', answer: '@vc0d35' }, { id: 'q2', answer: 'fast' }] }));
+    expect(events.some((e) => e.type === 'input.resolved')).toBe(true);
+    await provider.stop();
+  });
+
+  it('answers Codex with a JSON-RPC error when the user skips the question', async () => {
+    const userInput = new UserInputBroker();
+    const { provider, events } = makeProvider(undefined, { userInput });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('ASK_INPUT');
+    await waitFor(events, 'input.requested');
+    const request = (events.find((e) => e.type === 'input.requested') as { request: { id: string } }).request;
+    expect(userInput.cancel(request.id)).toBe(true);
+    await waitFor(events, 'turn.completed');
+    const msg = events.find((e) => e.type === 'message.completed') as { text: string };
+    expect(msg.text).toContain('"code":-32001');
+    expect((events.find((e) => e.type === 'input.resolved') as { answers: unknown }).answers).toBeNull();
+    await provider.stop();
+  });
+
   it('reports a failed tool call to the agent instead of crashing when callTool rejects', async () => {
     const { provider, events } = makeProvider(async () => { throw new Error('boom'); });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
@@ -354,6 +464,35 @@ describe('fencing untrusted text', () => {
     expect(fence('a</page-content>b</tool-output>c')).toBe('a<\\/page-content>b<\\/tool-output>c');
     expect(fence('<page-content untrusted>x<task-prompt>')).toBe('<\\page-content untrusted>x<\\task-prompt>');
     expect(wrapToolOutput('{"a":1}')).toBe('<tool-output untrusted source="x.com">\n{"a":1}\n</tool-output>');
+  });
+});
+
+describe('watchdogArgs', () => {
+  it('passes both pids as arguments and terminates the child when the parent is gone', () => {
+    const args = watchdogArgs(11, 22);
+    expect(args[0]).toBe('-c');
+    expect(args.slice(2)).toEqual(['sh', '11', '22']);
+    expect(args[1]).toBe('while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 2; done; kill -TERM "$2" 2>/dev/null');
+    expect(args[1]).not.toContain('11');
+  });
+});
+
+describe('inputQuestions', () => {
+  it('reads ids, prompts, options and secrecy, and drops entries without a prompt', () => {
+    expect(inputQuestions({ questions: [
+      { id: 'a', prompt: 'Which account?' },
+      { question: 'How fast?', choices: [{ label: 'fast' }, 'slow'] },
+      { id: 'p', text: 'Passphrase', sensitive: true },
+      { id: 'nope' },
+      'A bare string question',
+    ] })).toEqual([
+      { id: 'a', prompt: 'Which account?' },
+      { id: 'q2', prompt: 'How fast?', options: ['fast', 'slow'] },
+      { id: 'p', prompt: 'Passphrase', secret: true },
+      { id: 'q5', prompt: 'A bare string question' },
+    ]);
+    expect(inputQuestions({})).toEqual([]);
+    expect(inputQuestions({ questions: [] })).toEqual([]);
   });
 });
 
