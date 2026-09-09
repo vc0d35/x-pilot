@@ -26,6 +26,15 @@ const previewOf = (payload: unknown): string | null => {
  * the file sheet whenever that one changes so it keeps winning at equal specificity. Both are
  * per-document insertions, so a navigation drops the preview and nothing has to undo it.
  */
+// The preload runs before the document is parsed, so the root element may not exist yet.
+function markView(view: 'visible' | 'hidden'): void {
+  const mark = () => {
+    if (document.documentElement) document.documentElement.dataset.xpilotView = view;
+  };
+  if (document.documentElement) mark();
+  else document.addEventListener('DOMContentLoaded', mark, { once: true });
+}
+
 export function installPageConfig(): void {
   let key: string | null = null;
   let previewKey: string | null = null;
@@ -44,7 +53,7 @@ export function installPageConfig(): void {
   const apply = (payload: unknown): void => {
     const css = stylesOf(payload);
     const view = (payload as { view?: unknown } | null)?.view;
-    if (view === 'visible' || view === 'hidden') document.documentElement.dataset.xpilotView = view;
+    if (view === 'visible' || view === 'hidden') markView(view);
     try {
       applySelectorOverrides(selectorsOf(payload));
     } catch (err) {
