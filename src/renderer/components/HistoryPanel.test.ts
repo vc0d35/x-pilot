@@ -11,7 +11,7 @@ const conv = (threadId: string, kind: Conversation['kind'], taskId: number | nul
   updatedAt: '',
   toolsHash: null,
 });
-const task = (id: number, lastStatus: string | null): ScheduledTask => ({
+const task = (id: number, lastStatus: ScheduledTask['lastStatus']): ScheduledTask => ({
   id,
   title: `t${id}`,
   prompt: 'p',
@@ -25,6 +25,7 @@ const task = (id: number, lastStatus: string | null): ScheduledTask => ({
   nextRunAt: null,
   webSearch: false,
   lastSeenPostId: null,
+  visibleWindow: false,
 });
 
 describe('runningRunThreads', () => {

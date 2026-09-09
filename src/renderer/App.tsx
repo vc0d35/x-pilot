@@ -78,6 +78,14 @@ export function App() {
         onCollapse={() => void window.xpilot.setSidebarCollapsed(true)}
       />
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
+      {state.taskRun?.visibleWindow && (
+        <div className="banner run-banner">
+          <span className="run-banner-text">A scheduled task is using your window: {state.taskRun.title}</span>
+          <button className="link" onClick={() => void window.xpilot.stopTaskRun()}>
+            Stop
+          </button>
+        </div>
+      )}
       {settings?.posting.mode === 'autonomous' && (
         <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
       )}

@@ -62,6 +62,28 @@ describe('task tools', () => {
     expect(scheduleTask.spec.inputSchema.properties).toHaveProperty('webSearch');
     expect(updateTask.spec.inputSchema.properties).toHaveProperty('webSearch');
   });
+  it('carries the visible-window flag, defaulting it off, and says when to set it', async () => {
+    const c = ctx();
+    const hidden = (await scheduleTask.execute({ title: 'A', prompt: 'p', schedule: { every: '1h' } }, c)) as {
+      content: { id: number; visibleWindow: boolean };
+    };
+    expect(hidden.content.visibleWindow).toBe(false);
+    const onScreen = (await scheduleTask.execute({ title: 'B', prompt: 'p', schedule: { every: '1h' }, visibleWindow: true }, c)) as {
+      content: { visibleWindow: boolean };
+    };
+    expect(onScreen.content.visibleWindow).toBe(true);
+    expect(await updateTask.execute({ id: hidden.content.id, visibleWindow: true }, c)).toMatchObject({
+      success: true,
+      content: { visibleWindow: true },
+    });
+    for (const spec of [scheduleTask.spec, updateTask.spec]) {
+      const arg = (spec.inputSchema.properties as { visibleWindow?: { description?: string } }).visibleWindow;
+      expect(arg?.description).toMatch(/only set it when the user explicitly asked/i);
+      expect(arg?.description).toMatch(/on my screen/i);
+    }
+    expect(listTasks.spec.description).toMatch(/visibleWindow/);
+  });
+
   it('turns validation errors into tool failures the agent can act on', async () => {
     const c = ctx();
     expect(await scheduleTask.execute({ title: 'x', prompt: 'y', schedule: { every: '1m' } }, c)).toEqual(

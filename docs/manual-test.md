@@ -79,6 +79,9 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
 - [ ] While a task is running, open its run from History: it is marked "running", the banner says "Viewing a scheduled run", new events appear as the run makes them, and the composer is read-only. "Back to chat" returns to your own conversation with its transcript intact and the composer usable again.
+- [ ] "Every 30 minutes, on my screen while I'm away, scroll my timeline and open anything about Electron" → the task is created with visibleWindow and shows a "screen" badge in Scheduled tasks; a task asked for without that phrasing has no badge.
+- [ ] Type in the sidebar composer (or click in the X view), then "Run now" that task: nothing runs, the row says `deferred` and the next run is two minutes out; wait without touching the app and it runs, this time moving the window you are looking at.
+- [ ] While it runs, the sidebar shows "A scheduled task is using your window: …" on top of your own conversation, and it is still there on the History and Settings panels. Stop ends the run: the banner goes and the task row says `interrupted`.
 - [ ] Pause/Resume/Delete work; a paused task has no next run.
 
 ## Liking and timeline reading

@@ -56,7 +56,7 @@ Health is reported rather than assumed: `x_get_page_state` waits for X's layout 
 
 Two rules shape the xview tools. First, **background by default**: reading, searching and verifying happen in a hidden window, and only tools that the user's intent clearly points at the screen (`x_navigate`, `x_scroll`, `view: "visible"`) move the visible view. Second, **user decisions are final**: anything that writes to the account goes through the `ApprovalBroker` when the relevant setting says confirm, and a decline comes back as `status: 'cancelled_by_user'`, not as an error, so the model does not retry.
 
-Scheduled runs get a second registry whose "visible view" is a stub that refuses, so an unattended run can never hijack the user's screen. The same registry drops the tools that rewrite the page config — `xpilot_write_page_styles`, `xpilot_reset_page_styles`, `xpilot_set_selector`, `xpilot_reset_selector`, `xpilot_test_selector` — because both files govern every X window, survive restarts, and land on the page the user looks at. The read tools stay, so a run can report that the adapter looks broken.
+Scheduled runs get their own registry per run. By default its "visible view" is a stub that refuses, so an unattended run cannot hijack the user's screen; a task the user explicitly asked to act on their screen (`visibleWindow`) is given the real view and the adapter bridge with it, and nothing else changes. The same registry drops the tools that rewrite the page config — `xpilot_write_page_styles`, `xpilot_reset_page_styles`, `xpilot_set_selector`, `xpilot_reset_selector`, `xpilot_test_selector` — because both files govern every X window, survive restarts, and land on the page the user looks at. The read tools stay, so a run can report that the adapter looks broken.
 
 Page styles are the third thing gated by a setting: `settings.styles.mode` is `confirm` by default, and the agent's stylesheet reaches the user on an approval card with the whole CSS on it before it reaches the page.
 
@@ -73,6 +73,8 @@ Adding a tool is one file: export a `ToolModule` and add it to the source's list
 Prompting follows `docs/agent-principles.md`: hints, not scripts. The developer instructions state a handful of rules (background by default, verify with web sources, decisions are final, two-step posting, schedule recurring requests) and leave tool selection and interpretation to the model.
 
 Scheduled tasks live in the `tasks` table with a schedule (`every` or cron), a prompt written by the agent as complete instructions for an unattended run, and a thread mode. Each task also carries a watermark, `last_seen_post_id`: the runner reads the largest post id any `x_read_timeline` result carried during a run and stores it, so the next run's preamble can tell the model to pass that id as `sinceId` and read only what is new. `TaskManager` ticks every 30 seconds, enqueues due tasks once, and runs them one at a time; `TaskRunner` spawns a provider per run with a 10-minute limit. Tasks run only while the app is open. A run's conversation is viewable from History but read-only — the interactive agent refuses to bind to a run's thread — and while the run is still going its transcript streams into the sidebar on its own channel.
+
+A run is hidden unless the task says otherwise. `visibleWindow` is the opt-in: the agent sets it only when the user asked for a task that acts on their screen, and then the run drives the visible view and gains the preload's screen tools, while background reads still go to the runs' own hidden window. Everything else about a run is unchanged — no task-management tools, no page-config writers, the same approvals. Because the tool list differs, a task whose `visibleWindow` changed starts a fresh thread rather than resuming one Codex fixed to a different tool set. Such a run also waits for the user: main tracks when they last used the app (pointer, keyboard or a message they sent), and a run enqueued within two minutes of that is deferred — pushed back two minutes, not a whole interval, and recorded as `deferred`. While one is executing, the sidebar carries a banner naming the task with a Stop that ends the run as `interrupted`.
 
 ## 5. Data
 
@@ -95,7 +97,7 @@ The X page is untrusted remote content that runs third-party scripts, and the ag
 - **Codex.** The binary is taken from an explicit setting, PATH, or the login shell before any guessed directory, and must be a regular file owned by the user or root that nobody else can write.
 - **Dev-only switches** (test harness, DevTools Protocol port, custom start URL, custom profile) are ignored in packaged builds.
 
-Residual risks worth knowing: a prompt injection can still steer read-only tools and anything the user set to autonomous; the DOM adapter breaks when X changes markup, which shows up as `adapterHealthy: false`; and scheduled tasks act without a human present, by design.
+Residual risks worth knowing: a prompt injection can still steer read-only tools and anything the user set to autonomous; the DOM adapter breaks when X changes markup, which shows up as `adapterHealthy: false`; and scheduled tasks act without a human present, by design — including, when the user asks for it, on the window they are looking at, which is why such a run is opt-in per task, defers while the user is active, and is stoppable from a banner.
 
 ## 7. The renderer
 

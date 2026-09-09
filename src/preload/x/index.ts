@@ -5,6 +5,7 @@ import type { PreloadCtx } from './context';
 import { adapterTools, runAdapterTool } from './adapter/tools';
 import { installLikeCapture } from './adapter/capture';
 import { installFocusTracker } from './adapter/focus';
+import { installUserActivityPing } from './adapter/activity';
 import { installPageConfig } from './page-config';
 
 // First, and synchronously: the user's CSS has to be in the frame before the page renders.
@@ -37,3 +38,4 @@ installFocusTracker(
   () => location.href,
   (ctx) => ipcRenderer.send(IPC.focusChanged, ctx),
 );
+installUserActivityPing(document, () => ipcRenderer.send(IPC.userActive));

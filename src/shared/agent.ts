@@ -44,4 +44,6 @@ export type AgentEvent =
   | { type: 'approval.requested'; request: ApprovalRequest }
   | { type: 'approval.resolved'; id: string; decision: string; note?: string }
   | { type: 'input.requested'; request: UserInputRequest }
-  | { type: 'input.resolved'; id: string; answers: UserInputAnswers };
+  | { type: 'input.resolved'; id: string; answers: UserInputAnswers }
+  /** A scheduled run started or ended; `visibleWindow` runs drive the window the user is looking at. */
+  | { type: 'task.run'; taskId: number; title: string; visibleWindow: boolean; running: boolean };

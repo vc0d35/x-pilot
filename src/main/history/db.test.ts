@@ -71,8 +71,8 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(3);
-    expect(check.prepare('SELECT web_search, last_seen_post_id FROM tasks').all()).toEqual([]); // the added columns are there
+    expect(userVersion(check)).toBe(4);
+    expect(check.prepare('SELECT web_search, last_seen_post_id, visible_window FROM tasks').all()).toEqual([]); // the added columns are there
     check.close();
   });
 
@@ -94,7 +94,7 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(3);
+    expect(userVersion(check)).toBe(4);
     check.close();
   });
 
@@ -117,7 +117,31 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(3);
+    expect(userVersion(check)).toBe(4);
+    check.close();
+  });
+
+  it('adds visible_window to an existing v3 database, leaving the tasks already in it hidden', () => {
+    const file = tempFile();
+    const old = new DatabaseSync(file);
+    old.exec(OLD_SCHEMA);
+    old.exec('ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0');
+    old.exec('ALTER TABLE tasks ADD COLUMN last_seen_post_id TEXT');
+    old.exec('PRAGMA user_version = 3');
+    old
+      .prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run('Morning', 'Summarise my likes', '{"every":"1d"}', 'resume', '2026-09-01T00:00:00Z');
+    old.close();
+
+    const s = new HistoryDb(file);
+    const tasks = new TasksStore(s.db);
+    expect(tasks.list()).toEqual([expect.objectContaining({ title: 'Morning', visibleWindow: false })]);
+    tasks.update(1, { visibleWindow: true });
+    expect(tasks.get(1)?.visibleWindow).toBe(true);
+    s.close();
+
+    const check = new DatabaseSync(file);
+    expect(userVersion(check)).toBe(4);
     check.close();
   });
 
@@ -130,8 +154,8 @@ describe('schema migrations', () => {
     expect(new LikesStore(again.db).count()).toBe(1);
     again.close();
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(3);
-    expect(migrate(check)).toBe(3);
+    expect(userVersion(check)).toBe(4);
+    expect(migrate(check)).toBe(4);
     check.close();
   });
 
@@ -139,7 +163,7 @@ describe('schema migrations', () => {
     const file = tempFile();
     new DatabaseSync(file).close();
     const db = new DatabaseSync(file, { readOnly: true });
-    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 3/);
+    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 4/);
     expect(userVersion(db)).toBe(0);
     db.close();
   });

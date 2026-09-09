@@ -4,7 +4,11 @@ import { AppStore } from '../history/store';
 import type { AgentProvider, StartOptions } from '../agent/provider';
 import type { AgentEvent } from '../../shared/agent';
 import { DEFAULT_SETTINGS } from '../../shared/settings';
-import { MAX_TRANSCRIPT_OUTPUT } from '../agent/controller';
+import { MAX_TRANSCRIPT_OUTPUT, toolsFingerprint } from '../agent/controller';
+import { fail } from '../../shared/tools';
+
+/** Most of these tests care about the run, not its tools; a run with no tools stands in. */
+const noTools = { list: () => [], call: async () => fail('no tools in this test') };
 
 function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type: 'turn.completed', turnId: 't', status: 'completed' }]) {
   const listeners = new Set<(e: AgentEvent) => void>();
@@ -53,6 +57,7 @@ const task = {
   nextRunAt: null,
   webSearch: false,
   lastSeenPostId: null,
+  visibleWindow: false,
 };
 
 describe('TaskRunner', () => {
@@ -61,7 +66,7 @@ describe('TaskRunner', () => {
     const p = fakeProvider();
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -81,7 +86,7 @@ describe('TaskRunner', () => {
     const p = fakeProvider();
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -100,7 +105,7 @@ describe('TaskRunner', () => {
     ]);
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -121,7 +126,7 @@ describe('TaskRunner', () => {
     const seen: { threadId: string; type: string }[] = [];
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -146,7 +151,7 @@ describe('TaskRunner', () => {
     const seen: AgentEvent[] = [];
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -164,7 +169,7 @@ describe('TaskRunner', () => {
     const settings = { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'live' as const };
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => settings,
       workspaceDir: '/tmp',
       store,
@@ -177,7 +182,7 @@ describe('TaskRunner', () => {
     // The user's own setting still wins: a task cannot turn search on when it is off globally.
     const r2 = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => ({ ...settings, webSearch: 'disabled' as const }),
       workspaceDir: '/tmp',
       store,
@@ -187,12 +192,76 @@ describe('TaskRunner', () => {
     expect(p.starts[2].settings.webSearch).toBe('disabled');
   });
 
+  it('announces the run starting and ending, so the sidebar can raise a banner over it', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider();
+    const seen: AgentEvent[] = [];
+    const r = new TaskRunner({
+      createProvider: () => p,
+      toolsFor: () => noTools,
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      onRunEvent: (e) => seen.push(e),
+      timeoutMs: 2000,
+    });
+    await r.run({ ...task, visibleWindow: true });
+    expect(seen).toEqual([
+      { type: 'task.run', taskId: 3, title: 'Weather', visibleWindow: true, running: true },
+      { type: 'task.run', taskId: 3, title: 'Weather', visibleWindow: true, running: false },
+    ]);
+  });
+
+  it('ends the run in flight when the sidebar stops it, and reports it as interrupted', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider('t-stop', []);
+    const r = new TaskRunner({
+      createProvider: () => p,
+      toolsFor: () => noTools,
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 5000,
+    });
+    const running = r.run(task);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    r.stop();
+    expect(await running).toBe('interrupted');
+    expect(p.interrupt).toHaveBeenCalled();
+    expect(p.stop).toHaveBeenCalled();
+    r.stop(); // nothing is running now; stopping again is a no-op
+  });
+
+  it("starts a fresh thread when the run's tools are not the ones its thread was started with", async () => {
+    const store = new AppStore(':memory:');
+    const spec = { name: 'x_get_page_state', description: 'the screen', inputSchema: {} };
+    const screenTools = { list: () => [spec], call: async () => fail('not called') };
+    const p = fakeProvider('t-tools');
+    const r = new TaskRunner({
+      createProvider: () => p,
+      toolsFor: (t) => (t.visibleWindow ? screenTools : noTools),
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 2000,
+    });
+    await r.run(task);
+    expect(p.starts[0].threadId).toBeNull();
+    // The same tools: the thread the first run left behind is resumed.
+    await r.run({ ...task, threadId: 't-tools' });
+    expect(p.starts[1].threadId).toBe('t-tools');
+    // Turning the window on changes the tool list, which Codex fixed at thread start.
+    await r.run({ ...task, threadId: 't-tools', visibleWindow: true });
+    expect(p.starts[2].threadId).toBeNull();
+    expect(store.getConversation('t-tools')?.toolsHash).toBe(toolsFingerprint([spec]));
+  });
+
   it('reports failed turns and times out hung runs', async () => {
     const store = new AppStore(':memory:');
     const failing = fakeProvider('t2', [{ type: 'turn.completed', turnId: 't', status: 'failed', error: 'boom' }]);
     const r = new TaskRunner({
       createProvider: () => failing,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -202,7 +271,7 @@ describe('TaskRunner', () => {
     const hung = fakeProvider('t3', []);
     const r2 = new TaskRunner({
       createProvider: () => hung,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -230,7 +299,7 @@ describe('the watermark a run leaves behind', () => {
     if (seed) store.advanceTaskLastSeenPostId(created.id, seed);
     const r = new TaskRunner({
       createProvider: () => fakeProvider('t-mark', [...events, { type: 'turn.completed', turnId: 't', status: 'completed' }]),
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,
@@ -317,7 +386,7 @@ describe('the watermark a run leaves behind', () => {
     ]);
     const r = new TaskRunner({
       createProvider: () => p,
-      tools: () => [],
+      toolsFor: () => noTools,
       settings: () => DEFAULT_SETTINGS.agent.codex,
       workspaceDir: '/tmp',
       store,

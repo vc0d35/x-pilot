@@ -11,13 +11,23 @@ export class TasksStore {
     schedule: TaskSchedule;
     threadMode: 'resume' | 'new';
     webSearch?: boolean;
+    visibleWindow?: boolean;
     nextRunAt: string | null;
   }): ScheduledTask {
     const res = this.db
       .prepare(
-        'INSERT INTO tasks(title, prompt, schedule_json, thread_mode, web_search, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT INTO tasks(title, prompt, schedule_json, thread_mode, web_search, visible_window, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       )
-      .run(t.title, t.prompt, JSON.stringify(t.schedule), t.threadMode, t.webSearch ? 1 : 0, new Date().toISOString(), t.nextRunAt);
+      .run(
+        t.title,
+        t.prompt,
+        JSON.stringify(t.schedule),
+        t.threadMode,
+        t.webSearch ? 1 : 0,
+        t.visibleWindow ? 1 : 0,
+        new Date().toISOString(),
+        t.nextRunAt,
+      );
     return this.get(Number(res.lastInsertRowid))!;
   }
 
@@ -37,6 +47,7 @@ export class TasksStore {
         | 'lastStatus'
         | 'nextRunAt'
         | 'lastSeenPostId'
+        | 'visibleWindow'
       >
     >,
   ): void {
@@ -52,6 +63,7 @@ export class TasksStore {
       last_status: patch.lastStatus,
       next_run_at: patch.nextRunAt,
       last_seen_post_id: patch.lastSeenPostId,
+      visible_window: patch.visibleWindow === undefined ? undefined : patch.visibleWindow ? 1 : 0,
     };
     const set = Object.entries(cols).filter(([, v]) => v !== undefined);
     if (set.length === 0) return;
@@ -101,9 +113,10 @@ function rowToTask(r: Record<string, unknown>): ScheduledTask {
     webSearch: (r.web_search as number | null) === 1,
     createdAt: r.created_at as string,
     lastRunAt: (r.last_run_at as string | null) ?? null,
-    lastStatus: (r.last_status as string | null) ?? null,
+    lastStatus: (r.last_status as ScheduledTask['lastStatus']) ?? null,
     nextRunAt: (r.next_run_at as string | null) ?? null,
     lastSeenPostId: (r.last_seen_post_id as string | null) ?? null,
+    visibleWindow: (r.visible_window as number | null) === 1,
   };
 }
 

@@ -30,6 +30,10 @@ export interface SidebarIpcDeps {
   settings: SettingsStore;
   store: AppStore;
   tasks: TaskManager;
+  /** Stops the scheduled run in flight, for the banner's Stop button. */
+  stopTaskRun: () => void;
+  /** The user did something themselves; a run that wants their window waits for them to stop. */
+  onUserActivity: () => void;
   styles: PageStyles;
   selectors: SelectorOverrides;
   libraryDir: () => string;
@@ -60,6 +64,8 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     selectors,
     libraryDir,
     openPath,
+    stopTaskRun,
+    onUserActivity,
   } = deps;
   const push = (e: AgentEvent) => {
     if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e);
@@ -90,6 +96,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     IPC.agentSend,
     guarded(async (_e, raw) => {
       const { text, pageContext } = SendSchema.parse(raw);
+      onUserActivity();
       await agent.send(text, pageContext);
     }),
   );
@@ -185,6 +192,10 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     guarded((_e, raw) => tasks.runNow(z.object({ id: z.number().int() }).parse(raw).id)),
   );
   ipcMain.handle(
+    IPC.tasksStopRun,
+    guarded(() => stopTaskRun()),
+  );
+  ipcMain.handle(
     IPC.libraryList,
     guarded(() => store.listLibrary()),
   );
@@ -253,6 +264,17 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
       return r.filePaths[0];
     }),
   );
+}
+
+/**
+ * The visible X view's preload says the user just used the page. It carries nothing but the fact,
+ * is rate-limited on the preload side, and is only accepted from that one view.
+ */
+export function registerUserActivity(deps: { ipc: BridgeIpc; xContentsId: number; onActivity: () => void }): void {
+  deps.ipc.on(IPC.userActive, (event) => {
+    if (event.sender.id !== deps.xContentsId) return;
+    deps.onActivity();
+  });
 }
 
 export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {

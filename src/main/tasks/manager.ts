@@ -5,11 +5,25 @@ import { nextRun, parseSchedule } from './schedule';
 export type RunStatus = 'completed' | 'failed' | 'interrupted';
 export type RunTask = (task: ScheduledTask) => Promise<RunStatus>;
 
+/**
+ * How far a run that would take over the user's window is pushed back when the user is at the
+ * keyboard: far enough to stay out of the way, near enough that the task still happens soon.
+ */
+export const DEFER_MS = 2 * 60_000;
+
 export class TaskManager {
   private queue: Promise<void> = Promise.resolve();
   /** Tasks queued or running right now, so a tick during a long run cannot enqueue them twice. */
   private readonly active = new Map<number, Promise<void>>();
-  constructor(private readonly deps: { store: AppStore; now?: () => Date; run?: RunTask }) {}
+  constructor(
+    private readonly deps: {
+      store: AppStore;
+      now?: () => Date;
+      run?: RunTask;
+      /** True while the user is working in the app, so a run that wants their window waits. */
+      userActive?: () => boolean;
+    },
+  ) {}
 
   private now(): Date {
     return this.deps.now ? this.deps.now() : new Date();
@@ -21,6 +35,7 @@ export class TaskManager {
     schedule: Partial<Record<'every' | 'cron', unknown>>;
     threadMode?: 'resume' | 'new';
     webSearch?: boolean;
+    visibleWindow?: boolean;
   }): ScheduledTask {
     const title = input.title?.trim();
     const prompt = input.prompt?.trim();
@@ -33,6 +48,7 @@ export class TaskManager {
       schedule,
       threadMode: input.threadMode === 'new' ? 'new' : 'resume',
       webSearch: input.webSearch === true,
+      visibleWindow: input.visibleWindow === true,
       nextRunAt: nextRun(schedule, this.now()).toISOString(),
     });
   }
@@ -46,6 +62,7 @@ export class TaskManager {
       threadMode?: 'resume' | 'new';
       enabled?: boolean;
       webSearch?: boolean;
+      visibleWindow?: boolean;
     },
   ): ScheduledTask {
     const current = this.deps.store.getTask(id);
@@ -60,6 +77,7 @@ export class TaskManager {
       threadMode: patch.threadMode,
       enabled: patch.enabled,
       webSearch: patch.webSearch,
+      visibleWindow: patch.visibleWindow,
       nextRunAt,
     });
     return this.deps.store.getTask(id)!;
@@ -93,6 +111,14 @@ export class TaskManager {
   private enqueue(task: ScheduledTask): Promise<void> {
     const queued = this.active.get(task.id);
     if (queued) return queued;
+    // A run that drives the user's own window waits until they have stopped using it.
+    if (task.visibleWindow && this.deps.userActive?.()) {
+      this.deps.store.updateTask(task.id, {
+        nextRunAt: new Date(this.now().getTime() + DEFER_MS).toISOString(),
+        lastStatus: 'deferred',
+      });
+      return Promise.resolve();
+    }
     // Reschedule at queue time, not at start: a long run must not leave the task due on every tick.
     this.deps.store.updateTask(task.id, { nextRunAt: nextRun(task.schedule, this.now()).toISOString() });
     const job = this.queue.then(async () => {

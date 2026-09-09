@@ -127,6 +127,49 @@ describe('TaskManager', () => {
     await expect(m.idle()).resolves.toBeUndefined();
   });
 
+  it("puts off a run that wants the user's window while the user is using it", async () => {
+    let clock = now;
+    let active = true;
+    const run = vi.fn(async () => 'completed' as const);
+    const m = new TaskManager({ store: new AppStore(':memory:'), now: () => clock, run, userActive: () => active });
+    const t = m.create({ title: 'Screen', prompt: 'p', schedule: { every: '1h' }, visibleWindow: true });
+
+    clock = new Date('2026-09-08T11:00:00.000Z');
+    await m.tick();
+    await m.idle();
+    expect(run).not.toHaveBeenCalled();
+    // Pushed back by the deferral, not by the whole hour: the task happens as soon as they stop.
+    expect(m.get(t.id)).toMatchObject({ lastStatus: 'deferred', nextRunAt: '2026-09-08T11:02:00.000Z' });
+
+    active = false;
+    clock = new Date('2026-09-08T11:02:00.000Z');
+    await m.tick();
+    await m.idle();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(m.get(t.id)).toMatchObject({ lastStatus: 'completed', nextRunAt: '2026-09-08T12:02:00.000Z' });
+  });
+
+  it('never defers a run that stays in a hidden window', async () => {
+    let clock = now;
+    const run = vi.fn(async () => 'completed' as const);
+    const m = new TaskManager({ store: new AppStore(':memory:'), now: () => clock, run, userActive: () => true });
+    const t = m.create({ title: 'Hidden', prompt: 'p', schedule: { every: '1h' } });
+    clock = new Date('2026-09-08T11:00:00.000Z');
+    await m.tick();
+    await m.idle();
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(m.get(t.id)?.lastStatus).toBe('completed');
+  });
+
+  it('carries the visible-window flag from the agent, defaulting it off', () => {
+    const m = new TaskManager({ store: new AppStore(':memory:'), now: () => now });
+    const hidden = m.create({ title: 'A', prompt: 'p', schedule: { every: '1h' } });
+    expect(hidden.visibleWindow).toBe(false);
+    expect(m.create({ title: 'B', prompt: 'p', schedule: { every: '1h' }, visibleWindow: true }).visibleWindow).toBe(true);
+    expect(m.update(hidden.id, { visibleWindow: true }).visibleWindow).toBe(true);
+    expect(m.update(hidden.id, { enabled: false }).visibleWindow).toBe(true); // an unrelated patch leaves it alone
+  });
+
   it('runNow on a task that is already queued joins the queued run instead of adding another', async () => {
     const clock = new Date('2026-09-08T11:00:00.000Z');
     let release!: () => void;

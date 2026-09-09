@@ -31,6 +31,7 @@ const api: XPilotApi = {
   updateTask: (id, patch) => ipcRenderer.invoke(IPC.tasksUpdate, { id, ...patch }),
   deleteTask: (id) => ipcRenderer.invoke(IPC.tasksDelete, { id }),
   runTaskNow: (id) => ipcRenderer.invoke(IPC.tasksRunNow, { id }),
+  stopTaskRun: () => ipcRenderer.invoke(IPC.tasksStopRun),
   openConversation: (threadId) => ipcRenderer.invoke(IPC.conversationsOpen, { threadId }),
   openPdf: (path) => ipcRenderer.invoke(IPC.libraryOpen, { path }),
   chooseLibraryDir: () => ipcRenderer.invoke(IPC.libraryChooseDir),

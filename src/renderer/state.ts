@@ -35,6 +35,14 @@ export interface ViewingRun {
   running: boolean;
 }
 
+/** The scheduled run in flight, as the banner over the sidebar names it. */
+export interface TaskRun {
+  taskId: number;
+  title: string;
+  /** True when the run is driving the window the user is looking at, which is what the banner is for. */
+  visibleWindow: boolean;
+}
+
 /** Everything the sidebar dispatches that is not an agent event of the live conversation. */
 export type LocalAction =
   | { type: 'reset' }
@@ -57,6 +65,8 @@ export interface State {
   everSucceeded: boolean;
   /** Set while a scheduled run is being read instead of the live conversation. */
   viewing: ViewingRun | null;
+  /** The scheduled run executing right now, whichever conversation the sidebar is showing. */
+  taskRun: TaskRun | null;
 }
 
 export const initialState: State = {
@@ -69,6 +79,7 @@ export const initialState: State = {
   failure: null,
   everSucceeded: false,
   viewing: null,
+  taskRun: null,
 };
 
 let seq = 0;
@@ -82,6 +93,9 @@ export function reduce(state: State, e: AgentEvent | LocalAction): State {
       return { ...state, viewing: { threadId: e.threadId, taskId: e.taskId, title: e.title, running: e.running } };
     case 'view.live':
       return { ...state, viewing: null };
+    // A run of the user's own is not part of any conversation, so it outlives a reset or a new thread.
+    case 'task.run':
+      return { ...state, taskRun: e.running ? { taskId: e.taskId, title: e.title, visibleWindow: e.visibleWindow } : null };
     case 'conversation.event': {
       const viewing = state.viewing;
       if (!viewing || viewing.threadId !== e.threadId) return state;

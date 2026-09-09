@@ -5,6 +5,7 @@ export const IPC = {
   historyLiked: 'history:liked',
   historyUnliked: 'history:unliked',
   focusChanged: 'focus:changed',
+  userActive: 'user:active',
   // main -> X preload
   adapterCall: 'adapter:call',
   pageConfigUpdate: 'page-config:update',
@@ -41,6 +42,7 @@ export const IPC = {
   tasksUpdate: 'tasks:update',
   tasksDelete: 'tasks:delete',
   tasksRunNow: 'tasks:runNow',
+  tasksStopRun: 'tasks:stopRun',
   pageConfigStatus: 'page-config:status',
   pageConfigOpen: 'page-config:open',
   pageConfigReset: 'page-config:reset',

@@ -15,7 +15,7 @@ import { installPermissionHandlers } from './permissions';
 import { APP_SCHEME, SIDEBAR_URL, hardenWebContents, resolveSidebarAsset, reviveOnCrash } from './hardening';
 import { createLinkRouter, rateLimit, type LinkRouter } from './links';
 import { SettingsStore } from './settings';
-import { AppToolSource, ToolRegistry } from './tools/registry';
+import { AppToolSource, ToolRegistry, type ToolSource } from './tools/registry';
 import { AdapterBridge } from './adapter/bridge';
 import { adapterToolSpecs } from '../preload/x/adapter/tools/specs';
 import { XViewController } from './xview';
@@ -24,10 +24,10 @@ import { ApprovalBroker } from './approvals';
 import { UserInputBroker } from './user-input';
 import { AgentController } from './agent/controller';
 import { ThreadState } from './agent/thread-state';
-import { TaskManager } from './tasks/manager';
+import { DEFER_MS, TaskManager } from './tasks/manager';
 import { TaskRunner } from './tasks/runner';
 import { CodexProvider } from './agent/codex/provider';
-import { registerSidebarIpc, registerFocusRelay } from './ipc';
+import { registerSidebarIpc, registerFocusRelay, registerUserActivity } from './ipc';
 import { PageStyles, PAGE_STYLES_FILE } from './page-config/styles';
 import { SelectorOverrides, SELECTORS_FILE } from './page-config/selectors';
 import { registerPageConfigIpc } from './page-config/ipc';
@@ -37,7 +37,7 @@ import { DraftStore } from './tools/xview/drafts';
 import { AppStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
-import type { SelectorTest } from './tools/app/context';
+import type { AppToolCtx, SelectorTest } from './tools/app/context';
 import type { SelectorKey } from '../shared/selectors';
 import { exportPdf } from './library/pdf';
 
@@ -63,6 +63,59 @@ const NOT_FOR_SCHEDULED_RUNS = new Set([...TASK_MANAGEMENT_TOOLS, ...CONFIG_WRIT
 
 export function toolsForScheduledRuns<T extends { spec: { name: string } }>(tools: readonly T[]): T[] {
   return tools.filter((t) => !NOT_FOR_SCHEDULED_RUNS.has(t.spec.name));
+}
+
+/** The visible view as a run that may not touch it sees it: every call refuses, with the reason. */
+export const REFUSING_XVIEW: XViewLike = {
+  currentUrl: () => '',
+  navigate: () => Promise.reject(new Error("Scheduled runs cannot move the user's window")),
+  callPreload: async () => fail("The user's window is not available in a scheduled run; use background reads"),
+};
+
+export interface TaskRegistryDeps {
+  /** The window the user is looking at, for a task that was created to act on their screen. */
+  xview: XViewLike;
+  /** That window's preload, the only source of the screen tools; a hidden run has none of them. */
+  bridge: ToolSource;
+  /** The runs' own hidden window: background reads stay there whichever kind of run it is. */
+  background: () => Promise<XViewLike>;
+  allowHosts: () => string[];
+  approvals: ApprovalBroker;
+  postingMode: () => 'confirm' | 'autonomous';
+  likesMode: () => 'auto' | 'confirm';
+  /** Everything the app tools need; the runs' `testSelector` is always null. */
+  appCtx: Omit<AppToolCtx, 'testSelector'>;
+}
+
+/**
+ * Builds the tool set of one run, by task. A task the user asked to act on their screen drives the
+ * visible view and gets its preload's screen tools with it; every other run keeps the refusing stub
+ * and cannot reach the user's window at all. Beyond the window, the two are the same run surface:
+ * no task-management tools, no page-config writers, the same approvals and confirm settings.
+ */
+export function createTaskRegistryFactory(deps: TaskRegistryDeps): (task: { visibleWindow: boolean }) => ToolRegistry {
+  const build = (visibleWindow: boolean): ToolRegistry => {
+    const registry = new ToolRegistry();
+    if (visibleWindow) registry.addSource(deps.bridge);
+    registry.addSource(
+      new AppToolSource('xview', xviewTools, {
+        xview: visibleWindow ? deps.xview : REFUSING_XVIEW,
+        background: deps.background,
+        allowHosts: deps.allowHosts,
+        approvals: deps.approvals,
+        postingMode: deps.postingMode,
+        likesMode: deps.likesMode,
+        drafts: new DraftStore(),
+      }),
+    );
+    registry.addSource(new AppToolSource('app', toolsForScheduledRuns(appTools), { ...deps.appCtx, testSelector: null }));
+    return registry;
+  };
+  // One registry of each kind, built when a run of that kind first needs it: a draft composed in a
+  // run is still there for the x_submit_post that follows it.
+  let hidden: ToolRegistry | null = null;
+  let visible: ToolRegistry | null = null;
+  return (task) => (task.visibleWindow ? (visible ??= build(true)) : (hidden ??= build(false)));
 }
 
 export interface DevSwitches {
@@ -103,7 +156,8 @@ export interface XPilotApp {
   sidebar: WebContentsView;
   xview: XViewController;
   registry: ToolRegistry;
-  taskRegistry: ToolRegistry;
+  /** The tool set a scheduled run of this task gets; it depends on `visibleWindow`. */
+  taskRegistryFor: (task: { visibleWindow: boolean }) => ToolRegistry;
   agent: AgentController;
   tasks: TaskManager;
   store: AppStore;
@@ -225,6 +279,14 @@ export function createApp(opts: AppOptions): XPilotApp {
     selectors.close();
   });
 
+  // When the user last touched the app: pointer and keyboard in the X view, and their own messages
+  // in the sidebar. A run that would take over their window waits until they have stopped.
+  let lastUserActivityAt = 0;
+  const noteUserActivity = () => {
+    lastUserActivityAt = Date.now();
+  };
+  const userActive = () => Date.now() - lastUserActivityAt < DEFER_MS;
+
   const approvals = new ApprovalBroker();
   const userInput = new UserInputBroker();
   const registry = new ToolRegistry();
@@ -300,9 +362,9 @@ export function createApp(opts: AppOptions): XPilotApp {
   app.on('will-quit', () => clearInterval(retentionTimer));
   const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), LIBRARY_FOLDER_NAME);
   const taskRunner = new TaskRunner({
-    createProvider: () =>
-      new CodexProvider({ callTool: (n, a, signal) => taskRegistry.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
-    tools: () => taskRegistry.list(),
+    createProvider: (tools) =>
+      new CodexProvider({ callTool: (n, a, signal) => tools.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
+    toolsFor: (task) => taskRegistryFor(task),
     settings: () => settings.get().agent.codex,
     workspaceDir,
     store,
@@ -311,10 +373,15 @@ export function createApp(opts: AppOptions): XPilotApp {
     onTranscriptEvent: (threadId, event) => {
       if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.conversationEvent, { threadId, event });
     },
+    // A run that has the user's window raises a banner over their sidebar with a Stop on it.
+    onRunEvent: (event) => {
+      if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.agentEvent, event);
+    },
     log: (m) => console.log(m),
   });
   const tasks = new TaskManager({
     store,
+    userActive,
     run: (t) =>
       taskRunner.run(t).then((status) => {
         if (taskRunner.lastThreadId) store.updateTask(t.id, { threadId: taskRunner.lastThreadId });
@@ -369,25 +436,18 @@ export function createApp(opts: AppOptions): XPilotApp {
   };
   registry.addSource(new AppToolSource('app', appTools, { ...appCtx, testSelector }));
 
-  // A scheduled run gets the app tools but never the visible window, nor its adapter tools.
-  const taskXview: XViewLike = {
-    currentUrl: () => '',
-    navigate: () => Promise.reject(new Error("Scheduled runs cannot move the user's window")),
-    callPreload: async () => fail("The user's window is not available in a scheduled run; use background reads"),
-  };
-  const taskRegistry = new ToolRegistry();
-  taskRegistry.addSource(
-    new AppToolSource('xview', xviewTools, {
-      xview: taskXview,
-      background: () => taskBackground.get(),
-      allowHosts,
-      approvals,
-      postingMode: () => settings.get().posting.mode,
-      likesMode: () => settings.get().likes.mode,
-      drafts: new DraftStore(),
-    }),
-  );
-  taskRegistry.addSource(new AppToolSource('app', toolsForScheduledRuns(appTools), { ...appCtx, testSelector: null }));
+  // A scheduled run reads in its own hidden window and, unless the task asked for the user's
+  // screen, cannot reach the visible one at all.
+  const taskRegistryFor = createTaskRegistryFactory({
+    xview,
+    bridge,
+    background: () => taskBackground.get(),
+    allowHosts,
+    approvals,
+    postingMode: () => settings.get().posting.mode,
+    likesMode: () => settings.get().likes.mode,
+    appCtx,
+  });
   app.on('will-quit', () => store.close());
 
   const agent = new AgentController({
@@ -418,6 +478,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     setSidebarCollapsed,
     openLink: links.openLink,
     tasks,
+    stopTaskRun: () => taskRunner.stop(),
+    onUserActivity: noteUserActivity,
     agent,
     approvals,
     userInput,
@@ -429,6 +491,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     openPath: appCtx.openPath,
   });
   registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
+  registerUserActivity({ ipc: ipcMain, xContentsId: xView.webContents.id, onActivity: noteUserActivity });
 
   let ticker: NodeJS.Timeout | null = null;
   let quitting = false;
@@ -471,7 +534,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     sidebar,
     xview,
     registry,
-    taskRegistry,
+    taskRegistryFor,
     agent,
     tasks,
     store,

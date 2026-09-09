@@ -4,6 +4,25 @@ import type { AgentEvent } from '../shared/agent';
 
 const run = (events: AgentEvent[], s: State = initialState) => events.reduce(reduce, s);
 
+describe('the banner over a scheduled run that has the window', () => {
+  it('raises it while the run is going and takes it down when the run ends', () => {
+    const started = run([{ type: 'task.run', taskId: 4, title: 'Morning scroll', visibleWindow: true, running: true }]);
+    expect(started.taskRun).toEqual({ taskId: 4, title: 'Morning scroll', visibleWindow: true });
+    const ended = reduce(started, { type: 'task.run', taskId: 4, title: 'Morning scroll', visibleWindow: true, running: false });
+    expect(ended.taskRun).toBeNull();
+  });
+
+  it('keeps the run through a reset, because it is not part of any conversation', () => {
+    const s = run([{ type: 'task.run', taskId: 4, title: 'Morning scroll', visibleWindow: true, running: true }]);
+    expect(reduce(s, { type: 'reset' }).taskRun).toEqual(s.taskRun);
+  });
+
+  it('records a hidden run too, so only the banner has to decide it is not worth showing', () => {
+    const s = run([{ type: 'task.run', taskId: 5, title: 'Weather', visibleWindow: false, running: true }]);
+    expect(s.taskRun).toEqual({ taskId: 5, title: 'Weather', visibleWindow: false });
+  });
+});
+
 describe('sidebar reducer', () => {
   it('streams an agent message from deltas and finalises it', () => {
     const s = run([

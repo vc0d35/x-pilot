@@ -37,6 +37,8 @@ export interface ConversationEventMessage {
 }
 
 export type TaskSchedule = { every: string } | { cron: string };
+/** What the last attempt at a run came to; 'deferred' means the user was active and it was put off. */
+export type TaskStatus = 'running' | 'completed' | 'failed' | 'interrupted' | 'deferred';
 export interface ScheduledTask {
   id: number;
   title: string;
@@ -47,12 +49,17 @@ export interface ScheduledTask {
   enabled: boolean;
   createdAt: string;
   lastRunAt: string | null;
-  lastStatus: string | null;
+  lastStatus: TaskStatus | null;
   nextRunAt: string | null;
   /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
   webSearch: boolean;
   /** The largest post id a run of this task has read from a timeline, so the next run can skip it. */
   lastSeenPostId: string | null;
+  /**
+   * Whether a run drives the window the user is looking at, with the screen tools, instead of a
+   * hidden one. Only set when the user asked for it; a run is deferred while the user is active.
+   */
+  visibleWindow: boolean;
 }
 /** Which of the two page-config files a Settings row is about. */
 export type PageConfigKind = 'styles' | 'selectors';
@@ -100,6 +107,8 @@ export interface XPilotApi {
   updateTask(id: number, patch: { enabled?: boolean }): Promise<ScheduledTask>;
   deleteTask(id: number): Promise<void>;
   runTaskNow(id: number): Promise<void>;
+  /** Stops the scheduled run in flight; the run is recorded as interrupted. */
+  stopTaskRun(): Promise<void>;
   openConversation(threadId: string): Promise<OpenedConversation>;
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;

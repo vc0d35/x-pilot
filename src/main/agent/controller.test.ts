@@ -4,6 +4,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AgentController, toolsFingerprint, transcriptEvent, MAX_TRANSCRIPT_OUTPUT } from './controller';
+import type { ScheduledTask } from '../../shared/sidebar-api';
 import type { AgentProvider, StartOptions } from './provider';
 import { ToolRegistry } from '../tools/registry';
 import { SettingsStore } from '../settings';
@@ -372,7 +373,7 @@ describe('conversations', () => {
 });
 
 describe('opening a scheduled run', () => {
-  const withRun = (lastStatus: string | null) => {
+  const withRun = (lastStatus: ScheduledTask['lastStatus']) => {
     const appStore = new AppStore(':memory:');
     const task = appStore.createTask({
       title: 'Weather',

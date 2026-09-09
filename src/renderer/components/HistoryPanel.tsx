@@ -24,6 +24,7 @@ function TasksTab() {
           <div className="task-title">
             {t.title} <span className="badge">{describeSchedule(t.schedule)}</span>
             {t.webSearch && <span className="badge">web search</span>}
+            {t.visibleWindow && <span className="badge">screen</span>}
             {!t.enabled && <span className="badge">paused</span>}
           </div>
           <div className="task-prompt">{t.prompt}</div>

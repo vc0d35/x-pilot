@@ -84,6 +84,7 @@ export class AppStore {
     schedule: TaskSchedule;
     threadMode: 'resume' | 'new';
     webSearch?: boolean;
+    visibleWindow?: boolean;
     nextRunAt: string | null;
   }): ScheduledTask {
     return this.tasks.create(t);
@@ -104,6 +105,7 @@ export class AppStore {
         | 'lastStatus'
         | 'nextRunAt'
         | 'lastSeenPostId'
+        | 'visibleWindow'
       >
     >,
   ): void {
