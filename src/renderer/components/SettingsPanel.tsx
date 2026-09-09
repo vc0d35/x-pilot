@@ -51,14 +51,11 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
         </select>
       </label>
       <label>Codex binary
-        <input
-          key={codex.binPath ?? ''}
-          type="text"
-          spellCheck={false}
-          placeholder="auto-detect"
-          defaultValue={codex.binPath ?? ''}
-          onBlur={(e) => { const v = e.target.value.trim(); if (v !== (codex.binPath ?? '')) set({ agent: { codex: { binPath: v || null } } }); }}
-        />
+        <div className="row">
+          <code>{codex.binPath ?? 'auto-detect'}</code>
+          <button onClick={() => void window.xpilot.setCodexBinary('choose')}>Choose…</button>
+          {codex.binPath && <button onClick={() => void window.xpilot.setCodexBinary('clear')}>Clear</button>}
+        </div>
       </label>
       <label>Library folder
         <div className="row"><code>{settings.library.dir ?? '~/Documents/X Pilot'}</code><button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button></div>

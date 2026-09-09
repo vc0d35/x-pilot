@@ -18,6 +18,7 @@ export const IPC = {
   settingsGet: 'settings:get',
   settingsSet: 'settings:set',
   settingsChanged: 'settings:changed',
+  settingsCodexBinary: 'settings:codexBinary',
   libraryList: 'library:list',
   libraryOpen: 'library:open',
   libraryChooseDir: 'library:chooseDir',

@@ -1,3 +1,4 @@
+import { hasBannedSwitch } from './hardening';
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { hardenWebContents, reviveOnCrash } from './hardening';
@@ -94,5 +95,18 @@ describe('reviveOnCrash', () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining('not reloading'));
     c.crash('oom');
     expect(c.reloads).toHaveLength(1);
+  });
+});
+
+describe('hasBannedSwitch', () => {
+  it('flags debugging and network-rewriting switches in any position', () => {
+    expect(hasBannedSwitch(['/Applications/XPilot.app/Contents/MacOS/XPilot', '--remote-debugging-port=9222'])).toBe(true);
+    expect(hasBannedSwitch(['x', '--inspect-brk'])).toBe(true);
+    expect(hasBannedSwitch(['x', '--proxy-server=127.0.0.1:8080'])).toBe(true);
+    expect(hasBannedSwitch(['x', '--user-data-dir', '/tmp/p'])).toBe(true);
+  });
+  it('ignores ordinary arguments', () => {
+    expect(hasBannedSwitch(['x'])).toBe(false);
+    expect(hasBannedSwitch(['x', '--no-sandbox-warning', 'file.txt', '--inspector-off'])).toBe(false);
   });
 });

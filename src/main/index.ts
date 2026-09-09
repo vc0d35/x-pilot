@@ -9,7 +9,7 @@ import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { installPermissionHandlers } from './permissions';
-import { hardenWebContents, reviveOnCrash } from './hardening';
+import { hardenWebContents, reviveOnCrash, hasBannedSwitch } from './hardening';
 import { createLinkRouter, rateLimit } from './links';
 import { SettingsStore } from './settings';
 import { AppToolSource, ToolRegistry } from './tools/registry';
@@ -32,12 +32,15 @@ import { exportPdf } from './library/pdf';
 
 /** Development-only switches: a packaged app ignores them however its environment was set. */
 const DEV = !app.isPackaged;
+const TASK_MANAGEMENT_TOOLS = new Set(['xpilot_schedule_task', 'xpilot_update_task', 'xpilot_delete_task']);
 const START_URL = (DEV && process.env.XPILOT_START_URL) || 'https://x.com/home';
 const E2E = DEV && process.env.XPILOT_E2E === '1';
 
 if (DEV && process.env.XPILOT_USER_DATA) app.setPath('userData', process.env.XPILOT_USER_DATA);
 // Opt-in DevTools Protocol endpoint (localhost only) so tooling can inspect the live views: XPILOT_CDP_PORT=9222 npm run dev
 if (DEV && process.env.XPILOT_CDP_PORT) app.commandLine.appendSwitch('remote-debugging-port', process.env.XPILOT_CDP_PORT);
+
+if (!DEV && hasBannedSwitch(process.argv.slice(1))) process.exit(1);
 
 app.enableSandbox();
 
@@ -147,7 +150,7 @@ async function start(): Promise<void> {
       xview: taskXview, background: () => taskBackground.get(), allowHosts,
       approvals, postingMode: () => settings.get().posting.mode, likesMode: () => settings.get().likes.mode, drafts: new DraftStore(),
     }));
-    taskRegistry.addSource(new AppToolSource('app', appTools, appCtx));
+    taskRegistry.addSource(new AppToolSource('app', appTools.filter((t) => !TASK_MANAGEMENT_TOOLS.has(t.spec.name)), appCtx));
     app.on('will-quit', () => history.close());
 
     const agent = new AgentController({

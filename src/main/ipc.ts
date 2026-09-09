@@ -10,6 +10,9 @@ import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import { SettingsPatchSchema } from '../shared/settings';
+import { isSafeExecutable } from './agent/codex/binary';
+
+const CodexBinaryActionSchema = z.object({ action: z.enum(['choose', 'clear']) });
 import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
@@ -66,6 +69,16 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     const { path } = z.object({ path: z.string() }).parse(raw);
     if (!isOpenablePdf(path, libraryDir(), (p) => history.hasLibraryPath(p))) throw new Error('not a library PDF');
     await openPath(path);
+  }));
+  ipcMain.handle(IPC.settingsCodexBinary, guarded(async (_e, raw) => {
+    const { action } = CodexBinaryActionSchema.parse(raw);
+    if (action === 'clear') { settings.update({ agent: { codex: { binPath: null } } }); return null; }
+    const r = await dialog.showOpenDialog({ properties: ['openFile'], message: 'Choose the codex executable' });
+    const path = r.canceled ? null : r.filePaths[0];
+    if (!path) return settings.get().agent.codex.binPath;
+    if (!isSafeExecutable(path)) throw new Error('That file is not a safe executable: it must be a regular file you or root own that nobody else can write');
+    settings.update({ agent: { codex: { binPath: path } } });
+    return path;
   }));
   ipcMain.handle(IPC.libraryChooseDir, guarded(async () => { const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] }); if (r.canceled || !r.filePaths[0]) return null; settings.update({ library: { dir: r.filePaths[0] } }); return r.filePaths[0]; }));
 }

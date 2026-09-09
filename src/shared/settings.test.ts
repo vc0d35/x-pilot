@@ -7,16 +7,12 @@ describe('SettingsPatchSchema', () => {
   it('accepts a patch of known fields and leaves the untouched ones out of it', () => {
     expect(parse({ posting: { mode: 'autonomous' } })).toEqual({ posting: { mode: 'autonomous' } });
     expect(parse({ agent: { codex: { model: 'gpt-5' } } })).toEqual({ agent: { codex: { model: 'gpt-5' } } });
-    expect(parse({ agent: { codex: { binPath: '/opt/homebrew/bin/codex' } } })).toEqual({ agent: { codex: { binPath: '/opt/homebrew/bin/codex' } } });
+    expect(parse({ agent: { codex: { model: 'gpt-5' } } })).toEqual({ agent: { codex: { model: 'gpt-5' } } });
     expect(parse({ navigation: { allowHosts: ['x.com', '*.x.com'] } })).toEqual({ navigation: { allowHosts: ['x.com', '*.x.com'] } });
   });
 
-  it('rejects a binPath that is not an absolute path', () => {
-    expect(() => parse({ agent: { codex: { binPath: 'codex' } } })).toThrow(/absolute path/);
-    expect(() => parse({ agent: { codex: { binPath: '../codex' } } })).toThrow(/absolute path/);
-    expect(() => parse({ agent: { codex: { binPath: '/bin/codex\n; rm -rf /' } } })).toThrow(/absolute path/);
-    expect(() => parse({ agent: { codex: { binPath: `/${'x'.repeat(1024)}` } } })).toThrow();
-    expect(parse({ agent: { codex: { binPath: null } } })).toEqual({ agent: { codex: { binPath: null } } });
+  it('never accepts binPath over the patch channel: it is set through the file picker only', () => {
+    for (const binPath of ['/opt/homebrew/bin/codex', 'codex', null]) expect(() => parse({ agent: { codex: { binPath } } })).toThrow(/unrecognized_key|Unrecognized/i);
   });
 
   it('rejects host patterns that cover a public suffix, uppercase, or anything but a hostname', () => {
@@ -47,5 +43,11 @@ describe('SettingsSchema', () => {
     expect(() => SettingsSchema.parse({ ...DEFAULT_SETTINGS, navigation: { allowHosts: ['*.com'] } })).toThrow();
     expect(() => normalizeSettings({ agent: { codex: { binPath: 'codex' } } })).toThrow(/absolute path/);
     expect(normalizeSettings({ likes: { mode: 'auto' } }).likes.mode).toBe('auto');
+  });
+});
+
+describe('legacy settings values', () => {
+  it('maps approvalPolicy "never" to the default instead of rejecting the file', () => {
+    expect(normalizeSettings({ agent: { codex: { approvalPolicy: 'never' } } }).agent.codex.approvalPolicy).toBe('on-request');
   });
 });

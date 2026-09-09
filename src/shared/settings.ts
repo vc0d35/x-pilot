@@ -21,7 +21,7 @@ export const SettingsSchema = z.object({
     codex: z.object({
       model: z.string().nullable().default(null),
       reasoningEffort: z.string().nullable().default(null),
-      approvalPolicy: z.enum(['untrusted', 'on-request', 'never']).default('on-request'),
+      approvalPolicy: z.enum(['untrusted', 'on-request']).default('on-request'),
       sandbox: z.enum(['read-only', 'workspace-write']).default('read-only'),
       webSearch: z.enum(['live', 'cached', 'disabled']).default('live'),
       /** Absolute path to the `codex` binary; null means auto-detect (PATH, common install dirs, login shell). */
@@ -53,7 +53,8 @@ function patchOf(schema: z.ZodObject<z.ZodRawShape>): z.ZodObject<z.ZodRawShape>
   return z.strictObject(shape);
 }
 
-const codexShape = SettingsSchema.shape.agent.shape.codex;
+const { binPath: _binPath, ...codexPatchShape } = SettingsSchema.shape.agent.shape.codex.shape;
+const codexShape = z.object(codexPatchShape);
 
 /**
  * What a settings update may contain: every field of `SettingsSchema`, optional and validated by the
@@ -89,11 +90,14 @@ export function deepMerge<T>(base: T, patch: DeepPartial<T> | undefined): T {
 /** Fills in missing nested objects so leaf-level defaults apply, then validates. */
 export function normalizeSettings(raw: unknown): Settings {
   const r = isObj(raw) ? raw : {};
+  const agent = isObj(r.agent) ? { ...r.agent } : {};
+  const codex = isObj(agent.codex) ? { ...agent.codex } : {};
+  if (codex.approvalPolicy === 'never') delete codex.approvalPolicy;
   const shaped = {
     posting: isObj(r.posting) ? r.posting : {},
     likes: isObj(r.likes) ? r.likes : {},
     library: isObj(r.library) ? r.library : {},
-    agent: { ...(isObj(r.agent) ? r.agent : {}), codex: isObj(r.agent) && isObj((r.agent as Record<string, unknown>).codex) ? (r.agent as Record<string, unknown>).codex : {} },
+    agent: { ...agent, codex },
     navigation: isObj(r.navigation) ? r.navigation : {},
     ui: isObj(r.ui) ? r.ui : {},
     threadId: r.threadId ?? null,

@@ -29,6 +29,8 @@ export interface XPilotApi {
   openConversation(threadId: string): Promise<AgentEvent[]>;
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;
+  /** Picks the Codex binary with a file dialog, or clears it; returns the new path. */
+  setCodexBinary(action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
   /** Opens a link the user clicked in the sidebar: x.com in the main window, anything else in the browser. */

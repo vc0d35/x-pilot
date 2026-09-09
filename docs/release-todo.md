@@ -34,7 +34,14 @@ Goal: someone downloads XPilot on a Mac, opens it, logs into X, and it works. Th
 
 Done in the pre-release fix wave: permission handlers, renderer sandbox on for x.com, production CSP, dev-only switches gated on packaged builds, global `window.open` denial, PDF path containment, PDF-only opening, external-link rate limit, single-instance lock, crash handling, orderly quit, non-fatal startup load, task runs isolated from the user's window, Codex stderr drained, Codex binary discovery, approvals scoped to unexpected deaths, scheduler dedupe, SQLite migrations, atomic settings, transcript output cap, reopen tool-hash guard, deferred restart on settings change, `requestUserInput` refusal, prompt-injection fencing, bridge tool-list stability and navigation awareness, page-tool spec validation.
 
-Still open:
+A whole-application security review on 2026-09-09 (threat model, four attackers, two verifiers) led to a second fix wave: Electron fuses, private profile files, safe Codex lookup, validated settings patches, full prompt fencing, navigation policy on every window, scoped permissions, trusted-click like capture, permalink-only authorship, likes confirming by default, bounded approval cards, and a release workflow that refuses unsigned builds. Left open from that review:
+
+- [ ] **`grantFileProtocolExtraPrivileges` fuse.** Still enabled because the sidebar loads from `file://` inside the asar; closing it means serving the renderer from a custom protocol.
+- [ ] **t.co resolution budget.** Hops are https-only and bounded, but a page can still trigger many HEAD requests; add a per-minute budget.
+- [ ] **Release provenance.** Split build and sign into separate jobs, add build attestation, and a Dependabot config for actions and npm.
+- [ ] **Web search as an egress channel.** Queries are visible in the sidebar, which is the current mitigation; consider a setting to confirm searches during autonomous runs.
+
+Still open from the first review:
 
 - [ ] **Cancel in-flight tool calls on Stop.** Thread an `AbortSignal` from the provider through `registry.call` into `ToolModule.execute`; window-moving and destructive tools should check it before acting.
 - [ ] **Serialise hidden-window use within one agent.** If the model issues parallel tool calls, two navigate-then-read sequences can interleave on the same hidden window. A per-view async mutex around navigate + read, or a small pool of hidden windows, fixes it.

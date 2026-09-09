@@ -55,3 +55,10 @@ export function reviveOnCrash(
     if (!contents.isDestroyed()) contents.reload();
   });
 }
+
+const BANNED_SWITCH = /^--(remote-debugging-(port|pipe|address)|inspect(-brk|-port)?|js-flags|user-data-dir|host-rules|host-resolver-rules|proxy-server|proxy-pac-url|ignore-certificate-errors|disable-web-security|allow-running-insecure-content|load-extension|enable-logging|renderer-cmd-prefix)(=|$)/;
+
+/** Chromium parses these before any app code runs, so a packaged app can only refuse to continue. */
+export function hasBannedSwitch(argv: readonly string[]): boolean {
+  return argv.some((a) => BANNED_SWITCH.test(a));
+}

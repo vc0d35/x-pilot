@@ -29,6 +29,7 @@ const api: XPilotApi = {
   openConversation: (threadId) => ipcRenderer.invoke(IPC.conversationsOpen, { threadId }),
   openPdf: (path) => ipcRenderer.invoke(IPC.libraryOpen, { path }),
   chooseLibraryDir: () => ipcRenderer.invoke(IPC.libraryChooseDir),
+  setCodexBinary: (action) => ipcRenderer.invoke(IPC.settingsCodexBinary, { action }),
   clearHistory: () => ipcRenderer.invoke(IPC.historyClear),
   setSidebarCollapsed: (collapsed) => ipcRenderer.invoke(IPC.sidebarSetCollapsed, { collapsed }),
   openLink: (url) => ipcRenderer.invoke(IPC.linkOpen, { url }),
