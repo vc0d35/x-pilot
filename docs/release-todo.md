@@ -70,6 +70,6 @@ Still open from the first review:
 ## Documentation and project hygiene
 
 - [ ] README screenshots or a short GIF of the sidebar in use.
-- [ ] `SECURITY.md` with a disclosure contact; `CONTRIBUTING.md`; a code of conduct if the project accepts contributions.
-- [ ] A short privacy note: what is stored (X session in Electron's profile, liked posts and transcripts in SQLite, PDFs in Documents), what leaves the machine (only what Codex sends to its model, plus web search when enabled), and how to wipe it.
+- [x] `SECURITY.md` with a disclosure contact and PGP key, GitHub private vulnerability reporting enabled; `CONTRIBUTING.md`; Contributor Covenant code of conduct.
+- [x] A short privacy note: `docs/privacy.md`.
 - [ ] Refresh `docs/manual-test.md` and run the full checklist on a signed, packaged build on both Apple Silicon and Intel, from a fresh macOS user account.

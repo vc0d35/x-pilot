@@ -75,6 +75,8 @@ Signed and notarized builds come from the tag workflow (`.github/workflows/relea
 - [docs/agent-principles.md](docs/agent-principles.md): how we prompt the agent (hints, not scripts).
 - [docs/manual-test.md](docs/manual-test.md): manual checks and live DOM debugging.
 - [docs/passkeys.md](docs/passkeys.md): signing for Touch ID passkeys.
+- [docs/privacy.md](docs/privacy.md): what is stored, what leaves your Mac, and how to wipe it.
+- [SECURITY.md](SECURITY.md) for reporting vulnerabilities, [CONTRIBUTING.md](CONTRIBUTING.md) for pull requests.
 
 ## License
 
