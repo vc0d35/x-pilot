@@ -28,7 +28,14 @@ export class BackgroundXView {
       show: false,
       width: 1100,
       height: 1400,
-      webPreferences: { partition: 'persist:x', preload: this.opts.preload, contextIsolation: true, nodeIntegration: false, sandbox: true },
+      webPreferences: {
+        partition: 'persist:x',
+        preload: this.opts.preload,
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+        backgroundThrottling: false,
+      },
     });
     const contents: WebContents = win.webContents;
     attachNavigationPolicy(contents, {

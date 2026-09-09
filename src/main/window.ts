@@ -38,6 +38,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      backgroundThrottling: false,
     },
   });
   const sidebar = new WebContentsView({

@@ -12,6 +12,10 @@ if (dev.cdpPort) app.commandLine.appendSwitch('remote-debugging-port', dev.cdpPo
 
 if (!DEV && hasBannedSwitch(process.argv.slice(1))) process.exit(1);
 
+// X pauses its feeds when the page reports itself hidden, which Chromium does for an occluded window.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+
 app.enableSandbox();
 
 // Has to happen before the app is ready. A standard, secure scheme gives the sidebar a real origin,
