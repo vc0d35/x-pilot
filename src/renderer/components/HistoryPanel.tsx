@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import type { Conversation, ScheduledTask } from '../../shared/sidebar-api';
 import { describeSchedule } from '../../shared/schedule-format';
+import { PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
+import { showsProviderBadge } from '../provider-ui';
 
 function TasksTab() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
@@ -76,7 +78,11 @@ export function runningRunThreads(conversations: Conversation[], tasks: Schedule
   return threads;
 }
 
-function ConversationsTab(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
+function ConversationsTab(props: {
+  currentThreadId: string | null;
+  activeProvider: ProviderKind | null;
+  onOpen: (threadId: string) => void;
+}) {
   const [items, setItems] = useState<Conversation[]>([]);
   const [running, setRunning] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -97,6 +103,7 @@ function ConversationsTab(props: { currentThreadId: string | null; onOpen: (thre
         >
           <span className="conv-title">{c.title || (c.kind === 'task' ? 'Task run' : 'Untitled')}</span>
           <span className="conv-meta">
+            {showsProviderBadge(c.provider, props.activeProvider) && <span className="badge">{PROVIDER_LABELS[c.provider]}</span>}
             {c.kind === 'task' && <span className="badge">task</span>}
             {running.has(c.threadId) && <span className="badge">running</span>}
             {new Date(c.updatedAt).toLocaleString()}
@@ -107,7 +114,11 @@ function ConversationsTab(props: { currentThreadId: string | null; onOpen: (thre
   );
 }
 
-export function HistoryPanel(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
+export function HistoryPanel(props: {
+  currentThreadId: string | null;
+  activeProvider: ProviderKind | null;
+  onOpen: (threadId: string) => void;
+}) {
   const [tab, setTab] = useState<'conversations' | 'tasks'>('conversations');
   return (
     <div className="panel">
@@ -119,7 +130,11 @@ export function HistoryPanel(props: { currentThreadId: string | null; onOpen: (t
           Scheduled tasks
         </button>
       </div>
-      {tab === 'conversations' ? <ConversationsTab currentThreadId={props.currentThreadId} onOpen={props.onOpen} /> : <TasksTab />}
+      {tab === 'conversations' ? (
+        <ConversationsTab currentThreadId={props.currentThreadId} activeProvider={props.activeProvider} onOpen={props.onOpen} />
+      ) : (
+        <TasksTab />
+      )}
     </div>
   );
 }

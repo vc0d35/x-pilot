@@ -1,5 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite';
-import type { AgentEvent } from '../../shared/agent';
+import { PROVIDER_KINDS, type AgentEvent, type ProviderKind } from '../../shared/agent';
 import type { Conversation } from '../../shared/sidebar-api';
 
 export interface RetentionPolicy {
@@ -34,14 +34,21 @@ const RETENTION_GRACE_MS = 60 * 60 * 1000;
 export class ConversationsStore {
   constructor(private readonly db: DatabaseSync) {}
 
-  upsert(c: { threadId: string; kind: 'chat' | 'task'; taskId?: number | null; toolsHash: string | null }): void {
+  upsert(c: {
+    threadId: string;
+    kind: 'chat' | 'task';
+    taskId?: number | null;
+    toolsHash: string | null;
+    /** The backend that owns the thread; defaults to Codex, which is what every older row is. */
+    provider?: ProviderKind;
+  }): void {
     const now = stamp();
     this.db
       .prepare(
-        `INSERT INTO conversations(thread_id, title, kind, task_id, created_at, updated_at, tools_hash) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(thread_id) DO UPDATE SET updated_at = excluded.updated_at, tools_hash = excluded.tools_hash`,
+        `INSERT INTO conversations(thread_id, title, kind, task_id, created_at, updated_at, tools_hash, provider) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(thread_id) DO UPDATE SET updated_at = excluded.updated_at, tools_hash = excluded.tools_hash, provider = excluded.provider`,
       )
-      .run(c.threadId, c.kind === 'task' ? 'Task run' : '', c.kind, c.taskId ?? null, now, now, c.toolsHash);
+      .run(c.threadId, c.kind === 'task' ? 'Task run' : '', c.kind, c.taskId ?? null, now, now, c.toolsHash, c.provider ?? 'codex');
   }
 
   /** Appends an event to a conversation's transcript; the first user message becomes the title. */
@@ -144,6 +151,7 @@ function rowToConversation(r: Record<string, unknown>): Conversation {
     threadId: r.thread_id as string,
     title: r.title as string,
     kind: r.kind as 'chat' | 'task',
+    provider: PROVIDER_KINDS.find((k) => k === r.provider) ?? 'codex',
     taskId: (r.task_id as number | null) ?? null,
     createdAt: r.created_at as string,
     updatedAt: r.updated_at as string,

@@ -32,6 +32,7 @@
     "dist": "npm run build && node scripts/render-entitlements.mjs && electron-builder --mac --publish never"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.266",
     "@fontsource/ibm-plex-mono": "^5.3.0",
     "croner": "^10.0.1",
     "react": "^19.2.0",

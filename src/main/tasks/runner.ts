@@ -1,5 +1,5 @@
 import type { ScheduledTask } from '../../shared/sidebar-api';
-import type { AgentEvent } from '../../shared/agent';
+import type { AgentEvent, ProviderKind } from '../../shared/agent';
 import type { Settings } from '../../shared/settings';
 import type { ToolResult, ToolSpec } from '../../shared/tools';
 import type { AgentProvider } from '../agent/provider';
@@ -65,10 +65,10 @@ export class TaskRunner {
   constructor(
     private readonly deps: {
       /** The run's provider, wired to the tools that run was given. */
-      createProvider: (tools: RunTools) => AgentProvider;
+      createProvider: (kind: ProviderKind, tools: RunTools) => AgentProvider;
       /** The tool set for one task: a visible-window task also gets the user's window and its screen tools. */
       toolsFor: (task: ScheduledTask) => RunTools;
-      settings: () => Settings['agent']['codex'];
+      settings: () => Settings['agent'];
       workspaceDir: string;
       store: AppStore;
       /** Every event as it is recorded, so a sidebar watching this run sees it arrive. */
@@ -81,8 +81,14 @@ export class TaskRunner {
   ) {}
 
   async run(task: ScheduledTask): Promise<RunStatus> {
+    const agentSettings = this.deps.settings();
+    const kind = agentSettings.provider;
+    if (!kind) {
+      this.deps.log?.(`[xpilot] task ${task.id} skipped: no agent provider is chosen in Settings`);
+      return 'failed';
+    }
     const registry = this.deps.toolsFor(task);
-    const provider = this.deps.createProvider(registry);
+    const provider = this.deps.createProvider(kind, registry);
     const tools = registry.list();
     let threadId: string | null = null;
     let watermark: string | null = null;
@@ -109,18 +115,21 @@ export class TaskRunner {
     try {
       // Web search is an egress channel and nobody is watching an unattended run, so it is off
       // unless the task was created asking for it.
-      const codex = this.deps.settings();
-      const settings = { ...codex, webSearch: task.webSearch ? codex.webSearch : ('disabled' as const) };
+      const settings: Settings['agent'] = {
+        ...agentSettings,
+        codex: { ...agentSettings.codex, webSearch: task.webSearch ? agentSettings.codex.webSearch : 'disabled' },
+        claude: { ...agentSettings.claude, webSearch: task.webSearch ? agentSettings.claude.webSearch : 'off' },
+      };
       const toolsHash = toolsFingerprint(tools);
       const started = await provider.start({
         tools,
         settings,
-        threadId: this.resumeThreadId(task, toolsHash),
+        threadId: this.resumeThreadId(task, toolsHash, provider),
         workspaceDir: this.deps.workspaceDir,
       });
       threadId = started.threadId;
       this.lastThreadId = threadId;
-      this.deps.store.upsertConversation({ threadId, kind: 'task', taskId: task.id, toolsHash });
+      this.deps.store.upsertConversation({ threadId, kind: 'task', taskId: task.id, toolsHash, provider: kind });
       await provider.send(buildRunPrompt(task, task.lastRunAt), null);
       const timeout = new Promise<RunStatus>((resolve) => setTimeout(() => resolve('interrupted'), this.deps.timeoutMs ?? 10 * 60_000));
       const status = await Promise.race([done, timeout]);
@@ -141,12 +150,17 @@ export class TaskRunner {
   /**
    * The thread to resume, or null for a fresh one. Codex fixes a thread's tools at thread/start, so
    * a task whose tool set changed - turning `visibleWindow` on, say - starts over rather than
-   * resuming a thread that believes in a different set. A thread we have no record of is left alone.
+   * resuming a thread that believes in a different set. A thread another provider wrote is never
+   * resumed at all. A thread we have no record of is left alone.
    */
-  private resumeThreadId(task: ScheduledTask, toolsHash: string): string | null {
+  private resumeThreadId(task: ScheduledTask, toolsHash: string, provider: AgentProvider): string | null {
     if (task.threadMode !== 'resume' || !task.threadId) return null;
-    const stored = this.deps.store.getConversation(task.threadId)?.toolsHash;
-    if (stored !== undefined && stored !== toolsHash) {
+    const stored = this.deps.store.getConversation(task.threadId);
+    if (stored && stored.provider !== provider.kind) {
+      this.deps.log?.(`[xpilot] task ${task.id}: its last run used ${stored.provider}; starting a fresh thread`);
+      return null;
+    }
+    if (stored?.toolsHash !== undefined && provider.capabilities.toolsFrozenPerThread && stored.toolsHash !== toolsHash) {
       this.deps.log?.(`[xpilot] task ${task.id}: tools changed since its last run; starting a fresh thread`);
       return null;
     }

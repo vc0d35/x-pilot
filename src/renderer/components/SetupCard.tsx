@@ -1,24 +1,6 @@
 import { useState } from 'react';
-import type { SetupIssue, SetupProblem } from '../setup';
-
-const HEADLINE: Record<SetupProblem, string> = {
-  missing: 'XPilot could not find the Codex CLI, so the agent cannot start.',
-  'logged-out': 'Codex is installed but not logged in, so it cannot answer.',
-  other: 'The agent stopped and could not be started again.',
-};
-
-const COMMANDS: Record<SetupProblem, string[]> = {
-  missing: ['npm i -g @openai/codex', 'codex login'],
-  'logged-out': ['codex login'],
-  other: [],
-};
-
-const HINT: Record<SetupProblem, string> = {
-  missing:
-    'Run these in Terminal, then Try again. Already installed? Codex may live outside the app’s PATH: set its full path in Settings.',
-  'logged-out': 'Run this in Terminal, sign in, then Try again.',
-  other: 'Try again restarts Codex and resumes this conversation.',
-};
+import { providerFix, type SetupIssue } from '../setup';
+import { PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
 
 function Command({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -43,19 +25,31 @@ function Command({ text }: { text: string }) {
   );
 }
 
-export function SetupCard({ issue, onRetry, onOpenSettings }: { issue: SetupIssue; onRetry: () => void; onOpenSettings: () => void }) {
+export function SetupCard({
+  issue,
+  provider,
+  onRetry,
+  onOpenSettings,
+}: {
+  issue: SetupIssue;
+  /** The backend in use: what to install, and what to log into, is its own. */
+  provider: ProviderKind;
+  onRetry: () => void;
+  onOpenSettings: () => void;
+}) {
+  const fix = providerFix(provider, issue.problem);
   return (
     <div className="setup">
-      <div className="setup-title">{HEADLINE[issue.problem]}</div>
-      {COMMANDS[issue.problem].map((c) => (
+      <div className="setup-title">{fix.headline}</div>
+      {fix.commands.map((c) => (
         <Command key={c} text={c} />
       ))}
       {issue.problem === 'other' && <pre className="setup-detail">{issue.message}</pre>}
-      <p className="hint">{HINT[issue.problem]}</p>
+      <p className="hint">{fix.hint}</p>
       <div className="row">
         <button onClick={onRetry}>Try again</button>
         <button className="link" onClick={onOpenSettings}>
-          Codex binary path in Settings
+          {PROVIDER_LABELS[provider]} binary path in Settings
         </button>
       </div>
     </div>

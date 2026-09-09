@@ -243,3 +243,22 @@ describe('viewing a scheduled run', () => {
     expect(s.everSucceeded).toBe(true);
   });
 });
+
+describe('a conversation the other backend wrote', () => {
+  const viewForeign = { type: 'view.foreign' as const, threadId: 'old-1', provider: 'codex' as const };
+
+  it('is marked read-only, and is left by going back to the live conversation', () => {
+    const s = reduce(initialState, viewForeign);
+    expect(s.foreign).toEqual({ threadId: 'old-1', provider: 'codex' });
+    expect(reduce(s, { type: 'view.live' }).foreign).toBeNull();
+    expect(reduce(s, { type: 'reset' }).foreign).toBeNull();
+  });
+
+  it('never overlaps the scheduled-run view, whichever is opened second', () => {
+    const run = { type: 'view.task' as const, threadId: 'run-1', taskId: 7, title: 'Weather', running: true };
+    const s = [run, viewForeign].reduce(reduce, initialState);
+    expect(s.viewing).toBeNull();
+    expect(s.foreign).toEqual({ threadId: 'old-1', provider: 'codex' });
+    expect(reduce(s, run).foreign).toBeNull();
+  });
+});

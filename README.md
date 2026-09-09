@@ -1,6 +1,6 @@
 # XPilot
 
-XPilot is a macOS desktop app that wraps [x.com](https://x.com) and puts an AI agent next to it. The agent runs on your own [Codex CLI](https://github.com/openai/codex) and can read what you are looking at, verify claims with web search, search the posts you liked, save posts and X Articles as PDFs, post on your behalf, drive your timeline, and run scheduled tasks while the app is open.
+XPilot is a macOS desktop app that wraps [x.com](https://x.com) and puts an AI agent next to it. The agent runs on your own [Codex CLI](https://github.com/openai/codex) or [Claude Code](https://claude.com/code) — you pick one on first run and can switch in Settings — and can read what you are looking at, verify claims with web search, search the posts you liked, save posts and X Articles as PDFs, post on your behalf, drive your timeline, and run scheduled tasks while the app is open.
 
 X offers nothing for agents, so XPilot injects its own adapter into the X page: a small, reviewable set of tools that read and drive the page, each with a name, a description and a JSON schema the model can reason about. The agent talks to X only through that surface, never through raw browser automation, and every tool that writes to your account can be set to ask first.
 
@@ -8,7 +8,9 @@ X offers nothing for agents, so XPilot injects its own adapter into the X page: 
 
 - macOS (Apple Silicon or Intel).
 - Node.js 22.5 or newer (24 recommended). Unit tests use `node:sqlite`, which needs 22.5+.
-- [Codex CLI](https://github.com/openai/codex) installed and logged in: `npm i -g @openai/codex && codex login`.
+- One agent CLI, installed and logged in:
+  - [Codex CLI](https://github.com/openai/codex): `npm i -g @openai/codex && codex login`, or
+  - [Claude Code](https://claude.com/code): install it, then run `claude` once and log in.
 - An X account. You log in inside the app; nothing about your account is stored outside Electron's session.
 
 ## Run it locally
@@ -20,7 +22,7 @@ npm run dev
 
 `npm run dev` builds with electron-vite in watch mode and starts Electron. Changes to the renderer hot-reload; changes to the main process or the preloads rebuild and restart the app.
 
-The first launch opens x.com in the left pane and the agent sidebar on the right. The status dot in the sidebar header turns green once the Codex process is connected. If it stays on "codex login", run `codex login` in a terminal and click reconnect in Settings.
+The first launch opens x.com in the left pane and the agent sidebar on the right, and asks which agent to run on. The status dot in the sidebar header turns green once that CLI is connected. If it does not, log the CLI in from a terminal (`codex login`, or `claude`) and click reconnect in Settings; the binary can also be pointed at explicitly there.
 
 Useful environment variables:
 
@@ -46,7 +48,7 @@ npm test              # vitest unit tests (co-located *.test.ts next to the code
 npm run e2e           # builds, then Playwright launches the real Electron app against fixtures
 ```
 
-Unit tests cover the DOM adapter against captured x.com fixtures in `tests/fixtures/`, the tool layer with fake views, the Codex protocol with a fake app-server, the history store, and the renderer state. The e2e suite starts Electron with a temporary profile and a local fixture page, so it needs no X login. Two tests that reach the live site are skipped unless you set `XPILOT_E2E_NETWORK=1`.
+Unit tests cover the DOM adapter against captured x.com fixtures in `tests/fixtures/`, the tool layer with fake views, the Codex protocol with a fake app-server, the Claude provider against a scripted SDK message stream, the history store, and the renderer state. The e2e suite starts Electron with a temporary profile and a local fixture page, so it needs no X login. Two tests that reach the live site are skipped unless you set `XPILOT_E2E_NETWORK=1`.
 
 CI runs typecheck, lint, the formatting check, unit tests and the build on every push and pull request, and the hermetic e2e suite in a second job (`.github/workflows/ci.yml`).
 

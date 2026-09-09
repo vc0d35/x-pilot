@@ -1,4 +1,4 @@
-import type { AgentEvent, AgentStatus, ApprovalRequest, UserInputAnswers, UserInputRequest } from '../shared/agent';
+import type { AgentEvent, AgentStatus, ApprovalRequest, ProviderKind, UserInputAnswers, UserInputRequest } from '../shared/agent';
 
 export interface Message {
   id: string;
@@ -43,10 +43,17 @@ export interface TaskRun {
   visibleWindow: boolean;
 }
 
+/** A conversation the other backend wrote: it can be read, never continued. */
+export interface ForeignConversation {
+  threadId: string;
+  provider: ProviderKind;
+}
+
 /** Everything the sidebar dispatches that is not an agent event of the live conversation. */
 export type LocalAction =
   | { type: 'reset' }
   | { type: 'view.task'; threadId: string; taskId: number | null; title: string; running: boolean }
+  | { type: 'view.foreign'; threadId: string; provider: ProviderKind }
   | { type: 'view.live' }
   | { type: 'conversation.event'; threadId: string; event: AgentEvent };
 
@@ -65,6 +72,8 @@ export interface State {
   everSucceeded: boolean;
   /** Set while a scheduled run is being read instead of the live conversation. */
   viewing: ViewingRun | null;
+  /** Set while a conversation the other backend owns is on screen, read-only. */
+  foreign: ForeignConversation | null;
   /** The scheduled run executing right now, whichever conversation the sidebar is showing. */
   taskRun: TaskRun | null;
 }
@@ -79,6 +88,7 @@ export const initialState: State = {
   failure: null,
   everSucceeded: false,
   viewing: null,
+  foreign: null,
   taskRun: null,
 };
 
@@ -88,11 +98,13 @@ const localId = () => `local-${++seq}`;
 export function reduce(state: State, e: AgentEvent | LocalAction): State {
   switch (e.type) {
     case 'reset':
-      return { ...state, entries: [], running: false, failure: null, viewing: null };
+      return { ...state, entries: [], running: false, failure: null, viewing: null, foreign: null };
     case 'view.task':
-      return { ...state, viewing: { threadId: e.threadId, taskId: e.taskId, title: e.title, running: e.running } };
+      return { ...state, viewing: { threadId: e.threadId, taskId: e.taskId, title: e.title, running: e.running }, foreign: null };
+    case 'view.foreign':
+      return { ...state, foreign: { threadId: e.threadId, provider: e.provider }, viewing: null };
     case 'view.live':
-      return { ...state, viewing: null };
+      return { ...state, viewing: null, foreign: null };
     // A run of the user's own is not part of any conversation, so it outlives a reset or a new thread.
     case 'task.run':
       return { ...state, taskRun: e.running ? { taskId: e.taskId, title: e.title, visibleWindow: e.visibleWindow } : null };

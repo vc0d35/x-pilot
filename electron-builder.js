@@ -36,7 +36,9 @@ module.exports = {
   // uses its own profile folder instead of sharing (and single-instance-locking) the dev one.
   extraMetadata: { productName: 'XPilot', ...(teamId ? { xpilotTeamId: teamId } : {}) },
   directories: { buildResources: 'build', output: 'dist' },
-  files: ['out/**', 'package.json'],
+  // The Claude Agent SDK ships a bundled Claude Code binary per platform as optional dependencies.
+  // XPilot drives the user's own `claude`, so those ~50 MB of binaries are left out of the app.
+  files: ['out/**', 'package.json', '!node_modules/@anthropic-ai/claude-agent-sdk-*/**'],
   artifactName: '${productName}-${version}-${arch}.${ext}',
   mac: {
     category: 'public.app-category.social-networking',

@@ -6,6 +6,7 @@ const conv = (threadId: string, kind: Conversation['kind'], taskId: number | nul
   threadId,
   title: threadId,
   kind,
+  provider: 'codex',
   taskId,
   createdAt: '',
   updatedAt: '',

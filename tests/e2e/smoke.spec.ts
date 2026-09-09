@@ -191,6 +191,17 @@ test('both preloads are self-contained bundles and the React header renders', as
       timeout: 15_000,
     })
     .toBe('XPilot');
+  // A fresh profile has no backend chosen, so the first thing the conversation shows is the picker.
+  await expect
+    .poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript("document.querySelector('.setup-title')?.textContent ?? null")), {
+      timeout: 15_000,
+    })
+    .toBe('Choose a model to connect');
+  expect(
+    await inMain((t) =>
+      t.sidebar.webContents.executeJavaScript("[...document.querySelectorAll('.picker-name')].map((e) => e.textContent)"),
+    ),
+  ).toEqual(['Codex', 'Claude']);
 });
 
 test('the sidebar is served from the app scheme, with its stylesheet and fonts past the CSP', async () => {

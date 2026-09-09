@@ -1,6 +1,6 @@
 import type { Post } from '../../shared/page';
 import type { Conversation, LibraryItem, ScheduledTask, TaskSchedule } from '../../shared/sidebar-api';
-import type { AgentEvent } from '../../shared/agent';
+import type { AgentEvent, ProviderKind } from '../../shared/agent';
 import { HistoryDb, migrate, type HistoryStats } from './db';
 import { LikesStore, toFtsQuery, type HistoryHit, type HistoryQuery } from './likes';
 import { LibraryStore } from './library';
@@ -56,7 +56,13 @@ export class AppStore {
     return this.library.list(limit);
   }
 
-  upsertConversation(c: { threadId: string; kind: 'chat' | 'task'; taskId?: number | null; toolsHash: string | null }): void {
+  upsertConversation(c: {
+    threadId: string;
+    kind: 'chat' | 'task';
+    taskId?: number | null;
+    toolsHash: string | null;
+    provider?: ProviderKind;
+  }): void {
     this.conversations.upsert(c);
   }
   appendEvent(threadId: string, event: AgentEvent): void {

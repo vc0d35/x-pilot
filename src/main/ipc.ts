@@ -14,9 +14,11 @@ import type { SelectorOverrides } from './page-config/selectors';
 import type { AppStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import { SettingsPatchSchema } from '../shared/settings';
-import { isSafeExecutable } from './agent/codex/binary';
+import { PROVIDER_KINDS } from '../shared/agent';
+import { isSafeExecutable } from './agent/binary';
 
-const CodexBinaryActionSchema = z.object({ action: z.enum(['choose', 'clear']) });
+const ProviderSchema = z.object({ provider: z.enum(PROVIDER_KINDS) });
+const ProviderBinaryActionSchema = z.object({ provider: z.enum(PROVIDER_KINDS), action: z.enum(['choose', 'clear']) });
 const PageConfigKindSchema = z.object({ kind: z.enum(['styles', 'selectors']) });
 import type { BridgeIpc } from './adapter/bridge';
 
@@ -129,7 +131,18 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   );
   ipcMain.handle(
     IPC.agentListModels,
-    guarded(() => agent.listModels()),
+    guarded((_e, raw) => {
+      const { provider } = z.object({ provider: z.enum(PROVIDER_KINDS).optional() }).parse(raw ?? {});
+      return agent.modelsFor(provider ?? agent.activeProvider());
+    }),
+  );
+  ipcMain.handle(
+    IPC.agentSetProvider,
+    guarded((_e, raw) => agent.switchProvider(ProviderSchema.parse(raw).provider)),
+  );
+  ipcMain.handle(
+    IPC.agentProbeProvider,
+    guarded((_e, raw) => agent.probeProvider(ProviderSchema.parse(raw).provider)),
   );
   ipcMain.handle(
     IPC.settingsGet,
@@ -207,20 +220,25 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
       await openPath(path);
     }),
   );
+  // `binPath` is deliberately absent from the settings patch schema: it is only ever written here,
+  // after the file has been checked, so a renderer cannot point the app at an arbitrary executable.
   ipcMain.handle(
-    IPC.settingsCodexBinary,
+    IPC.settingsProviderBinary,
     guarded(async (_e, raw) => {
-      const { action } = CodexBinaryActionSchema.parse(raw);
+      const { provider, action } = ProviderBinaryActionSchema.parse(raw);
+      const bin = provider === 'claude' ? 'claude' : 'codex';
+      const store = (binPath: string | null) =>
+        settings.update(provider === 'claude' ? { agent: { claude: { binPath } } } : { agent: { codex: { binPath } } });
       if (action === 'clear') {
-        settings.update({ agent: { codex: { binPath: null } } });
+        store(null);
         return null;
       }
-      const r = await dialog.showOpenDialog({ properties: ['openFile'], message: 'Choose the codex executable' });
+      const r = await dialog.showOpenDialog({ properties: ['openFile'], message: `Choose the ${bin} executable` });
       const path = r.canceled ? null : r.filePaths[0];
-      if (!path) return settings.get().agent.codex.binPath;
+      if (!path) return settings.get().agent[provider].binPath;
       if (!isSafeExecutable(path))
         throw new Error('That file is not a safe executable: it must be a regular file you or root own that nobody else can write');
-      settings.update({ agent: { codex: { binPath: path } } });
+      store(path);
       return path;
     }),
   );

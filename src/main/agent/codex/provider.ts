@@ -6,7 +6,7 @@ import type { ToolResult } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
 import type { UserInputBroker } from '../../user-input';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
-import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
+import type { AgentProvider, ModelInfo, ProviderKind, StartOptions } from '../provider';
 import { JsonRpcStdio } from './jsonrpc';
 import { CODEX_MISSING_MESSAGE, codexSpawnEnv, resolveCodexBinary } from './binary';
 import { handleNotification, handleServerRequest, newItemPhases, type ItemPhases } from './events';
@@ -62,6 +62,9 @@ const EXIT_WAIT_MS = 4000;
 
 export class CodexProvider implements AgentProvider {
   readonly id = 'codex';
+  readonly kind: ProviderKind = 'codex';
+  /** `thread/start` fixes a thread's tools, so a changed tool list cannot be resumed onto it. */
+  readonly capabilities = { toolsFrozenPerThread: true };
   private proc: ChildProcessWithoutNullStreams | null = null;
   private rpc: JsonRpcStdio | null = null;
   private threadId: string | null = null;
@@ -159,15 +162,16 @@ export class CodexProvider implements AgentProvider {
       description: t.description,
       inputSchema: t.inputSchema,
     }));
+    const codex = opts.settings.codex;
     const common = {
       cwd: opts.workspaceDir,
-      model: opts.settings.model,
-      approvalPolicy: opts.settings.approvalPolicy,
-      sandbox: opts.settings.sandbox,
+      model: codex.model,
+      approvalPolicy: codex.approvalPolicy,
+      sandbox: codex.sandbox,
       developerInstructions: DEVELOPER_INSTRUCTIONS,
       config: {
-        ...(opts.settings.reasoningEffort ? { model_reasoning_effort: opts.settings.reasoningEffort } : {}),
-        web_search: opts.settings.webSearch,
+        ...(codex.reasoningEffort ? { model_reasoning_effort: codex.reasoningEffort } : {}),
+        web_search: codex.webSearch,
       },
     };
     let res: { thread: { id: string } };
@@ -195,7 +199,7 @@ export class CodexProvider implements AgentProvider {
   }
 
   private async resolveBinary(opts: StartOptions): Promise<string> {
-    const explicit = opts.settings.binPath ?? null;
+    const explicit = opts.settings.codex.binPath ?? null;
     const found = await (this.deps.binary ? this.deps.binary(explicit) : resolveCodexBinary(explicit));
     if (found) return found;
     this.emit({ type: 'status', status: 'error', message: CODEX_MISSING_MESSAGE });

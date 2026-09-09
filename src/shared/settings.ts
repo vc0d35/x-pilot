@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PROVIDER_KINDS } from './agent';
 
 export const DEFAULT_ALLOW_HOSTS = ['x.com', '*.x.com', 'twitter.com', '*.twitter.com', 't.co'];
 
@@ -31,7 +32,8 @@ export const SettingsSchema = z.object({
   styles: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
   library: z.object({ dir: z.string().nullable().default(null) }),
   agent: z.object({
-    provider: z.literal('codex').default('codex'),
+    /** Which backend drives the agent; null until the user picks one in the first-run card. */
+    provider: z.enum(PROVIDER_KINDS).nullable().default(null),
     codex: z.object({
       model: z.string().nullable().default('gpt-5.6-luna'),
       reasoningEffort: z.string().nullable().default('low'),
@@ -39,6 +41,13 @@ export const SettingsSchema = z.object({
       sandbox: z.enum(['read-only', 'workspace-write']).default('read-only'),
       webSearch: z.enum(['live', 'cached', 'disabled']).default('live'),
       /** Absolute path to the `codex` binary; null means auto-detect (PATH, common install dirs, login shell). */
+      binPath: BinPathSchema.nullable().default(null),
+    }),
+    claude: z.object({
+      model: z.string().nullable().default('claude-sonnet-5'),
+      effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).nullable().default('low'),
+      webSearch: z.enum(['on', 'off']).default('on'),
+      /** Absolute path to the `claude` binary; null means auto-detect (PATH, common install dirs, login shell). */
       binPath: BinPathSchema.nullable().default(null),
     }),
   }),
@@ -69,8 +78,11 @@ function patchOf(schema: z.ZodObject<z.ZodRawShape>): z.ZodObject<z.ZodRawShape>
   return z.strictObject(shape);
 }
 
-const { binPath: _binPath, ...codexPatchShape } = SettingsSchema.shape.agent.shape.codex.shape;
+// `binPath` is settable only through the file picker, which checks the file before it is stored.
+const { binPath: _codexBinPath, ...codexPatchShape } = SettingsSchema.shape.agent.shape.codex.shape;
 const codexShape = z.object(codexPatchShape);
+const { binPath: _claudeBinPath, ...claudePatchShape } = SettingsSchema.shape.agent.shape.claude.shape;
+const claudeShape = z.object(claudePatchShape);
 
 /**
  * What a settings update may contain: every field of `SettingsSchema`, optional and validated by the
@@ -86,6 +98,7 @@ export const SettingsPatchSchema = z.strictObject({
     .strictObject({
       provider: optionalField(SettingsSchema.shape.agent.shape.provider),
       codex: patchOf(codexShape).optional(),
+      claude: patchOf(claudeShape).optional(),
     })
     .optional(),
   navigation: patchOf(SettingsSchema.shape.navigation).optional(),
@@ -116,16 +129,21 @@ export function normalizeSettings(raw: unknown): Settings {
   const r = isObj(raw) ? raw : {};
   const agent = isObj(r.agent) ? { ...r.agent } : {};
   const codex = isObj(agent.codex) ? { ...agent.codex } : {};
+  const claude = isObj(agent.claude) ? { ...agent.claude } : {};
   if (codex.approvalPolicy === 'never') delete codex.approvalPolicy;
+  const ui = isObj(r.ui) ? r.ui : {};
+  // A file written before there was a choice belongs to a user who was already on Codex; only a
+  // genuinely new profile gets the null that raises the picker.
+  if (agent.provider === undefined && ui.onboarded === true) agent.provider = 'codex';
   const shaped = {
     posting: isObj(r.posting) ? r.posting : {},
     likes: isObj(r.likes) ? r.likes : {},
     styles: isObj(r.styles) ? r.styles : {},
     library: isObj(r.library) ? r.library : {},
-    agent: { ...agent, codex },
+    agent: { ...agent, codex, claude },
     navigation: isObj(r.navigation) ? r.navigation : {},
     history: isObj(r.history) ? r.history : {},
-    ui: isObj(r.ui) ? r.ui : {},
+    ui,
     window: isObj(r.window) ? r.window : {},
   };
   return SettingsSchema.parse(shaped);

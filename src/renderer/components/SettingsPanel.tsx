@@ -1,8 +1,11 @@
 import { useEffect, useState } from 'react';
-import type { PostingMode, Settings, StylesMode } from '../../shared/settings';
+import type { DeepPartial, PostingMode, Settings, StylesMode } from '../../shared/settings';
 import { confirmPostingMode, confirmStylesMode } from '../posting-mode';
-import type { HistoryStats, ModelInfo, PageConfigKind, PageConfigStatus } from '../../shared/sidebar-api';
+import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
+import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
+import { modelLabel, providerState } from '../provider-ui';
+import { providerFixHint } from '../setup';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,16 +19,191 @@ export function formatBytes(bytes: number): string {
   return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
-export function SettingsPanel({ settings }: { settings: Settings }) {
-  const [models, setModels] = useState<ModelInfo[]>([]);
+const set = (patch: DeepPartial<Settings>) => void window.xpilot.setSettings(patch);
+
+/**
+ * Which backend answers, and the settings of the one that does. Both are offered whatever is in
+ * use: Connect proves the other one works before it is switched to, on its own throwaway process.
+ */
+function ModelsSection(props: { settings: Settings; connected: ProviderKind[]; onConnected: (kind: ProviderKind) => void }) {
+  const active = props.settings.agent.provider;
+  const [list, setList] = useState<ModelList | null>(null);
+  const [checking, setChecking] = useState<ProviderKind | null>(null);
+  const [results, setResults] = useState<Partial<Record<ProviderKind, string>>>({});
+  const [binError, setBinError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let live = true;
+    void window.xpilot.listModels(active).then(
+      (r) => {
+        if (live) setList(r);
+      },
+      () => {
+        if (live) setList({ provider: active, models: [], unavailable: true });
+      },
+    );
+    return () => {
+      live = false;
+    };
+  }, [active]);
+  const { onConnected } = props;
+  const check = (kind: ProviderKind) => {
+    setChecking(kind);
+    setResults((r) => ({ ...r, [kind]: undefined }));
+    void window.xpilot
+      .probeProvider(kind)
+      .then(
+        (r) => {
+          if (!r.ok) return { [kind]: `${r.error} — ${providerFixHint(kind, r.error)}` };
+          onConnected(kind);
+          return { [kind]: `Answered${r.model ? ` on ${r.model}` : ''}.` };
+        },
+        (err: unknown) => ({ [kind]: err instanceof Error ? err.message : String(err) }),
+      )
+      .then((r) => setResults((prev) => ({ ...prev, ...r })))
+      .finally(() => setChecking(null));
+  };
+  const chooseBinary = (kind: ProviderKind, action: 'choose' | 'clear') => {
+    setBinError(null);
+    void window.xpilot
+      .setProviderBinary(kind, action)
+      .catch((err: unknown) => setBinError(err instanceof Error ? err.message : String(err)));
+  };
+
+  const models = list?.provider === active ? list.models : [];
+  const claude = props.settings.agent.claude;
+  const codex = props.settings.agent.codex;
+  const modelId = active === 'claude' ? claude.model : active === 'codex' ? codex.model : null;
+  const current = models.find((m) => m.id === (modelId ?? models.find((x) => x.isDefault)?.id));
+  const effort = active === 'claude' ? claude.effort : codex.reasoningEffort;
+  const binPath = active === 'claude' ? claude.binPath : active === 'codex' ? codex.binPath : null;
+  const setModel = (id: string | null) =>
+    set(
+      active === 'claude' ? { agent: { claude: { model: id, effort: null } } } : { agent: { codex: { model: id, reasoningEffort: null } } },
+    );
+  const setEffort = (value: string) =>
+    set(
+      active === 'claude'
+        ? { agent: { claude: { effort: (value || null) as Settings['agent']['claude']['effort'] } } }
+        : { agent: { codex: { reasoningEffort: value || null } } },
+    );
+
+  return (
+    <fieldset className="settings-group">
+      <legend>Models</legend>
+      {PROVIDER_KINDS.map((kind) => (
+        <div className="provider" key={kind}>
+          <div className="row">
+            <span className="provider-name">{PROVIDER_LABELS[kind]}</span>
+            <span className="badge">
+              {providerState({ active: kind === active, checking: checking === kind, connected: props.connected.includes(kind) })}
+            </span>
+            <div className="spacer" />
+            <button disabled={kind === active} onClick={() => void window.xpilot.setProvider(kind)}>
+              Use
+            </button>
+            <button disabled={checking !== null} onClick={() => check(kind)}>
+              {kind === active || props.connected.includes(kind) ? 'Check' : 'Connect'}
+            </button>
+          </div>
+          {results[kind] && <p className="hint">{results[kind]}</p>}
+        </div>
+      ))}
+      {!active && <p className="hint">No model is connected yet. Connect one and it becomes the agent XPilot drives.</p>}
+      {active && (
+        <>
+          <label>
+            {PROVIDER_LABELS[active]} model
+            <select value={modelId ?? ''} onChange={(e) => setModel(e.target.value || null)}>
+              <option value="">{PROVIDER_LABELS[active]} default</option>
+              {models.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.displayName}
+                </option>
+              ))}
+              {modelId && !models.some((m) => m.id === modelId) && <option value={modelId}>{modelId}</option>}
+            </select>
+          </label>
+          {list?.provider === active && list.unavailable && (
+            <p className="hint">
+              Could not read {PROVIDER_LABELS[active]}&rsquo;s model list; {modelLabel(active, modelId, models)} stays in use.
+            </p>
+          )}
+          {current && current.reasoningEfforts.length > 0 && (
+            <label>
+              Reasoning effort
+              <select value={effort ?? ''} onChange={(e) => setEffort(e.target.value)}>
+                <option value="">Model default</option>
+                {current.reasoningEfforts.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Web search
+            {active === 'claude' ? (
+              <select
+                value={claude.webSearch}
+                onChange={(e) => set({ agent: { claude: { webSearch: e.target.value as Settings['agent']['claude']['webSearch'] } } })}
+              >
+                <option value="on">On (the agent may search the web)</option>
+                <option value="off">Off</option>
+              </select>
+            ) : (
+              <select
+                value={codex.webSearch}
+                onChange={(e) => set({ agent: { codex: { webSearch: e.target.value as Settings['agent']['codex']['webSearch'] } } })}
+              >
+                <option value="live">Live (fact-check against the web)</option>
+                <option value="cached">Cached index only</option>
+                <option value="disabled">Off</option>
+              </select>
+            )}
+          </label>
+          {active === 'codex' && (
+            <label>
+              Codex command approvals
+              <select
+                value={codex.approvalPolicy}
+                onChange={(e) =>
+                  set({ agent: { codex: { approvalPolicy: e.target.value as Settings['agent']['codex']['approvalPolicy'] } } })
+                }
+              >
+                <option value="on-request">Ask when Codex requests</option>
+                <option value="untrusted">Ask for anything untrusted</option>
+              </select>
+            </label>
+          )}
+          <label>
+            {PROVIDER_LABELS[active]} binary
+            <div className="row">
+              <code>{binPath ?? 'auto-detect'}</code>
+              <button onClick={() => chooseBinary(active, 'choose')}>Choose…</button>
+              {binPath && <button onClick={() => chooseBinary(active, 'clear')}>Clear</button>}
+            </div>
+          </label>
+          {binError && <p className="hint">{binError}</p>}
+        </>
+      )}
+    </fieldset>
+  );
+}
+
+export function SettingsPanel({
+  settings,
+  connected,
+  onConnected,
+}: {
+  settings: Settings;
+  /** Providers that answered a Connect in this session; the rows say so until the app restarts. */
+  connected: ProviderKind[];
+  onConnected: (kind: ProviderKind) => void;
+}) {
   const [stats, setStats] = useState<HistoryStats | null>(null);
   const [pageConfig, setPageConfig] = useState<PageConfigStatus | null>(null);
-  useEffect(() => {
-    void window.xpilot
-      .listModels()
-      .then(setModels)
-      .catch(() => setModels([]));
-  }, []);
   useEffect(() => {
     void window.xpilot
       .historyStats()
@@ -42,12 +220,10 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
   const reset = (kind: PageConfigKind, question: string) => {
     if (confirm(question)) void window.xpilot.resetPageConfig(kind).then(setPageConfig);
   };
-  const codex = settings.agent.codex;
-  const current = models.find((m) => m.id === (codex.model ?? models.find((x) => x.isDefault)?.id));
-  const set = (patch: Parameters<typeof window.xpilot.setSettings>[0]) => void window.xpilot.setSettings(patch);
 
   return (
     <div className="panel settings">
+      <ModelsSection settings={settings} connected={connected} onConnected={onConnected} />
       <label>
         Posting mode
         <select
@@ -61,36 +237,6 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           <option value="autonomous">Autonomous (agent clicks Post)</option>
         </select>
       </label>
-      <label>
-        Model
-        <select
-          value={codex.model ?? ''}
-          onChange={(e) => set({ agent: { codex: { model: e.target.value || null, reasoningEffort: null } } })}
-        >
-          <option value="">Codex default</option>
-          {models.map((m) => (
-            <option key={m.id} value={m.id}>
-              {m.displayName}
-            </option>
-          ))}
-        </select>
-      </label>
-      {current && current.reasoningEfforts.length > 0 && (
-        <label>
-          Reasoning effort
-          <select
-            value={codex.reasoningEffort ?? ''}
-            onChange={(e) => set({ agent: { codex: { reasoningEffort: e.target.value || null } } })}
-          >
-            <option value="">Model default</option>
-            {current.reasoningEfforts.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
       <label>
         Agent likes
         <select value={settings.likes.mode} onChange={(e) => set({ likes: { mode: e.target.value as 'auto' | 'confirm' } })}>
@@ -110,35 +256,6 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           <option value="confirm">Confirm each stylesheet in the sidebar</option>
           <option value="autonomous">Autonomous (agent restyles the page)</option>
         </select>
-      </label>
-      <label>
-        Web search
-        <select
-          value={codex.webSearch}
-          onChange={(e) => set({ agent: { codex: { webSearch: e.target.value as Settings['agent']['codex']['webSearch'] } } })}
-        >
-          <option value="live">Live (fact-check against the web)</option>
-          <option value="cached">Cached index only</option>
-          <option value="disabled">Off</option>
-        </select>
-      </label>
-      <label>
-        Codex command approvals
-        <select
-          value={codex.approvalPolicy}
-          onChange={(e) => set({ agent: { codex: { approvalPolicy: e.target.value as Settings['agent']['codex']['approvalPolicy'] } } })}
-        >
-          <option value="on-request">Ask when Codex requests</option>
-          <option value="untrusted">Ask for anything untrusted</option>
-        </select>
-      </label>
-      <label>
-        Codex binary
-        <div className="row">
-          <code>{codex.binPath ?? 'auto-detect'}</code>
-          <button onClick={() => void window.xpilot.setCodexBinary('choose')}>Choose…</button>
-          {codex.binPath && <button onClick={() => void window.xpilot.setCodexBinary('clear')}>Clear</button>}
-        </div>
       </label>
       <label>
         Library folder
@@ -231,7 +348,10 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           </button>
         </div>
       </label>
-      <p className="hint">Changing the model, effort, or approval policy restarts the agent and resumes the current thread.</p>
+      <p className="hint">
+        Changing the model, effort, or approval policy restarts the agent and resumes the current thread; switching providers starts a new
+        one.
+      </p>
     </div>
   );
 }

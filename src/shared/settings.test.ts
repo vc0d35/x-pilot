@@ -59,3 +59,38 @@ describe('legacy settings values', () => {
     expect(normalizeSettings({ agent: { codex: { approvalPolicy: 'never' } } }).agent.codex.approvalPolicy).toBe('on-request');
   });
 });
+
+describe('the agent provider', () => {
+  it('is unset on a fresh profile, which is what raises the first-run picker', () => {
+    expect(DEFAULT_SETTINGS.agent.provider).toBeNull();
+  });
+
+  it('is Codex for a profile that was already onboarded before there was a choice', () => {
+    expect(normalizeSettings({ ui: { onboarded: true } }).agent.provider).toBe('codex');
+    expect(normalizeSettings({ ui: { onboarded: false } }).agent.provider).toBeNull();
+    // An explicit choice is never overwritten.
+    expect(normalizeSettings({ ui: { onboarded: true }, agent: { provider: 'claude' } }).agent.provider).toBe('claude');
+    expect(normalizeSettings({ ui: { onboarded: true }, agent: { provider: null } }).agent.provider).toBeNull();
+  });
+
+  it('rejects a provider it does not have', () => {
+    expect(() => normalizeSettings({ agent: { provider: 'gemini' } })).toThrow();
+    expect(() => parse({ agent: { provider: 'gemini' } })).toThrow();
+    expect(parse({ agent: { provider: 'claude' } })).toEqual({ agent: { provider: 'claude' } });
+  });
+
+  it('defaults Claude to Sonnet on low effort with web search on', () => {
+    expect(DEFAULT_SETTINGS.agent.claude).toEqual({ model: 'claude-sonnet-5', effort: 'low', webSearch: 'on', binPath: null });
+  });
+
+  it('takes a Claude patch but never its binary path, which only the file picker sets', () => {
+    expect(parse({ agent: { claude: { model: 'claude-opus-5', effort: 'max' } } })).toEqual({
+      agent: { claude: { model: 'claude-opus-5', effort: 'max' } },
+    });
+    expect(() => parse({ agent: { claude: { effort: 'ultra' } } })).toThrow();
+    expect(() => parse({ agent: { claude: { binPath: '/usr/local/bin/claude' } } })).toThrow();
+    expect(normalizeSettings({ agent: { claude: { binPath: '/usr/local/bin/claude' } } }).agent.claude.binPath).toBe(
+      '/usr/local/bin/claude',
+    );
+  });
+});

@@ -21,6 +21,13 @@ export function OnboardingCard({
           </button>{' '}
           can make it autonomous.
         </li>
+        <li>
+          The pill in the header names the model answering you;{' '}
+          <button className="link" onClick={onOpenSettings}>
+            Settings
+          </button>{' '}
+          → Models connects the other one and switches between them.
+        </li>
         <li>Scheduled tasks only run while XPilot is open.</li>
         <li>
           PDFs are saved to <code>{libraryDir}</code> and listed under the library icon.

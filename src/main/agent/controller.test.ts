@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AgentController, toolsFingerprint, transcriptEvent, MAX_TRANSCRIPT_OUTPUT } from './controller';
+import { AgentController, NO_PROVIDER_MESSAGE, toolsFingerprint, transcriptEvent, MAX_TRANSCRIPT_OUTPUT } from './controller';
 import type { ScheduledTask } from '../../shared/sidebar-api';
 import type { AgentProvider, StartOptions } from './provider';
 import { ToolRegistry } from '../tools/registry';
@@ -11,10 +11,12 @@ import { SettingsStore } from '../settings';
 import { ThreadState } from './thread-state';
 import type { AgentEvent } from '../../shared/agent';
 
-function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: string }>) {
+function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: string }>, kind: 'codex' | 'claude' = 'codex') {
   const listeners = new Set<(e: AgentEvent) => void>();
   const p: AgentProvider & { starts: StartOptions[]; sent: string[]; emitEvent: (e: AgentEvent) => void; running: boolean } = {
     id: 'fake',
+    kind,
+    capabilities: { toolsFrozenPerThread: kind === 'codex' },
     starts: [],
     sent: [],
     running: false,
@@ -40,7 +42,12 @@ function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: strin
   return p;
 }
 
-const settings = () => new SettingsStore(join(mkdtempSync(join(tmpdir(), 'xp-')), 's.json'));
+/** A fresh profile with a provider already chosen; a profile with none is the picker's business. */
+const settings = (provider: 'codex' | 'claude' | null = 'codex') => {
+  const store = new SettingsStore(join(mkdtempSync(join(tmpdir(), 'xp-')), 's.json'));
+  if (provider) store.update({ agent: { provider } });
+  return store;
+};
 const threadState = (store: SettingsStore) => ThreadState.beside(store.filePath);
 
 describe('AgentController', () => {
@@ -59,7 +66,7 @@ describe('AgentController', () => {
     expect(providers[0].starts[0].tools.map((t) => t.name)).toEqual(['x_a']);
     expect(providers[0].starts[0].threadId).toBeNull();
     // No threadState dependency: the controller falls back to a file beside settings.json.
-    expect(threadState(store).get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()) });
+    expect(threadState(store).get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()), provider: 'codex' });
     await ctl.start({ resume: true });
     expect(providers[0].stop).toHaveBeenCalled();
     expect(providers[1].starts[0].threadId).toBe('T');
@@ -85,7 +92,7 @@ describe('AgentController', () => {
     });
     await ctl.start({ resume: true });
     expect(provider.starts[0].threadId).toBeNull();
-    expect(state.get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()) });
+    expect(state.get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()), provider: 'codex' });
   });
 
   it('newThread clears the thread id and emits provider errors as status', async () => {
@@ -444,5 +451,205 @@ describe('opening a scheduled run', () => {
     expect(ctl.currentThreadId()).toBe('T');
     expect(threadState(store).get().threadId).toBe('T');
     expect(providers[0].stop).not.toHaveBeenCalled();
+  });
+});
+
+describe('choosing a provider', () => {
+  const registry = () => {
+    const r = new ToolRegistry();
+    r.addSource({
+      id: 's',
+      list: () => [{ name: 'x_a', description: 'a', inputSchema: {} }],
+      call: async () => ({ success: true, content: 1 }),
+    });
+    return r;
+  };
+
+  it('does not start at all until a provider is chosen, and says why', async () => {
+    const store = settings(null);
+    const events: AgentEvent[] = [];
+    const ctl = new AgentController({ registry: registry(), settings: store, workspaceDir: '/tmp', createProvider: () => fakeProvider() });
+    ctl.onEvent((e) => events.push(e));
+    await ctl.start({ resume: true });
+    expect(events).toEqual([{ type: 'status', status: 'disconnected', message: NO_PROVIDER_MESSAGE }]);
+    await expect(ctl.send('hi', null)).rejects.toThrow('Agent is not running');
+  });
+
+  it('switchProvider records the choice and starts a fresh thread on the new provider', async () => {
+    const store = settings('codex');
+    const state = threadState(store);
+    state.set({ threadId: 'old-codex', threadToolsHash: 'h', provider: 'codex' });
+    const claude = fakeProvider(async () => ({ threadId: 'claude-1' }), 'claude');
+    const kinds: string[] = [];
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      threadState: state,
+      workspaceDir: '/tmp',
+      createProvider: (kind) => {
+        kinds.push(kind);
+        return claude;
+      },
+    });
+    await ctl.switchProvider('claude');
+    expect(store.get().agent.provider).toBe('claude');
+    expect(kinds).toEqual(['claude']);
+    expect(claude.starts[0].threadId).toBeNull();
+    expect(state.get()).toMatchObject({ threadId: 'claude-1', provider: 'claude' });
+  });
+
+  it('never resumes a thread the other provider started', async () => {
+    const store = settings('claude');
+    const state = threadState(store);
+    state.set({ threadId: 'codex-thread', threadToolsHash: toolsFingerprint(registry().list()), provider: 'codex' });
+    const claude = fakeProvider(async () => ({ threadId: 'claude-1' }), 'claude');
+    const events: AgentEvent[] = [];
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      threadState: state,
+      workspaceDir: '/tmp',
+      createProvider: () => claude,
+    });
+    ctl.onEvent((e) => events.push(e));
+    await ctl.start({ resume: true });
+    expect(claude.starts[0].threadId).toBeNull();
+    expect(events.find((e) => e.type === 'status' && e.message?.includes('belongs to Codex'))).toBeTruthy();
+  });
+
+  it('resumes a Claude thread whose tools changed, because Claude does not freeze them', async () => {
+    const store = settings('claude');
+    const state = threadState(store);
+    state.set({ threadId: 'claude-1', threadToolsHash: 'a-different-hash', provider: 'claude' });
+    const claude = fakeProvider(async () => ({ threadId: 'claude-1' }), 'claude');
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      threadState: state,
+      workspaceDir: '/tmp',
+      createProvider: () => claude,
+    });
+    await ctl.start({ resume: true });
+    expect(claude.starts[0].threadId).toBe('claude-1');
+  });
+
+  it('hands the whole agent settings slice to the provider, so each reads its own part', async () => {
+    const store = settings('claude');
+    const provider = fakeProvider(undefined, 'claude');
+    const ctl = new AgentController({ registry: registry(), settings: store, workspaceDir: '/tmp', createProvider: () => provider });
+    await ctl.start({ resume: true });
+    expect(provider.starts[0].settings.claude.model).toBe('claude-sonnet-5');
+    expect(provider.starts[0].settings.codex.model).toBeTruthy();
+  });
+
+  it('opens a conversation the other provider wrote as a read-only foreign view', async () => {
+    const store = settings('claude');
+    const appStore = new AppStore(':memory:');
+    appStore.upsertConversation({ threadId: 'codex-1', kind: 'chat', toolsHash: null, provider: 'codex' });
+    appStore.appendEvent('codex-1', { type: 'user.message', text: 'from the codex days' });
+    const providers = [fakeProvider(undefined, 'claude'), fakeProvider(undefined, 'claude')];
+    let i = 0;
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => providers[i++],
+    });
+    await ctl.start({ resume: false });
+    const opened = await ctl.openConversation('codex-1');
+    expect(opened.view).toEqual({ threadId: 'codex-1', kind: 'foreign', provider: 'codex' });
+    expect(opened.events.map((e) => e.type)).toEqual(['user.message']);
+    expect(i).toBe(1); // nothing was restarted on it
+  });
+
+  it('records the provider on the conversations it writes', async () => {
+    const store = settings('claude');
+    const appStore = new AppStore(':memory:');
+    const provider = fakeProvider(async () => ({ threadId: 'claude-1' }), 'claude');
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => provider,
+    });
+    await ctl.start({ resume: false });
+    expect(appStore.getConversation('claude-1')?.provider).toBe('claude');
+  });
+
+  it('follows a provider that re-points its thread mid-turn', async () => {
+    const store = settings('claude');
+    const appStore = new AppStore(':memory:');
+    const state = threadState(store);
+    const provider = fakeProvider(async () => ({ threadId: 'claude-1' }), 'claude');
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      store: appStore,
+      threadState: state,
+      workspaceDir: '/tmp',
+      createProvider: () => provider,
+    });
+    await ctl.start({ resume: false });
+    provider.emitEvent({ type: 'thread', threadId: 'claude-2' });
+    provider.emitEvent({ type: 'user.message', text: 'after the move' });
+    expect(ctl.currentThreadId()).toBe('claude-2');
+    expect(state.get().threadId).toBe('claude-2');
+    expect(appStore.listEvents('claude-2').map((e) => e.type)).toEqual(['user.message']);
+  });
+
+  it('offers the static Claude models for a provider that is not running, and says when it has none', async () => {
+    const store = settings('codex');
+    const provider = fakeProvider();
+    const ctl = new AgentController({ registry: registry(), settings: store, workspaceDir: '/tmp', createProvider: () => provider });
+    await ctl.start({ resume: true });
+    expect((await ctl.modelsFor('claude')).models.map((m) => m.id)).toContain('claude-sonnet-5');
+    // Codex is running here but its fake reports nothing, so the list is flagged unavailable.
+    expect(await ctl.modelsFor('codex')).toEqual({ provider: 'codex', models: [], unavailable: true });
+  });
+
+  it('probes a provider with one short turn and leaves the live one alone', async () => {
+    const store = settings('codex');
+    const live = fakeProvider();
+    const probe = fakeProvider(async () => ({ threadId: 'probe' }), 'claude');
+    const created: string[] = [];
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      workspaceDir: '/tmp',
+      createProvider: (kind) => {
+        created.push(kind);
+        return created.length === 1 ? live : probe;
+      },
+    });
+    await ctl.start({ resume: true });
+    const result = ctl.probeProvider('claude');
+    await vi.waitFor(() => expect(probe.sent).toHaveLength(1));
+    probe.emitEvent({ type: 'turn.completed', turnId: 't', status: 'completed' });
+    expect(await result).toEqual({ ok: true, model: 'claude-sonnet-5' });
+    expect(probe.sent[0]).toBe('Reply with the single word OK.');
+    expect(probe.starts[0].tools).toEqual([]);
+    expect(probe.stop).toHaveBeenCalled();
+    expect(live.stop).not.toHaveBeenCalled();
+    expect(ctl.currentThreadId()).toBe('T');
+  });
+
+  it('reports a probe that fails with the error the provider gave', async () => {
+    const store = settings('codex');
+    const probe = fakeProvider(async () => ({ threadId: 'probe' }), 'claude');
+    const providers = [fakeProvider(), probe];
+    let i = 0;
+    const ctl = new AgentController({
+      registry: registry(),
+      settings: store,
+      workspaceDir: '/tmp',
+      createProvider: () => providers[i++],
+    });
+    await ctl.start({ resume: true });
+    const result = ctl.probeProvider('claude');
+    await vi.waitFor(() => expect(probe.sent).toHaveLength(1));
+    probe.emitEvent({ type: 'turn.completed', turnId: 't', status: 'failed', error: 'Invalid API key' });
+    expect(await result).toEqual({ ok: false, error: 'Invalid API key' });
   });
 });

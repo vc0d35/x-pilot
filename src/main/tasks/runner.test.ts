@@ -10,10 +10,15 @@ import { fail } from '../../shared/tools';
 /** Most of these tests care about the run, not its tools; a run with no tools stands in. */
 const noTools = { list: () => [], call: async () => fail('no tools in this test') };
 
+/** The runner is handed the whole agent slice; every test but the web-search ones uses the defaults. */
+const AGENT_SETTINGS = { ...DEFAULT_SETTINGS.agent, provider: 'codex' as const };
+
 function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type: 'turn.completed', turnId: 't', status: 'completed' }]) {
   const listeners = new Set<(e: AgentEvent) => void>();
   const p: AgentProvider & { starts: StartOptions[]; sent: string[] } = {
     id: 'fake',
+    kind: 'codex',
+    capabilities: { toolsFrozenPerThread: true },
     starts: [],
     sent: [],
     start: vi.fn(async (o: StartOptions) => {
@@ -67,7 +72,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -87,7 +92,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -106,7 +111,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -127,7 +132,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       onTranscriptEvent: (threadId, event) => seen.push({ threadId, type: event.type }),
@@ -152,7 +157,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       onTranscriptEvent: (_threadId, event) => seen.push(event),
@@ -163,10 +168,49 @@ describe('TaskRunner', () => {
     expect(pushed.output.endsWith('… [truncated]')).toBe(true);
   });
 
+  it('skips the run with a clear log when no provider has been chosen', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider();
+    const logs: string[] = [];
+    const r = new TaskRunner({
+      createProvider: () => p,
+      toolsFor: () => noTools,
+      settings: () => ({ ...AGENT_SETTINGS, provider: null }),
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 2000,
+      log: (m) => logs.push(m),
+    });
+    expect(await r.run(task)).toBe('failed');
+    expect(p.starts).toHaveLength(0);
+    expect(logs.join(' ')).toContain('no agent provider is chosen');
+  });
+
+  it('runs on the chosen provider and records the run under it', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider();
+    const kinds: string[] = [];
+    const r = new TaskRunner({
+      createProvider: (kind) => {
+        kinds.push(kind);
+        return p;
+      },
+      toolsFor: () => noTools,
+      settings: () => ({ ...AGENT_SETTINGS, provider: 'claude' }),
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 2000,
+    });
+    expect(await r.run(task)).toBe('completed');
+    expect(kinds).toEqual(['claude']);
+    expect(store.getConversation('task-thread')?.provider).toBe('claude');
+    expect(p.starts[0].settings.claude.webSearch).toBe('off');
+  });
+
   it('disables web search for a run unless the task asked for it', async () => {
     const store = new AppStore(':memory:');
     const p = fakeProvider();
-    const settings = { ...DEFAULT_SETTINGS.agent.codex, webSearch: 'live' as const };
+    const settings = { ...AGENT_SETTINGS, codex: { ...AGENT_SETTINGS.codex, webSearch: 'live' as const } };
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
@@ -176,20 +220,20 @@ describe('TaskRunner', () => {
       timeoutMs: 2000,
     });
     await r.run(task);
-    expect(p.starts[0].settings.webSearch).toBe('disabled');
+    expect(p.starts[0].settings.codex.webSearch).toBe('disabled');
     await r.run({ ...task, webSearch: true });
-    expect(p.starts[1].settings.webSearch).toBe('live');
+    expect(p.starts[1].settings.codex.webSearch).toBe('live');
     // The user's own setting still wins: a task cannot turn search on when it is off globally.
     const r2 = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => ({ ...settings, webSearch: 'disabled' as const }),
+      settings: () => ({ ...settings, codex: { ...settings.codex, webSearch: 'disabled' as const } }),
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
     });
     await r2.run({ ...task, webSearch: true });
-    expect(p.starts[2].settings.webSearch).toBe('disabled');
+    expect(p.starts[2].settings.codex.webSearch).toBe('disabled');
   });
 
   it('announces the run starting and ending, so the sidebar can raise a banner over it', async () => {
@@ -199,7 +243,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       onRunEvent: (e) => seen.push(e),
@@ -218,7 +262,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 5000,
@@ -240,7 +284,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: (t) => (t.visibleWindow ? screenTools : noTools),
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -262,7 +306,7 @@ describe('TaskRunner', () => {
     const r = new TaskRunner({
       createProvider: () => failing,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -272,7 +316,7 @@ describe('TaskRunner', () => {
     const r2 = new TaskRunner({
       createProvider: () => hung,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 50,
@@ -300,7 +344,7 @@ describe('the watermark a run leaves behind', () => {
     const r = new TaskRunner({
       createProvider: () => fakeProvider('t-mark', [...events, { type: 'turn.completed', turnId: 't', status: 'completed' }]),
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,
@@ -387,7 +431,7 @@ describe('the watermark a run leaves behind', () => {
     const r = new TaskRunner({
       createProvider: () => p,
       toolsFor: () => noTools,
-      settings: () => DEFAULT_SETTINGS.agent.codex,
+      settings: () => AGENT_SETTINGS,
       workspaceDir: '/tmp',
       store,
       timeoutMs: 2000,

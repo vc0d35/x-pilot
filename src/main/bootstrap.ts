@@ -26,7 +26,7 @@ import { AgentController } from './agent/controller';
 import { ThreadState } from './agent/thread-state';
 import { DEFER_MS, TaskManager } from './tasks/manager';
 import { TaskRunner } from './tasks/runner';
-import { CodexProvider } from './agent/codex/provider';
+import { createProvider } from './agent/providers';
 import { registerSidebarIpc, registerFocusRelay, registerUserActivity } from './ipc';
 import { PageStyles, PAGE_STYLES_FILE } from './page-config/styles';
 import { SelectorOverrides, SELECTORS_FILE } from './page-config/selectors';
@@ -362,10 +362,10 @@ export function createApp(opts: AppOptions): XPilotApp {
   app.on('will-quit', () => clearInterval(retentionTimer));
   const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), LIBRARY_FOLDER_NAME);
   const taskRunner = new TaskRunner({
-    createProvider: (tools) =>
-      new CodexProvider({ callTool: (n, a, signal) => tools.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
+    createProvider: (kind, tools) =>
+      createProvider(kind, { callTool: (n, a, signal) => tools.call(n, a, { signal }), approvals, clientVersion: app.getVersion() }),
     toolsFor: (task) => taskRegistryFor(task),
-    settings: () => settings.get().agent.codex,
+    settings: () => settings.get().agent,
     workspaceDir,
     store,
     // A run opened from History is a read-only view, so its events reach the sidebar here rather
@@ -456,8 +456,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     registry,
     settings,
     workspaceDir,
-    createProvider: () =>
-      new CodexProvider({
+    createProvider: (kind) =>
+      createProvider(kind, {
         callTool: (n, a, signal) => registry.call(n, a, { signal }),
         approvals,
         userInput,

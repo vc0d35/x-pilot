@@ -1,20 +1,32 @@
-import type { AgentEvent } from '../../shared/agent';
+import type { AgentEvent, ProviderKind } from '../../shared/agent';
 import type { PageContext } from '../../shared/page';
 import type { Settings } from '../../shared/settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { ModelInfo } from '../../shared/sidebar-api';
 
-export type { ModelInfo };
+export type { ModelInfo, ProviderKind };
+
+/** What the rest of the app must know about a backend's thread model. */
+export interface ProviderCapabilities {
+  /**
+   * The tool list is fixed when a thread is created, so a thread started with a different tool set
+   * cannot be resumed and the controller starts a fresh one instead.
+   */
+  toolsFrozenPerThread: boolean;
+}
 
 export interface StartOptions {
   tools: ToolSpec[];
-  settings: Settings['agent']['codex'];
+  /** The whole `agent` settings slice; each provider reads its own part of it. */
+  settings: Settings['agent'];
   threadId?: string | null;
   workspaceDir: string;
 }
 
 export interface AgentProvider {
   readonly id: string;
+  readonly kind: ProviderKind;
+  readonly capabilities: ProviderCapabilities;
   start(opts: StartOptions): Promise<{ threadId: string }>;
   send(text: string, pageContext?: PageContext | null): Promise<void>;
   interrupt(): Promise<void>;

@@ -9,13 +9,13 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Agent
 
-- [ ] Header reaches `ready`; an error banner appears if `codex login` is needed.
+- [ ] The header pill names the model in use (e.g. `GPT-5.6-Luna` or `Sonnet 5`) with a breathing dot; clicking it opens Settings. While the agent is starting it reads `connecting…`, and a dead agent shows `disconnected`/`error` with a `reconnect` link next to it.
 - [ ] "Which page am I on?" → `x_get_page_state` tool row, correct answer.
 - [ ] Stop button interrupts a long answer.
 - [ ] Open a post with a factual claim and ask "is this true?" → a `web_search` tool row appears and the answer cites non-X sources; Settings → Web search → Off makes the agent stop searching the web.
 - [ ] Ctrl+D from anywhere (even with the sidebar collapsed) focuses the agent input.
 - [ ] Header chevron hides the sidebar entirely (x.com fills the window); View → Toggle Sidebar or ⌘\ brings it back with the conversation intact.
-- [ ] New thread clears the list; a settings change (model) restarts and resumes the thread.
+- [ ] New thread clears the list; a settings change (model) restarts and resumes the thread, and the pill follows the new model.
 - [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 
 ## Focus context
@@ -76,7 +76,7 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Conversations and scheduled tasks
 
-- [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
+- [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues that thread on the backend that wrote it.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
 - [ ] While a task is running, open its run from History: it is marked "running", the banner says "Viewing a scheduled run", new events appear as the run makes them, and the composer is read-only. "Back to chat" returns to your own conversation with its transcript intact and the composer usable again.
 - [ ] "Every 30 minutes, on my screen while I'm away, scroll my timeline and open anything about Electron" → the task is created with visibleWindow and shows a "screen" badge in Scheduled tasks; a task asked for without that phrasing has no badge.
@@ -126,7 +126,11 @@ Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --
 
 ## First run and setup
 
-- [ ] Fresh profile (`XPILOT_USER_DATA=$(mktemp -d) npm run dev`): the onboarding card shows above the composer; "Got it" dismisses it for good; History, Library and Tasks show their empty states.
-- [ ] Settings → Codex binary → a bogus path, then reconnect: the setup card says Codex was not found, with install and login commands and a Try again button; clearing the path and Try again removes the card.
+- [ ] Fresh profile (`XPILOT_USER_DATA=$(mktemp -d) npm run dev`): the "Choose a model to connect" card is the first thing in the conversation, with Codex and Claude, one requirement line each, and no onboarding card yet. The composer is disabled and reads "Choose a model to start", and the pill says `choose a model`.
+- [ ] Connect on one of them: the option reads "Connecting…" while the CLI is asked one question, then the card goes, the onboarding card takes its place, the pill shows that model's name, and a message can be sent.
+- [ ] Connect on a backend that is not installed or not logged in: the CLI's own error appears under that option with a one-line fix (`codex login` / run `claude` once and log in), and the other option still works.
+- [ ] Settings → Models: both rows show a state (`active` / `connected` / `not connected`); Check on the active one answers, Use on the other switches to it, the pill changes, and the conversation starts fresh on the new backend. Only the active backend's model, effort, web search (and Codex approvals) rows are shown.
+- [ ] With Claude active, open a Codex conversation from History: the row carries a `Codex` badge, the banner says the conversation was with Codex and offers Settings, the transcript is readable and the composer is disabled. Back to chat (the conversation icon) returns to your own thread.
+- [ ] Settings → Models → the active backend's binary → a bogus path, then reconnect: the setup card names that backend, with its install and login commands and a Try again button; clearing the path and Try again removes the card.
 - [ ] `codex logout` in a terminal, then send a message: the card says you are logged out and shows `codex login`; log in, Try again, card disappears.
 - [ ] Packaged build (`npm run dist`, open `dist/mac-arm64/XPilot.app`) from Finder: Codex is found without a terminal PATH.

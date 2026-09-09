@@ -1,4 +1,4 @@
-import type { AgentEvent, UserInputAnswers } from './agent';
+import type { AgentEvent, ProviderKind, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
 
@@ -8,10 +8,23 @@ export interface ModelInfo {
   isDefault: boolean;
   reasoningEfforts: string[];
 }
+/** One provider's models, and whether we could offer any at all. */
+export interface ModelList {
+  provider: ProviderKind;
+  models: ModelInfo[];
+  /** True when the list is empty because the provider could not be asked, not because it has none. */
+  unavailable: boolean;
+}
+
+/** What the Connect button came back with; `model` is the one the turn ran on. */
+export type ProbeResult = { ok: true; model: string | null } | { ok: false; error: string };
+
 export interface Conversation {
   threadId: string;
   title: string;
   kind: 'chat' | 'task';
+  /** The backend that wrote it; only that one can continue it. */
+  provider: ProviderKind;
   taskId: number | null;
   createdAt: string;
   updatedAt: string;
@@ -20,10 +33,13 @@ export interface Conversation {
 /**
  * What the sidebar is looking at after it opened a conversation. A scheduled run is a read-only
  * view: the interactive agent stays on its own thread, and the run's events stream in while it
- * is still going.
+ * is still going. So is a conversation another provider owns: it can be read, never continued.
  */
 export type ConversationView =
-  { threadId: string; kind: 'live' } | { threadId: string; kind: 'task'; taskId: number | null; title: string; running: boolean };
+  | { threadId: string; kind: 'live' }
+  | { threadId: string; kind: 'task'; taskId: number | null; title: string; running: boolean }
+  /** A conversation the other provider wrote: readable, not resumable. */
+  | { threadId: string; kind: 'foreign'; provider: ProviderKind };
 
 export interface OpenedConversation {
   events: AgentEvent[];
@@ -98,7 +114,12 @@ export interface XPilotApi {
   resolveApproval(id: string, decision: string, note?: string): Promise<void>;
   /** Answers a clarifying question from the agent; null answers mean the user skipped it. */
   resolveInput(id: string, answers: UserInputAnswers): Promise<void>;
-  listModels(): Promise<ModelInfo[]>;
+  /** The models to offer; omit `provider` for the one that is running. */
+  listModels(provider?: ProviderKind): Promise<ModelList>;
+  /** Records the chosen backend and starts a fresh thread on it. */
+  setProvider(provider: ProviderKind): Promise<void>;
+  /** Connect: one short turn on a throwaway instance of that provider, to prove it answers. */
+  probeProvider(provider: ProviderKind): Promise<ProbeResult>;
   getSettings(): Promise<Settings>;
   setSettings(patch: DeepPartial<Settings>): Promise<Settings>;
   listLibrary(): Promise<LibraryItem[]>;
@@ -117,8 +138,8 @@ export interface XPilotApi {
   openPageConfig(kind: PageConfigKind): Promise<void>;
   /** Empties one of the two files, as the user, so nothing is confirmed; returns the new status. */
   resetPageConfig(kind: PageConfigKind): Promise<PageConfigStatus>;
-  /** Picks the Codex binary with a file dialog, or clears it; returns the new path. */
-  setCodexBinary(action: 'choose' | 'clear'): Promise<string | null>;
+  /** Picks that provider's binary with a file dialog, or clears it; returns the new path. */
+  setProviderBinary(provider: ProviderKind, action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;
   historyStats(): Promise<HistoryStats>;
   setSidebarCollapsed(collapsed: boolean): Promise<void>;

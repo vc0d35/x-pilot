@@ -54,6 +54,11 @@ export function fenceBlock(value: unknown, max: number): string {
   return fence(sanitize(value, true).slice(0, max));
 }
 
+/** Wraps a tool result for the model: untrusted page data, with its own delimiters escaped. */
+export function wrapToolOutput(text: string): string {
+  return `<tool-output untrusted source="x.com">\n${fence(text)}\n</tool-output>`;
+}
+
 /** Wraps lines in an untrusted fence. Every field inside must already have gone through `fence*`. */
 export function pageContentBlock(lines: string[]): string {
   return ['<page-content untrusted>', ...lines, '</page-content>'].join('\n');

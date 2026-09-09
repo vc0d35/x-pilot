@@ -12,17 +12,20 @@ import {
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join } from 'node:path';
+import { PROVIDER_KINDS, type ProviderKind } from '../../shared/agent';
 
 /** The agent's own bookkeeping: not a user setting, so it lives beside settings.json, not inside it. */
 export interface ThreadStateData {
   threadId: string | null;
   /** Fingerprint of the tool list the stored thread was started with; a mismatch forces a fresh thread. */
   threadToolsHash: string | null;
+  /** Which backend the stored thread belongs to; a thread is never resumed under another one. */
+  provider: ProviderKind | null;
 }
 
 export const THREAD_STATE_FILE = 'agent-state.json';
 
-const EMPTY: ThreadStateData = { threadId: null, threadToolsHash: null };
+const EMPTY: ThreadStateData = { threadId: null, threadToolsHash: null, provider: null };
 
 function isObj(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -30,9 +33,13 @@ function isObj(v: unknown): v is Record<string, unknown> {
 
 function readState(raw: unknown): ThreadStateData {
   const r = isObj(raw) ? raw : {};
+  const threadId = typeof r.threadId === 'string' ? r.threadId : null;
+  const provider = PROVIDER_KINDS.find((k) => k === r.provider) ?? null;
   return {
-    threadId: typeof r.threadId === 'string' ? r.threadId : null,
+    threadId,
     threadToolsHash: typeof r.threadToolsHash === 'string' ? r.threadToolsHash : null,
+    // A file written before there was a second provider records a Codex thread.
+    provider: provider ?? (threadId ? 'codex' : null),
   };
 }
 
@@ -102,7 +109,7 @@ export class ThreadState {
     if (!existsSync(settingsPath)) return { ...EMPTY };
     try {
       const found = readState(JSON.parse(readFileSync(settingsPath, 'utf8')));
-      if (!found.threadId && !found.threadToolsHash) return found;
+      if (!found.threadId && !found.threadToolsHash) return { ...found, provider: null };
       this.current = found;
       this.write();
       return found;

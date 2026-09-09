@@ -71,8 +71,9 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(4);
+    expect(userVersion(check)).toBe(5);
     expect(check.prepare('SELECT web_search, last_seen_post_id, visible_window FROM tasks').all()).toEqual([]); // the added columns are there
+    expect(check.prepare('SELECT provider FROM conversations').all()).toEqual([]);
     check.close();
   });
 
@@ -94,7 +95,7 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(4);
+    expect(userVersion(check)).toBe(5);
     check.close();
   });
 
@@ -117,7 +118,7 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(4);
+    expect(userVersion(check)).toBe(5);
     check.close();
   });
 
@@ -141,7 +142,7 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(4);
+    expect(userVersion(check)).toBe(5);
     check.close();
   });
 
@@ -154,8 +155,8 @@ describe('schema migrations', () => {
     expect(new LikesStore(again.db).count()).toBe(1);
     again.close();
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(4);
-    expect(migrate(check)).toBe(4);
+    expect(userVersion(check)).toBe(5);
+    expect(migrate(check)).toBe(5);
     check.close();
   });
 
@@ -163,7 +164,7 @@ describe('schema migrations', () => {
     const file = tempFile();
     new DatabaseSync(file).close();
     const db = new DatabaseSync(file, { readOnly: true });
-    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 4/);
+    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 5/);
     expect(userVersion(db)).toBe(0);
     db.close();
   });

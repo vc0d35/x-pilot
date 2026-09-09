@@ -2,7 +2,7 @@ import type { AgentEvent, UserInputQuestion } from '../../../shared/agent';
 import type { ToolResult } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
 import type { UserInputBroker } from '../../user-input';
-import { fence } from '../fence';
+import { wrapToolOutput } from '../fence';
 import { JsonRpcError } from './jsonrpc';
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
@@ -10,9 +10,7 @@ const USER_INPUT_TIMEOUT_MS = 5 * 60 * 1000;
 const QUESTION_MAX = 24;
 const OPTION_MAX = 32;
 
-export function wrapToolOutput(text: string): string {
-  return `<tool-output untrusted source="x.com">\n${fence(text)}\n</tool-output>`;
-}
+export { wrapToolOutput };
 
 /** What a stream of item notifications has to remember between them. */
 export interface ItemPhases {

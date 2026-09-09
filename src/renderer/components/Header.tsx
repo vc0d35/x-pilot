@@ -30,28 +30,29 @@ const ICON = {
   expand: 'M13 17l5-5-5-5M6 17l5-5-5-5',
 };
 
-const LABELS: Record<AgentStatus, string | null> = {
-  ready: null,
-  running: null,
-  starting: 'starting',
-  disconnected: 'disconnected',
-  error: 'error',
-};
-
-export function StatusDot(props: { status: AgentStatus; message?: string; onReconnect: () => void }) {
-  const label = LABELS[props.status];
-  const canReconnect = props.status === 'disconnected' || props.status === 'error';
+/**
+ * The header's identity line: which model is answering, or what is wrong when none is. Clicking it
+ * opens Settings, where the model is chosen; a dead agent keeps its own reconnect next to it.
+ */
+export function ModelPill(props: {
+  status: AgentStatus;
+  message?: string;
+  label: string;
+  canReconnect: boolean;
+  onOpenSettings: () => void;
+  onReconnect: () => void;
+}) {
   return (
-    <span className={`status status-${props.status}`} title={props.message ?? props.status}>
-      <span className="status-dot" aria-label={props.status} />
-      {label &&
-        (canReconnect ? (
-          <button className="link" onClick={props.onReconnect}>
-            {label} · reconnect
-          </button>
-        ) : (
-          <span className="status-label">{label}</span>
-        ))}
+    <span className={`status status-${props.status}`}>
+      <button className="pill" onClick={props.onOpenSettings} title={props.message ?? `${props.label} — open Settings`}>
+        <span className="status-dot" aria-label={props.status} />
+        <span className="pill-text">{props.label}</span>
+      </button>
+      {props.canReconnect && (
+        <button className="link" onClick={props.onReconnect}>
+          reconnect
+        </button>
+      )}
     </span>
   );
 }
@@ -59,6 +60,9 @@ export function StatusDot(props: { status: AgentStatus; message?: string; onReco
 export function Header(props: {
   status: AgentStatus;
   statusMessage?: string;
+  /** What the pill says: the model in use, or the state it is stuck in. */
+  pillLabel: string;
+  canReconnect: boolean;
   onNewThread: () => void;
   onReconnect: () => void;
   panel: Panel;
@@ -72,7 +76,14 @@ export function Header(props: {
         <img className="brand-mark" src={logo} alt="" width={18} height={18} />
         XPilot
       </div>
-      <StatusDot status={props.status} message={props.statusMessage} onReconnect={props.onReconnect} />
+      <ModelPill
+        status={props.status}
+        message={props.statusMessage}
+        label={props.pillLabel}
+        canReconnect={props.canReconnect}
+        onOpenSettings={() => props.onPanel('settings')}
+        onReconnect={props.onReconnect}
+      />
       <div className="spacer" />
       <button
         className={`icon${props.panel === 'chat' ? ' icon-active' : ''}`}

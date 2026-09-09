@@ -1,3 +1,8 @@
+/** The agent backends XPilot can drive; `null` in settings means the user has not chosen yet. */
+export const PROVIDER_KINDS = ['codex', 'claude'] as const;
+export type ProviderKind = (typeof PROVIDER_KINDS)[number];
+export const PROVIDER_LABELS: Record<ProviderKind, string> = { codex: 'Codex', claude: 'Claude' };
+
 export type AgentStatus = 'starting' | 'ready' | 'running' | 'disconnected' | 'error';
 
 export interface ApprovalOption {
