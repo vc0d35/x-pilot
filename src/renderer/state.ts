@@ -24,6 +24,24 @@ export type Entry =
   | { kind: 'approval'; request: ApprovalRequest; decision?: string; note?: string }
   | { kind: 'input'; request: UserInputRequest; resolved?: { answers: UserInputAnswers } };
 
+/**
+ * The scheduled run the sidebar is showing instead of the user's own conversation. It is read-only:
+ * the run has its own Codex process, and its events arrive on their own channel.
+ */
+export interface ViewingRun {
+  threadId: string;
+  taskId: number | null;
+  title: string;
+  running: boolean;
+}
+
+/** Everything the sidebar dispatches that is not an agent event of the live conversation. */
+export type LocalAction =
+  | { type: 'reset' }
+  | { type: 'view.task'; threadId: string; taskId: number | null; title: string; running: boolean }
+  | { type: 'view.live' }
+  | { type: 'conversation.event'; threadId: string; event: AgentEvent };
+
 export interface State {
   status: AgentStatus;
   statusMessage?: string;
@@ -37,6 +55,8 @@ export interface State {
   failure: { message: string } | null;
   /** True once a turn has completed in this session, so a stale failure stops shaping the UI. */
   everSucceeded: boolean;
+  /** Set while a scheduled run is being read instead of the live conversation. */
+  viewing: ViewingRun | null;
 }
 
 export const initialState: State = {
@@ -48,15 +68,36 @@ export const initialState: State = {
   turnId: null,
   failure: null,
   everSucceeded: false,
+  viewing: null,
 };
 
 let seq = 0;
 const localId = () => `local-${++seq}`;
 
-export function reduce(state: State, e: AgentEvent | { type: 'reset' }): State {
+export function reduce(state: State, e: AgentEvent | LocalAction): State {
   switch (e.type) {
     case 'reset':
-      return { ...state, entries: [], running: false, failure: null };
+      return { ...state, entries: [], running: false, failure: null, viewing: null };
+    case 'view.task':
+      return { ...state, viewing: { threadId: e.threadId, taskId: e.taskId, title: e.title, running: e.running } };
+    case 'view.live':
+      return { ...state, viewing: null };
+    case 'conversation.event': {
+      const viewing = state.viewing;
+      if (!viewing || viewing.threadId !== e.threadId) return state;
+      const next = reduce(state, e.event);
+      if (e.event.type !== 'turn.completed') return next;
+      // The run's turn ending is the run's news, not the live agent's: keep its own health fields.
+      return {
+        ...next,
+        status: state.status,
+        statusMessage: state.statusMessage,
+        running: state.running,
+        failure: state.failure,
+        everSucceeded: state.everSucceeded,
+        viewing: { ...viewing, running: false },
+      };
+    }
     case 'status': {
       // 'starting' is the one status that means a fresh attempt, so it is what clears a failure:
       // 'ready' follows a failed turn (Codex reports auth errors there) and must not clear it.

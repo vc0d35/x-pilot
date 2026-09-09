@@ -43,6 +43,7 @@ const api: XPilotApi = {
   setSidebarCollapsed: (collapsed) => ipcRenderer.invoke(IPC.sidebarSetCollapsed, { collapsed }),
   openLink: (url) => ipcRenderer.invoke(IPC.linkOpen, { url }),
   onEvent: subscribe(IPC.agentEvent),
+  onConversationEvent: subscribe(IPC.conversationEvent),
   onFocus: subscribe(IPC.focusUpdate),
   onSettings: subscribe(IPC.settingsChanged),
   onSidebarCollapsed: subscribe(IPC.sidebarCollapsed),

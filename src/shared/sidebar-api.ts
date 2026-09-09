@@ -17,6 +17,25 @@ export interface Conversation {
   updatedAt: string;
   toolsHash: string | null;
 }
+/**
+ * What the sidebar is looking at after it opened a conversation. A scheduled run is a read-only
+ * view: the interactive agent stays on its own thread, and the run's events stream in while it
+ * is still going.
+ */
+export type ConversationView =
+  { threadId: string; kind: 'live' } | { threadId: string; kind: 'task'; taskId: number | null; title: string; running: boolean };
+
+export interface OpenedConversation {
+  events: AgentEvent[];
+  view: ConversationView;
+}
+
+/** One transcript event of a conversation the sidebar is not driving, pushed as it is recorded. */
+export interface ConversationEventMessage {
+  threadId: string;
+  event: AgentEvent;
+}
+
 export type TaskSchedule = { every: string } | { cron: string };
 export interface ScheduledTask {
   id: number;
@@ -79,7 +98,7 @@ export interface XPilotApi {
   updateTask(id: number, patch: { enabled?: boolean }): Promise<ScheduledTask>;
   deleteTask(id: number): Promise<void>;
   runTaskNow(id: number): Promise<void>;
-  openConversation(threadId: string): Promise<AgentEvent[]>;
+  openConversation(threadId: string): Promise<OpenedConversation>;
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;
   /** Where the page stylesheet and the selector overrides live, and what state they are in. */
@@ -97,6 +116,8 @@ export interface XPilotApi {
   onSidebarCollapsed(cb: (collapsed: boolean) => void): () => void;
   onFocusInput(cb: () => void): () => void;
   onEvent(cb: (e: AgentEvent) => void): () => void;
+  /** Transcript events of a scheduled run, so a run opened from History streams while it runs. */
+  onConversationEvent(cb: (m: ConversationEventMessage) => void): () => void;
   onFocus(cb: (ctx: PageContext | null) => void): () => void;
   onSettings(cb: (s: Settings) => void): () => void;
 }

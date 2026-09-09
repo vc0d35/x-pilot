@@ -306,6 +306,11 @@ export function createApp(opts: AppOptions): XPilotApp {
     settings: () => settings.get().agent.codex,
     workspaceDir,
     store,
+    // A run opened from History is a read-only view, so its events reach the sidebar here rather
+    // than through the interactive agent's stream.
+    onTranscriptEvent: (threadId, event) => {
+      if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.conversationEvent, { threadId, event });
+    },
     log: (m) => console.log(m),
   });
   const tasks = new TaskManager({

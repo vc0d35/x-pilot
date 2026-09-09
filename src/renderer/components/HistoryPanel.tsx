@@ -58,10 +58,30 @@ function TasksTab() {
   );
 }
 
+/**
+ * The thread of each running task's current run. Conversations come newest first, so the first one
+ * a running task has is the run in flight; earlier runs of the same task are finished.
+ */
+export function runningRunThreads(conversations: Conversation[], tasks: ScheduledTask[]): Set<string> {
+  const running = new Set(tasks.filter((t) => t.lastStatus === 'running').map((t) => t.id));
+  const seen = new Set<number>();
+  const threads = new Set<string>();
+  for (const c of conversations) {
+    if (c.kind !== 'task' || c.taskId === null || !running.has(c.taskId) || seen.has(c.taskId)) continue;
+    seen.add(c.taskId);
+    threads.add(c.threadId);
+  }
+  return threads;
+}
+
 function ConversationsTab(props: { currentThreadId: string | null; onOpen: (threadId: string) => void }) {
   const [items, setItems] = useState<Conversation[]>([]);
+  const [running, setRunning] = useState<Set<string>>(new Set());
   useEffect(() => {
-    void window.xpilot.listConversations().then(setItems);
+    void Promise.all([window.xpilot.listConversations(), window.xpilot.listTasks()]).then(([conversations, tasks]) => {
+      setItems(conversations);
+      setRunning(runningRunThreads(conversations, tasks));
+    });
   }, []);
   if (items.length === 0)
     return <p className="hint">No conversations yet. Every thread you start in the chat is saved here, newest first.</p>;
@@ -76,6 +96,7 @@ function ConversationsTab(props: { currentThreadId: string | null; onOpen: (thre
           <span className="conv-title">{c.title || (c.kind === 'task' ? 'Task run' : 'Untitled')}</span>
           <span className="conv-meta">
             {c.kind === 'task' && <span className="badge">task</span>}
+            {running.has(c.threadId) && <span className="badge">running</span>}
             {new Date(c.updatedAt).toLocaleString()}
           </span>
         </button>

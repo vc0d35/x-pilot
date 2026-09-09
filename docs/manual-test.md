@@ -78,6 +78,7 @@ Run `npm run dev`, logged into x.com in the X view.
 
 - [ ] History (clock icon) lists past conversations newest first; clicking one restores its transcript and continues the same Codex thread.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
+- [ ] While a task is running, open its run from History: it is marked "running", the banner says "Viewing a scheduled run", new events appear as the run makes them, and the composer is read-only. "Back to chat" returns to your own conversation with its transcript intact and the composer usable again.
 - [ ] Pause/Resume/Delete work; a paused task has no next run.
 
 ## Liking and timeline reading

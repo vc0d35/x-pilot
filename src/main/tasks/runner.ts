@@ -1,4 +1,5 @@
 import type { ScheduledTask } from '../../shared/sidebar-api';
+import type { AgentEvent } from '../../shared/agent';
 import type { Settings } from '../../shared/settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { AgentProvider } from '../agent/provider';
@@ -32,6 +33,8 @@ export class TaskRunner {
       settings: () => Settings['agent']['codex'];
       workspaceDir: string;
       store: AppStore;
+      /** Every event as it is recorded, so a sidebar watching this run sees it arrive. */
+      onTranscriptEvent?: (threadId: string, event: AgentEvent) => void;
       timeoutMs?: number;
       log?: (m: string) => void;
     },
@@ -43,7 +46,11 @@ export class TaskRunner {
     let threadId: string | null = null;
     const done = new Promise<RunStatus>((resolve) => {
       provider.onEvent((e) => {
-        if (threadId && RECORDED.has(e.type)) this.deps.store.appendEvent(threadId, transcriptEvent(e));
+        if (threadId && RECORDED.has(e.type)) {
+          const recorded = transcriptEvent(e);
+          this.deps.store.appendEvent(threadId, recorded);
+          this.deps.onTranscriptEvent?.(threadId, recorded);
+        }
         if (e.type === 'turn.completed')
           resolve(e.status === 'completed' ? 'completed' : e.status === 'interrupted' ? 'interrupted' : 'failed');
         if (e.type === 'status' && (e.status === 'disconnected' || e.status === 'error')) resolve('failed');

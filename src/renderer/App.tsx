@@ -27,7 +27,37 @@ export function App() {
     return window.xpilot.onSettings(setSettings);
   }, []);
 
+  useEffect(
+    () => window.xpilot.onConversationEvent((m) => dispatch({ type: 'conversation.event', threadId: m.threadId, event: m.event })),
+    [],
+  );
+
   const reconnect = () => void window.xpilot.reconnect();
+  /**
+   * Opens a conversation in the chat pane. Main decides what that means: the user's own thread is
+   * resumed, a scheduled run comes back as a read-only view. The view is dispatched after the
+   * replay so the run's live state wins over the `turn.completed` of an earlier run in its log.
+   */
+  const openConversation = (threadId: string) => {
+    dispatch({ type: 'reset' });
+    setPanel('chat');
+    void window.xpilot.openConversation(threadId).then(({ events, view }) => {
+      for (const e of events) dispatch(e);
+      dispatch(
+        view.kind === 'task'
+          ? { type: 'view.task', threadId: view.threadId, taskId: view.taskId, title: view.title, running: view.running }
+          : { type: 'view.live' },
+      );
+    });
+  };
+  const backToChat = () => {
+    if (state.threadId) openConversation(state.threadId);
+    else dispatch({ type: 'reset' });
+  };
+  const showPanel = (p: Panel) => {
+    if (p === 'chat' && state.viewing) backToChat();
+    else setPanel(p);
+  };
   const issue = setupIssue(state);
   const adapterBroken = state.entries.some((en) => en.kind === 'tool' && en.call.status === 'done' && reportsBrokenAdapter(en.call.output));
 
@@ -44,7 +74,7 @@ export function App() {
         }}
         onReconnect={reconnect}
         panel={panel}
-        onPanel={setPanel}
+        onPanel={showPanel}
         onCollapse={() => void window.xpilot.setSidebarCollapsed(true)}
       />
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
@@ -52,22 +82,23 @@ export function App() {
         <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
       )}
       {panel === 'history' ? (
-        <HistoryPanel
-          currentThreadId={state.threadId}
-          onOpen={(threadId) => {
-            dispatch({ type: 'reset' });
-            setPanel('chat');
-            void window.xpilot.openConversation(threadId).then((events) => {
-              for (const e of events) dispatch(e);
-            });
-          }}
-        />
+        <HistoryPanel currentThreadId={state.threadId} onOpen={openConversation} />
       ) : panel === 'library' ? (
         <LibraryPanel />
       ) : panel === 'settings' ? (
         settings && <SettingsPanel settings={settings} />
       ) : (
         <>
+          {state.viewing && (
+            <div className="banner run-banner">
+              <span className="run-banner-text">
+                Viewing a scheduled run: {state.viewing.title} &middot; {state.viewing.running ? 'running…' : 'finished'}
+              </span>
+              <button className="link" onClick={backToChat}>
+                Back to chat
+              </button>
+            </div>
+          )}
           {issue && <SetupCard issue={issue} onRetry={reconnect} onOpenSettings={() => setPanel('settings')} />}
           {settings && !settings.ui.onboarded && (
             <OnboardingCard
@@ -78,13 +109,14 @@ export function App() {
           )}
           <EntryList
             entries={state.entries}
-            activity={state.activity}
+            activity={state.viewing ? null : state.activity}
             onResolve={(id, d, note) => void window.xpilot.resolveApproval(id, d, note)}
             onResolveInput={(id, answers) => void window.xpilot.resolveInput(id, answers)}
           />
           <Composer
-            disabled={state.status !== 'ready' && state.status !== 'running'}
-            running={state.running}
+            disabled={!!state.viewing || (state.status !== 'ready' && state.status !== 'running')}
+            placeholder={state.viewing ? 'Scheduled runs are read-only. Ask in your own conversation.' : undefined}
+            running={!state.viewing && state.running}
             focus={focus}
             onStop={() => void window.xpilot.interrupt()}
             onSend={(text, ctx) =>

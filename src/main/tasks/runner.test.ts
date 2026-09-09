@@ -110,6 +110,52 @@ describe('TaskRunner', () => {
     expect(recorded.output.endsWith('… [truncated]')).toBe(true);
   });
 
+  it('reports every recorded event, including turn.completed, so a sidebar can watch the run', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider('t-watch', [
+      { type: 'activity', activity: 'thinking' },
+      { type: 'turn.completed', turnId: 't', status: 'completed' },
+    ]);
+    const seen: { threadId: string; type: string }[] = [];
+    const r = new TaskRunner({
+      createProvider: () => p,
+      tools: () => [],
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      onTranscriptEvent: (threadId, event) => seen.push({ threadId, type: event.type }),
+      timeoutMs: 2000,
+    });
+    await r.run(task);
+    expect(seen).toEqual([
+      { threadId: 't-watch', type: 'user.message' },
+      { threadId: 't-watch', type: 'message.completed' },
+      { threadId: 't-watch', type: 'turn.completed' },
+    ]);
+    expect(seen.map((e) => e.type)).toEqual(store.listEvents('t-watch').map((e) => e.type));
+  });
+
+  it('reports the truncated event, not the raw one', async () => {
+    const store = new AppStore(':memory:');
+    const p = fakeProvider('t-cut', [
+      { type: 'tool.completed', itemId: 'c1', name: 'x_read_post', success: true, output: 'z'.repeat(20_000) },
+      { type: 'turn.completed', turnId: 't', status: 'completed' },
+    ]);
+    const seen: AgentEvent[] = [];
+    const r = new TaskRunner({
+      createProvider: () => p,
+      tools: () => [],
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      onTranscriptEvent: (_threadId, event) => seen.push(event),
+      timeoutMs: 2000,
+    });
+    await r.run(task);
+    const pushed = seen.find((e) => e.type === 'tool.completed') as { output: string };
+    expect(pushed.output.endsWith('… [truncated]')).toBe(true);
+  });
+
   it('disables web search for a run unless the task asked for it', async () => {
     const store = new AppStore(':memory:');
     const p = fakeProvider();

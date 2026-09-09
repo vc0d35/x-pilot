@@ -36,6 +36,7 @@ export const IPC = {
   sidebarFocusInput: 'sidebar:focusInput',
   conversationsList: 'conversations:list',
   conversationsOpen: 'conversations:open',
+  conversationEvent: 'conversation:event',
   tasksList: 'tasks:list',
   tasksUpdate: 'tasks:update',
   tasksDelete: 'tasks:delete',

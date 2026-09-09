@@ -289,7 +289,8 @@ describe('reopening a conversation', () => {
     ctl.onEvent((e) => events.push(e));
     const replay = await ctl.openConversation('old');
     expect(provider.starts[0].threadId).toBe('old');
-    expect(replay.map((e) => e.type)).toEqual(['user.message']);
+    expect(replay.events.map((e) => e.type)).toEqual(['user.message']);
+    expect(replay.view).toEqual({ threadId: 'old', kind: 'live' });
     expect(events.some((e) => e.type === 'status' && (e.message ?? '').includes('fresh thread'))).toBe(false);
   });
 
@@ -362,9 +363,85 @@ describe('conversations', () => {
     await ctl.openConversation('T2'); // reopening the live thread does not restart the provider
     expect(i).toBe(before);
     expect(appStore.listEvents('T').map((e) => e.type)).toEqual(['user.message', 'message.completed']);
-    const events = await ctl.openConversation('T');
+    const opened = await ctl.openConversation('T');
     expect(providers[2].starts[0].threadId).toBe('T');
-    expect(events.map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    expect(opened.events.map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    expect(opened.view).toEqual({ threadId: 'T', kind: 'live' });
     expect(threadState(store).get().threadId).toBe('T');
+  });
+});
+
+describe('opening a scheduled run', () => {
+  const withRun = (lastStatus: string | null) => {
+    const appStore = new AppStore(':memory:');
+    const task = appStore.createTask({
+      title: 'Weather',
+      prompt: 'Post the weather',
+      schedule: { every: '1h' },
+      threadMode: 'resume',
+      nextRunAt: null,
+    });
+    appStore.updateTask(task.id, { lastStatus });
+    appStore.upsertConversation({ threadId: 'run-1', kind: 'task', taskId: task.id, toolsHash: 'h' });
+    appStore.appendEvent('run-1', { type: 'user.message', text: 'Scheduled task "Weather"' });
+    appStore.appendEvent('run-1', { type: 'message.completed', itemId: 'm1', text: 'posted' });
+    return appStore;
+  };
+
+  it('returns the stored transcript as a read-only view without touching the live thread or provider', async () => {
+    const store = settings();
+    const appStore = withRun('running');
+    const live = fakeProvider();
+    const runProvider = fakeProvider();
+    let i = 0;
+    const ctl = new AgentController({
+      registry: new ToolRegistry(),
+      settings: store,
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => [live, runProvider][i++],
+    });
+    await ctl.start({ resume: false });
+    const opened = await ctl.openConversation('run-1');
+    expect(opened.events.map((e) => e.type)).toEqual(['user.message', 'message.completed']);
+    expect(opened.view).toEqual({ threadId: 'run-1', kind: 'task', taskId: 1, title: 'Weather', running: true });
+    expect(i).toBe(1); // no second provider: nothing was started on the run's thread
+    expect(live.stop).not.toHaveBeenCalled();
+    expect(ctl.currentThreadId()).toBe('T');
+    expect(threadState(store).get().threadId).toBe('T');
+  });
+
+  it('reports a finished run as not running', async () => {
+    const store = settings();
+    const ctl = new AgentController({
+      registry: new ToolRegistry(),
+      settings: store,
+      store: withRun('completed'),
+      workspaceDir: '/tmp',
+      createProvider: () => fakeProvider(),
+    });
+    expect((await ctl.openConversation('run-1')).view).toMatchObject({ kind: 'task', running: false });
+  });
+
+  it('start() refuses to resume a run thread and keeps the current one', async () => {
+    const store = settings();
+    const appStore = withRun('running');
+    const providers = [fakeProvider(), fakeProvider()];
+    let i = 0;
+    const ctl = new AgentController({
+      registry: new ToolRegistry(),
+      settings: store,
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => providers[i++],
+    });
+    await ctl.start({ resume: false });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    await ctl.start({ resume: true, threadId: 'run-1' });
+    warn.mockRestore();
+    expect(i).toBe(1);
+    expect(ctl.currentThreadId()).toBe('T');
+    expect(threadState(store).get().threadId).toBe('T');
+    expect(providers[0].stop).not.toHaveBeenCalled();
   });
 });

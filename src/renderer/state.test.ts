@@ -178,3 +178,49 @@ describe('reportsBrokenAdapter', () => {
     expect(reportsBrokenAdapter('')).toBe(false);
   });
 });
+
+describe('viewing a scheduled run', () => {
+  const viewTask = { type: 'view.task' as const, threadId: 'run-1', taskId: 7, title: 'Weather', running: true };
+  const viewing = () => reduce(initialState, viewTask);
+  const streamed = (threadId: string, event: AgentEvent) => ({ type: 'conversation.event' as const, threadId, event });
+
+  it('records the run being viewed and clears it again', () => {
+    const s = viewing();
+    expect(s.viewing).toEqual({ threadId: 'run-1', taskId: 7, title: 'Weather', running: true });
+    expect(reduce(s, { type: 'view.live' }).viewing).toBeNull();
+    expect(reduce(s, { type: 'reset' }).viewing).toBeNull();
+    expect(reduce(s, { type: 'reset' }).entries).toEqual([]);
+  });
+
+  it("applies the run's events through the same reducer path as live ones", () => {
+    const s = [
+      streamed('run-1', { type: 'user.message', text: 'Scheduled task "Weather"' }),
+      streamed('run-1', { type: 'tool.started', itemId: 'c1', name: 'x_read_timeline', args: {} }),
+      streamed('run-1', { type: 'tool.completed', itemId: 'c1', name: 'x_read_timeline', success: true, output: '[]' }),
+      streamed('run-1', { type: 'message.completed', itemId: 'm1', text: 'Posted.' }),
+    ].reduce(reduce, viewing());
+    expect(s.entries).toEqual([
+      { kind: 'message', message: { id: expect.any(String), role: 'user', text: 'Scheduled task "Weather"' } },
+      { kind: 'tool', call: { id: 'c1', name: 'x_read_timeline', args: {}, status: 'done', output: '[]' } },
+      { kind: 'message', message: { id: 'm1', role: 'agent', text: 'Posted.', streaming: false } },
+    ]);
+    expect(s.viewing?.running).toBe(true);
+  });
+
+  it('ignores events for any other thread, and every event when nothing is being viewed', () => {
+    const s = viewing();
+    expect(reduce(s, streamed('another-run', { type: 'user.message', text: 'not mine' }))).toBe(s);
+    expect(reduce(initialState, streamed('run-1', { type: 'user.message', text: 'nobody is looking' }))).toBe(initialState);
+  });
+
+  it("flips running to false on turn.completed without touching the live agent's health", () => {
+    const live: State = { ...viewing(), status: 'ready', running: true, failure: { message: 'earlier' }, everSucceeded: true };
+    const s = reduce(live, streamed('run-1', { type: 'turn.completed', turnId: 't', status: 'failed', error: 'boom' }));
+    expect(s.viewing).toEqual({ threadId: 'run-1', taskId: 7, title: 'Weather', running: false });
+    expect(s.entries.at(-1)).toEqual({ kind: 'message', message: { id: expect.any(String), role: 'system', text: 'Turn failed: boom' } });
+    expect(s.status).toBe('ready');
+    expect(s.running).toBe(true);
+    expect(s.failure).toEqual({ message: 'earlier' });
+    expect(s.everSucceeded).toBe(true);
+  });
+});

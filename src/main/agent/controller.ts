@@ -5,7 +5,7 @@ import type { SettingsStore } from '../settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { ToolRegistry } from '../tools/registry';
 import type { AppStore } from '../history/store';
-import type { Conversation } from '../../shared/sidebar-api';
+import type { Conversation, OpenedConversation } from '../../shared/sidebar-api';
 import type { AgentProvider, ModelInfo } from './provider';
 import { ThreadState } from './thread-state';
 
@@ -74,6 +74,12 @@ export class AgentController {
   }
 
   async start(opts: { resume: boolean; threadId?: string | null }): Promise<void> {
+    // A scheduled run's thread belongs to that run's own process; binding the interactive agent to
+    // it would restart Codex on it and, mid-run, put two processes on one thread.
+    if (opts.threadId && this.deps.store?.getConversation(opts.threadId)?.kind === 'task') {
+      console.warn(`[xpilot] refusing to resume ${opts.threadId}: it is a scheduled run's thread`);
+      return;
+    }
     const gen = ++this.generation;
     await this.stop();
     if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
@@ -143,10 +149,30 @@ export class AgentController {
     }
   }
 
-  async openConversation(threadId: string): Promise<AgentEvent[]> {
+  /**
+   * Opens a conversation for the sidebar. A scheduled run is a read-only view: its transcript is
+   * returned as it stands and the live thread and provider are left alone, because the run has its
+   * own Codex process. Anything else is the user's own conversation, so it is resumed as before.
+   */
+  async openConversation(threadId: string): Promise<OpenedConversation> {
+    const conversation = this.deps.store?.getConversation(threadId);
+    const events = (): AgentEvent[] => this.deps.store?.listEvents(threadId) ?? [];
+    if (conversation?.kind === 'task') {
+      const task = conversation.taskId === null ? null : this.deps.store?.getTask(conversation.taskId);
+      return {
+        events: events(),
+        view: {
+          threadId,
+          kind: 'task',
+          taskId: conversation.taskId,
+          title: task?.title ?? conversation.title,
+          running: task?.lastStatus === 'running',
+        },
+      };
+    }
     // Already in it: nothing to restart (an empty thread cannot even be resumed by Codex yet).
     if (threadId !== this.threadId || !this.provider) await this.start({ resume: true, threadId });
-    return this.deps.store?.listEvents(threadId) ?? [];
+    return { events: events(), view: { threadId: this.threadId ?? threadId, kind: 'live' } };
   }
 
   listConversations(): Conversation[] {

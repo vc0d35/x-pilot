@@ -3,6 +3,8 @@ import type { PageContext } from '../../shared/page';
 
 export function Composer(props: {
   disabled: boolean;
+  /** Replaces the disabled placeholder when there is a better reason than "not ready" to give. */
+  placeholder?: string;
   running: boolean;
   focus: PageContext | null;
   onSend: (text: string, ctx: PageContext | null) => Promise<boolean>;
@@ -27,7 +29,9 @@ export function Composer(props: {
         <textarea
           ref={inputRef}
           value={text}
-          placeholder={props.disabled ? 'Agent not ready' : 'Ask about this page, or tell me what to do… (⌘↩ to send)'}
+          placeholder={
+            props.placeholder ?? (props.disabled ? 'Agent not ready' : 'Ask about this page, or tell me what to do… (⌘↩ to send)')
+          }
           disabled={props.disabled || sending}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
