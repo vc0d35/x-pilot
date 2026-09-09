@@ -75,7 +75,6 @@ Signed and notarized builds come from the tag workflow (`.github/workflows/relea
 - [docs/agent-principles.md](docs/agent-principles.md): how we prompt the agent (hints, not scripts).
 - [docs/manual-test.md](docs/manual-test.md): manual checks and live DOM debugging.
 - [docs/passkeys.md](docs/passkeys.md): signing for Touch ID passkeys.
-- [docs/superpowers/specs](docs/superpowers/specs): the original design documents.
 
 ## License
 

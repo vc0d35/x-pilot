@@ -7,7 +7,7 @@ Goal: someone downloads XPilot on a Mac, opens it, logs into X, and it works. Th
 - [x] _decision_ **License.** PolyForm Noncommercial 1.0.0: `LICENSE`, `package.json` and the README agree.
 - [x] _decision_ **Public repository and author name.** `github.com/vc0d35/x-pilot`, author `vc0d35`.
 - [ ] _decision_ **Should scheduling a task ask for confirmation?** A scheduled task is a persistent grant: an injected instruction that reaches `xpilot_schedule_task` re-runs unattended. Posting confirms by default; tasks do not. Options: confirm on create, or show a persistent "N tasks scheduled" indicator with one-click review.
-- [x] _decision_ **Internal build plans stay out of the public repo.** `docs/superpowers/plans` is removed; the design specs stay.
+- [x] _decision_ **Internal design and build documents stay out of the public repo.** `docs/superpowers` is removed from the tree and from history; `docs/architecture.md` is the design reference.
 
 ## Packaging and signing
 
