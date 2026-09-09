@@ -24,6 +24,7 @@ const task = (id: number, lastStatus: string | null): ScheduledTask => ({
   lastStatus,
   nextRunAt: null,
   webSearch: false,
+  lastSeenPostId: null,
 });
 
 describe('runningRunThreads', () => {

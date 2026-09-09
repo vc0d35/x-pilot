@@ -19,7 +19,7 @@ const schedule = z.strictObject({
 export const scheduleTask = defineTool({
   name: 'xpilot_schedule_task',
   description:
-    'Creates a recurring task the app runs while it is open: at each scheduled time a fresh agent run receives `prompt` and acts with the same tools (posting still follows the user\'s confirm/autonomous setting). Write the prompt as complete instructions for that future run. threadMode "resume" (default) keeps one thread across runs so the task remembers what it did; "new" starts clean each time.',
+    'Creates a recurring task the app runs while it is open: at each scheduled time a fresh agent run receives `prompt` and acts with the same tools (posting still follows the user\'s confirm/autonomous setting). Runs are unattended in a hidden window that loads pages fresh and can neither see nor move the user\'s own window, so write the prompt as what that run should read and do, not as gestures on a screen. threadMode "resume" (default) keeps one thread across runs so the task remembers what it did; "new" starts clean each time.',
   args: z.strictObject({ title: z.string(), prompt: z.string(), schedule, threadMode, webSearch }),
   execute: async (args, ctx: AppToolCtx) =>
     attempt(() =>
@@ -35,7 +35,8 @@ export const scheduleTask = defineTool({
 
 export const listTasks = defineTool({
   name: 'xpilot_list_tasks',
-  description: 'Lists the scheduled tasks with their schedule, enabled state, last run and next run.',
+  description:
+    'Lists the scheduled tasks with their schedule, enabled state, last run, next run, and lastSeenPostId — the newest timeline post an earlier run of that task read.',
   args: z.strictObject({}),
   annotations: { readOnlyHint: true },
   execute: async (_args, ctx: AppToolCtx) => ok(ctx.tasks.list()),
@@ -44,7 +45,7 @@ export const listTasks = defineTool({
 export const updateTask = defineTool({
   name: 'xpilot_update_task',
   description:
-    'Changes a scheduled task: enable/disable it, or update its title, prompt, schedule or threadMode. Changing the schedule or re-enabling recomputes the next run.',
+    "Changes a scheduled task: enable/disable it, or update its title, prompt, schedule or threadMode. A prompt still has to read as instructions for an unattended run in a hidden window that loads pages fresh and cannot touch the user's own window. Changing the schedule or re-enabling recomputes the next run.",
   args: z.strictObject({
     id: z.int(),
     enabled: z.boolean().optional(),

@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TaskRunner, buildRunPrompt } from './runner';
+import { TaskRunner, buildRunPrompt, timelineWatermark } from './runner';
 import { AppStore } from '../history/store';
 import type { AgentProvider, StartOptions } from '../agent/provider';
 import type { AgentEvent } from '../../shared/agent';
 import { DEFAULT_SETTINGS } from '../../shared/settings';
+import { MAX_TRANSCRIPT_OUTPUT } from '../agent/controller';
 
 function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type: 'turn.completed', turnId: 't', status: 'completed' }]) {
   const listeners = new Set<(e: AgentEvent) => void>();
@@ -51,6 +52,7 @@ const task = {
   lastStatus: null,
   nextRunAt: null,
   webSearch: false,
+  lastSeenPostId: null,
 };
 
 describe('TaskRunner', () => {
@@ -212,6 +214,138 @@ describe('TaskRunner', () => {
   });
 });
 
+const timelineResult = (newest: string | null, posts: string[]) =>
+  `<tool-output untrusted source="x.com">\n${JSON.stringify({ tab: 'following', pages: 3, posts: posts.map((id) => ({ id })), sinceId: null, newest })}\n</tool-output>`;
+
+describe('the watermark a run leaves behind', () => {
+  const runWith = async (events: AgentEvent[], seed: string | null = null) => {
+    const store = new AppStore(':memory:');
+    const created = store.createTask({
+      title: 'Following',
+      prompt: 'Like technical posts',
+      schedule: { every: '1h' },
+      threadMode: 'resume',
+      nextRunAt: null,
+    });
+    if (seed) store.advanceTaskLastSeenPostId(created.id, seed);
+    const r = new TaskRunner({
+      createProvider: () => fakeProvider('t-mark', [...events, { type: 'turn.completed', turnId: 't', status: 'completed' }]),
+      tools: () => [],
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 2000,
+    });
+    const status = await r.run({ ...task, id: created.id, lastSeenPostId: seed });
+    return { status, watermark: store.getTask(created.id)?.lastSeenPostId ?? null };
+  };
+
+  it('records the largest id any timeline read returned during the run', async () => {
+    const { watermark } = await runWith([
+      {
+        type: 'tool.completed',
+        itemId: 'c1',
+        name: 'x_read_timeline',
+        success: true,
+        output: timelineResult('1900000000000000009', ['1900000000000000009']),
+      },
+      {
+        type: 'tool.completed',
+        itemId: 'c2',
+        name: 'x_read_timeline',
+        success: true,
+        output: timelineResult('1900000000000000004', ['1900000000000000004']),
+      },
+    ]);
+    expect(watermark).toBe('1900000000000000009');
+  });
+
+  it('reads the full result, not the truncated one the transcript keeps', async () => {
+    const filler = 'z'.repeat(MAX_TRANSCRIPT_OUTPUT);
+    const output = `<tool-output untrusted source="x.com">\n${JSON.stringify({ posts: [{ id: '1', text: filler }], newest: '1900000000000000009' })}\n</tool-output>`;
+    const { watermark } = await runWith([{ type: 'tool.completed', itemId: 'c1', name: 'x_read_timeline', success: true, output }]);
+    expect(output.length).toBeGreaterThan(MAX_TRANSCRIPT_OUTPUT);
+    expect(watermark).toBe('1900000000000000009');
+  });
+
+  it('leaves the watermark alone for other tools, failed reads, and reads with nothing newer', async () => {
+    const other = await runWith([
+      {
+        type: 'tool.completed',
+        itemId: 'c1',
+        name: 'x_read_post',
+        success: true,
+        output: timelineResult('1900000000000000009', ['1900000000000000009']),
+      },
+      { type: 'tool.completed', itemId: 'c2', name: 'x_read_timeline', success: false, output: 'Error: the page never loaded' },
+      { type: 'tool.completed', itemId: 'c3', name: 'x_read_timeline', success: true, output: timelineResult(null, []) },
+    ]);
+    expect(other.watermark).toBeNull();
+    const older = await runWith(
+      [
+        {
+          type: 'tool.completed',
+          itemId: 'c1',
+          name: 'x_read_timeline',
+          success: true,
+          output: timelineResult('1900000000000000004', ['1900000000000000004']),
+        },
+      ],
+      '1900000000000000009',
+    );
+    expect(older.watermark).toBe('1900000000000000009');
+  });
+
+  it('records what a failed run had already read', async () => {
+    const store = new AppStore(':memory:');
+    const created = store.createTask({
+      title: 'Following',
+      prompt: 'Like technical posts',
+      schedule: { every: '1h' },
+      threadMode: 'resume',
+      nextRunAt: null,
+    });
+    const p = fakeProvider('t-fail', [
+      {
+        type: 'tool.completed',
+        itemId: 'c1',
+        name: 'x_read_timeline',
+        success: true,
+        output: timelineResult('1900000000000000009', ['1900000000000000009']),
+      },
+      { type: 'turn.completed', turnId: 't', status: 'failed', error: 'boom' },
+    ]);
+    const r = new TaskRunner({
+      createProvider: () => p,
+      tools: () => [],
+      settings: () => DEFAULT_SETTINGS.agent.codex,
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 2000,
+    });
+    expect(await r.run({ ...task, id: created.id })).toBe('failed');
+    expect(store.getTask(created.id)?.lastSeenPostId).toBe('1900000000000000009');
+  });
+});
+
+describe('timelineWatermark', () => {
+  it('reads `newest` out of the fenced tool result', () => {
+    expect(timelineWatermark(timelineResult('1900000000000000009', ['1900000000000000009']))).toBe('1900000000000000009');
+    expect(timelineWatermark(JSON.stringify({ newest: '1900000000000000009' }))).toBe('1900000000000000009');
+    expect(timelineWatermark(timelineResult(null, []))).toBeNull();
+    expect(timelineWatermark('Error: the page never loaded')).toBeNull();
+  });
+
+  it('still finds the id when a quoted post left the JSON unparseable, and refuses anything but digits', () => {
+    const broken =
+      '<tool-output untrusted source="x.com">\n{"posts":[{"text":"<\\page-content"}],"newest":"1900000000000000009"}\n</tool-output>';
+    expect(() => JSON.parse(broken.split('\n')[1])).toThrow();
+    expect(timelineWatermark(broken)).toBe('1900000000000000009');
+    expect(timelineWatermark(JSON.stringify({ newest: '19; DROP TABLE tasks' }))).toBeNull();
+    expect(timelineWatermark(JSON.stringify({ newest: 190 }))).toBeNull(); // a number, not the id string the tool returns
+  });
+});
+
 describe('buildRunPrompt', () => {
   it('prefixes a scheduled-run hint with the last run time and fences the stored prompt', () => {
     const t = buildRunPrompt(task, null);
@@ -220,6 +354,19 @@ describe('buildRunPrompt', () => {
     expect(t.endsWith('<task-prompt untrusted>\nPost the Amsterdam weather\n</task-prompt>')).toBe(true);
     expect(buildRunPrompt({ ...task, lastRunAt: '2026-09-08T10:00:00.000Z' }, '2026-09-08T10:00:00.000Z')).toContain(
       'last run 2026-09-08T10:00:00.000Z',
+    );
+  });
+
+  it("says the run is unattended in a hidden window that cannot reach the user's own", () => {
+    expect(buildRunPrompt(task, null)).toContain(
+      "This run is unattended in a hidden window that loads pages fresh, so it cannot see or move the user's window",
+    );
+  });
+
+  it('names the watermark and how to use it, only once a run has left one', () => {
+    expect(buildRunPrompt(task, null)).not.toContain('already seen in earlier runs');
+    expect(buildRunPrompt({ ...task, lastSeenPostId: '1900000000000000009' }, null)).toContain(
+      'Posts with id up to 1900000000000000009 were already seen in earlier runs; pass sinceId to x_read_timeline to read only newer ones.',
     );
   });
 

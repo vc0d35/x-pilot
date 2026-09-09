@@ -71,8 +71,8 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(2);
-    expect(check.prepare('SELECT web_search FROM tasks').all()).toEqual([]); // the added column is there
+    expect(userVersion(check)).toBe(3);
+    expect(check.prepare('SELECT web_search, last_seen_post_id FROM tasks').all()).toEqual([]); // the added columns are there
     check.close();
   });
 
@@ -94,7 +94,30 @@ describe('schema migrations', () => {
     s.close();
 
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(2);
+    expect(userVersion(check)).toBe(3);
+    check.close();
+  });
+
+  it('adds last_seen_post_id to an existing v2 database, leaving the tasks already in it unwatermarked', () => {
+    const file = tempFile();
+    const old = new DatabaseSync(file);
+    old.exec(OLD_SCHEMA);
+    old.exec('ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0');
+    old.exec('PRAGMA user_version = 2');
+    old
+      .prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run('Following', 'Like technical posts', '{"every":"1h"}', 'resume', '2026-09-01T00:00:00Z');
+    old.close();
+
+    const s = new HistoryDb(file);
+    const tasks = new TasksStore(s.db);
+    expect(tasks.list()).toEqual([expect.objectContaining({ title: 'Following', lastSeenPostId: null })]);
+    tasks.advanceLastSeenPostId(1, '1934000000000000001');
+    expect(tasks.get(1)?.lastSeenPostId).toBe('1934000000000000001');
+    s.close();
+
+    const check = new DatabaseSync(file);
+    expect(userVersion(check)).toBe(3);
     check.close();
   });
 
@@ -107,8 +130,8 @@ describe('schema migrations', () => {
     expect(new LikesStore(again.db).count()).toBe(1);
     again.close();
     const check = new DatabaseSync(file);
-    expect(userVersion(check)).toBe(2);
-    expect(migrate(check)).toBe(2);
+    expect(userVersion(check)).toBe(3);
+    expect(migrate(check)).toBe(3);
     check.close();
   });
 
@@ -116,7 +139,7 @@ describe('schema migrations', () => {
     const file = tempFile();
     new DatabaseSync(file).close();
     const db = new DatabaseSync(file, { readOnly: true });
-    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 2/);
+    expect(() => migrate(db)).toThrow(/could not upgrade its history database from version 0 to 3/);
     expect(userVersion(db)).toBe(0);
     db.close();
   });

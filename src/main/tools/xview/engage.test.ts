@@ -30,12 +30,18 @@ function view(rendered: string[], posts: Array<Record<string, unknown>> = [], pa
   };
 }
 
-function ctx(likesMode: 'auto' | 'confirm', visibleIds: string[], bgIds: string[], onScreen: Array<Record<string, unknown>> = []) {
+function ctx(
+  likesMode: 'auto' | 'confirm',
+  visibleIds: string[],
+  bgIds: string[],
+  onScreen: Array<Record<string, unknown>> = [],
+  timeline: Array<Record<string, unknown>> = [{ id: 'a' }, { id: 'b' }, { id: 'b' }, { id: 'c' }],
+) {
   const approvals = new ApprovalBroker();
   const events: AgentEvent[] = [];
   approvals.onEvent((e) => events.push(e));
   const xview = view(visibleIds, onScreen);
-  const bg = view(bgIds, [{ id: 'a' }, { id: 'b' }, { id: 'b' }, { id: 'c' }], true);
+  const bg = view(bgIds, timeline, true);
   return {
     c: {
       xview,
@@ -106,17 +112,48 @@ describe('x_like_post', () => {
   });
 });
 
+type TimelineResult = { success: true; content: { tab: string; posts: { id: string }[]; sinceId: string | null; newest: string | null } };
+
+// Snowflakes, newest last, as a timeline read returns them.
+const SNOWFLAKES = [{ id: '1900000000000000001' }, { id: '1900000000000000005' }, { id: '1900000000000000009' }, { id: 'promoted' }];
+
 describe('x_read_timeline', () => {
   it('scrolls the hidden window through the chosen tab and dedupes posts', async () => {
     const { c } = ctx('auto', [], []);
-    const r = (await readTimeline.execute({ tab: 'following', pages: 3 }, c)) as {
-      success: true;
-      content: { tab: string; posts: { id: string }[] };
-    };
+    const r = (await readTimeline.execute({ tab: 'following', pages: 3 }, c)) as TimelineResult;
     expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/home', undefined);
     expect(c.bg.callPreload).toHaveBeenCalledWith('x_select_home_tab', { label: 'Following' }, undefined);
     expect(r.content.tab).toBe('following');
     expect(r.content.posts.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+    expect(r.content.sinceId).toBeNull();
     expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+
+  it('reports the largest id it saw, and null when no post carries a snowflake', async () => {
+    const withIds = (await readTimeline.execute({ pages: 3 }, ctx('auto', [], [], [], SNOWFLAKES).c)) as TimelineResult;
+    expect(withIds.content.newest).toBe('1900000000000000009');
+    const withoutIds = (await readTimeline.execute({ pages: 3 }, ctx('auto', [], []).c)) as TimelineResult;
+    expect(withoutIds.content.newest).toBeNull();
+  });
+
+  it('drops posts at or below sinceId, keeping newest as the largest id seen before filtering', async () => {
+    const { c } = ctx('auto', [], [], [], SNOWFLAKES);
+    const r = (await readTimeline.execute({ pages: 3, sinceId: '1900000000000000005' }, c)) as TimelineResult;
+    expect(r.content.posts.map((p) => p.id)).toEqual(['1900000000000000009', 'promoted']);
+    expect(r.content.sinceId).toBe('1900000000000000005');
+    expect(r.content.newest).toBe('1900000000000000009');
+  });
+
+  it('compares ids past the safe-integer range', async () => {
+    const near = [{ id: '9007199254740993' }, { id: '9007199254740992' }];
+    const { c } = ctx('auto', [], [], [], near);
+    const r = (await readTimeline.execute({ pages: 1, sinceId: '9007199254740992' }, c)) as TimelineResult;
+    expect(r.content.posts.map((p) => p.id)).toEqual(['9007199254740993']);
+  });
+
+  it('rejects a sinceId that is not a bounded run of digits', () => {
+    expect(readTimeline.args.safeParse({ sinceId: '19; DROP' }).success).toBe(false);
+    expect(readTimeline.args.safeParse({ sinceId: '1'.repeat(33) }).success).toBe(false);
+    expect(readTimeline.args.safeParse({ sinceId: '1900000000000000005' }).success).toBe(true);
   });
 });

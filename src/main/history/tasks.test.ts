@@ -37,4 +37,24 @@ describe('TasksStore', () => {
     s.delete(1);
     expect(s.list()).toEqual([]);
   });
+
+  it('starts a task with no watermark and only ever moves it forward', () => {
+    const s = new TasksStore(new HistoryDb(':memory:').db);
+    s.create({ title: 'Following', prompt: 'Like technical posts', schedule: { every: '1h' }, threadMode: 'resume', nextRunAt: null });
+    expect(s.get(1)?.lastSeenPostId).toBeNull();
+    s.advanceLastSeenPostId(1, '1900000000000000005');
+    expect(s.get(1)?.lastSeenPostId).toBe('1900000000000000005');
+    s.advanceLastSeenPostId(1, '1900000000000000001'); // an older read must not lose what earlier runs saw
+    expect(s.get(1)?.lastSeenPostId).toBe('1900000000000000005');
+    s.advanceLastSeenPostId(1, '9007199254740993'); // shorter, but compared as a number it is smaller
+    expect(s.get(1)?.lastSeenPostId).toBe('1900000000000000005');
+    s.advanceLastSeenPostId(1, '1900000000000000009');
+    expect(s.get(1)?.lastSeenPostId).toBe('1900000000000000009');
+  });
+
+  it('ignores a watermark for a task that is gone', () => {
+    const s = new TasksStore(new HistoryDb(':memory:').db);
+    expect(() => s.advanceLastSeenPostId(404, '1900000000000000005')).not.toThrow();
+    expect(s.list()).toEqual([]);
+  });
 });

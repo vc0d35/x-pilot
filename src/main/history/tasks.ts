@@ -26,7 +26,17 @@ export class TasksStore {
     patch: Partial<
       Pick<
         ScheduledTask,
-        'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'webSearch' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'
+        | 'title'
+        | 'prompt'
+        | 'schedule'
+        | 'threadMode'
+        | 'threadId'
+        | 'enabled'
+        | 'webSearch'
+        | 'lastRunAt'
+        | 'lastStatus'
+        | 'nextRunAt'
+        | 'lastSeenPostId'
       >
     >,
   ): void {
@@ -41,12 +51,20 @@ export class TasksStore {
       last_run_at: patch.lastRunAt,
       last_status: patch.lastStatus,
       next_run_at: patch.nextRunAt,
+      last_seen_post_id: patch.lastSeenPostId,
     };
     const set = Object.entries(cols).filter(([, v]) => v !== undefined);
     if (set.length === 0) return;
     this.db
       .prepare(`UPDATE tasks SET ${set.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`)
       .run(...set.map(([, v]) => v as string | number | null), id);
+  }
+
+  /** Moves the watermark forward only: a run that reads older posts must not lose what earlier runs saw. */
+  advanceLastSeenPostId(id: number, postId: string): void {
+    const current = this.get(id);
+    if (!current || (current.lastSeenPostId !== null && !isGreater(postId, current.lastSeenPostId))) return;
+    this.update(id, { lastSeenPostId: postId });
   }
 
   delete(id: number): void {
@@ -85,5 +103,15 @@ function rowToTask(r: Record<string, unknown>): ScheduledTask {
     lastRunAt: (r.last_run_at as string | null) ?? null,
     lastStatus: (r.last_status as string | null) ?? null,
     nextRunAt: (r.next_run_at as string | null) ?? null,
+    lastSeenPostId: (r.last_seen_post_id as string | null) ?? null,
   };
+}
+
+/** X post ids are increasing snowflakes, well past Number.MAX_SAFE_INTEGER. */
+function isGreater(a: string, b: string): boolean {
+  try {
+    return BigInt(a) > BigInt(b);
+  } catch {
+    return a > b;
+  }
 }

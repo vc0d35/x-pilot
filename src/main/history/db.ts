@@ -48,6 +48,9 @@ CREATE TABLE IF NOT EXISTS tasks(
   `
 ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0;
 `,
+  `
+ALTER TABLE tasks ADD COLUMN last_seen_post_id TEXT;
+`,
 ];
 
 const V1_TABLES = ['posts', 'posts_fts', 'library', 'conversations', 'conversation_events', 'tasks'];

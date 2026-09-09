@@ -93,11 +93,24 @@ export class AppStore {
     patch: Partial<
       Pick<
         ScheduledTask,
-        'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'webSearch' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'
+        | 'title'
+        | 'prompt'
+        | 'schedule'
+        | 'threadMode'
+        | 'threadId'
+        | 'enabled'
+        | 'webSearch'
+        | 'lastRunAt'
+        | 'lastStatus'
+        | 'nextRunAt'
+        | 'lastSeenPostId'
       >
     >,
   ): void {
     this.tasks.update(id, patch);
+  }
+  advanceTaskLastSeenPostId(id: number, postId: string): void {
+    this.tasks.advanceLastSeenPostId(id, postId);
   }
   deleteTask(id: number): void {
     this.tasks.delete(id);

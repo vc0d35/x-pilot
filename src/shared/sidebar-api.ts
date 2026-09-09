@@ -51,6 +51,8 @@ export interface ScheduledTask {
   nextRunAt: string | null;
   /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
   webSearch: boolean;
+  /** The largest post id a run of this task has read from a timeline, so the next run can skip it. */
+  lastSeenPostId: string | null;
 }
 /** Which of the two page-config files a Settings row is about. */
 export type PageConfigKind = 'styles' | 'selectors';

@@ -30,6 +30,7 @@ function TasksTab() {
           <div className="conv-meta">
             {t.lastRunAt ? `last ${new Date(t.lastRunAt).toLocaleString()} · ${t.lastStatus ?? ''}` : 'never run'}
             {t.enabled && t.nextRunAt ? ` · next ${new Date(t.nextRunAt).toLocaleString()}` : ''}
+            {t.lastSeenPostId ? ` · seen up to ${t.lastSeenPostId}` : ''}
           </div>
           <div className="row">
             <button onClick={() => void window.xpilot.updateTask(t.id, { enabled: !t.enabled }).then(refresh)}>

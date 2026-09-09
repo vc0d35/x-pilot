@@ -155,12 +155,18 @@ describe('the JSON schema the model sees', () => {
       'Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.',
   };
 
-  it('x_read_timeline: an enum, a bounded integer and the shared view argument', () => {
+  it('x_read_timeline: an enum, a bounded integer, a bounded id and the shared view argument', () => {
     expect(readTimeline.spec.inputSchema).toEqual({
       type: 'object',
       properties: {
         tab: { type: 'string', enum: ['for_you', 'following'] },
         pages: { type: 'integer', minimum: 1, maximum: 10, description: 'How many screens to scroll (default 3)' },
+        sinceId: {
+          type: 'string',
+          pattern: '^\\d+$',
+          maxLength: 32,
+          description: 'Drop posts with this id or older; use the `newest` id from an earlier read',
+        },
         view: VIEW,
       },
       additionalProperties: false,

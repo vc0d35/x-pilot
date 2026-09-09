@@ -6,6 +6,8 @@ import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target
 
 const LIKE_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const EXCERPT_MAX = 280;
+const POST_ID_MAX = 32;
+const DIGITS = /^\d+$/;
 
 interface VisiblePostRow {
   url?: unknown;
@@ -81,13 +83,22 @@ export const likePost = defineTool({
   },
 });
 
+/** X post ids are increasing snowflakes, so they order the timeline; anything else is not one. */
+const snowflake = (id: unknown): bigint | null => (typeof id === 'string' && DIGITS.test(id) ? BigInt(id) : null);
+
 export const readTimeline = defineTool({
   name: 'x_read_timeline',
   description:
-    'Reads the Home timeline ("For you" or "Following") by scrolling through it, returning the posts seen. Runs in a hidden window by default so the user\'s screen is untouched; pass view: "visible" to scroll the user\'s own window.',
+    'Reads the Home timeline ("For you" or "Following") by scrolling through it, returning the posts seen. Runs in a hidden window by default so the user\'s screen is untouched; pass view: "visible" to scroll the user\'s own window. Pass sinceId to get only posts newer than one already read; the result reports `newest`, the largest id seen.',
   args: z.strictObject({
     tab: z.enum(['for_you', 'following']).optional(),
     pages: z.int().min(1).max(10).optional().describe('How many screens to scroll (default 3)'),
+    sinceId: z
+      .string()
+      .regex(DIGITS)
+      .max(POST_ID_MAX)
+      .optional()
+      .describe('Drop posts with this id or older; use the `newest` id from an earlier read'),
     ...VIEW_ARG,
   }),
   annotations: { readOnlyHint: true },
@@ -109,6 +120,28 @@ export const readTimeline = defineTool({
         if (stoppedMidRoll) return stoppedMidRoll;
         if (i < pages - 1) await view.callPreload('x_scroll', { direction: 'down', amount: 2000 }, signal);
       }
-      return ok({ tab: args.tab === 'following' ? 'following' : 'for_you', pages, posts: [...seen.values()] });
+      const all = [...seen.values()] as Array<{ id?: unknown }>;
+      let newest: bigint | null = null;
+      for (const p of all) {
+        const n = snowflake(p.id);
+        if (n !== null && (newest === null || n > newest)) newest = n;
+      }
+      const sinceId = args.sinceId ?? null;
+      const floor = sinceId === null ? null : BigInt(sinceId);
+      // A post whose id is not a snowflake cannot be placed against the watermark, so it is kept.
+      const posts =
+        floor === null
+          ? all
+          : all.filter((p) => {
+              const n = snowflake(p.id);
+              return n === null || n > floor;
+            });
+      return ok({
+        tab: args.tab === 'following' ? 'following' : 'for_you',
+        pages,
+        posts,
+        sinceId,
+        newest: newest === null ? null : String(newest),
+      });
     }),
 });
