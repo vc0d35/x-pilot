@@ -33,8 +33,8 @@ export const SettingsSchema = z.object({
   agent: z.object({
     provider: z.literal('codex').default('codex'),
     codex: z.object({
-      model: z.string().nullable().default(null),
-      reasoningEffort: z.string().nullable().default(null),
+      model: z.string().nullable().default('gpt-5.6-luna'),
+      reasoningEffort: z.string().nullable().default('low'),
       approvalPolicy: z.enum(['untrusted', 'on-request']).default('on-request'),
       sandbox: z.enum(['read-only', 'workspace-write']).default('read-only'),
       webSearch: z.enum(['live', 'cached', 'disabled']).default('live'),
