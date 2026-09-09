@@ -23,7 +23,7 @@ Codex keeps its own login and its conversation history under `~/.codex`; XPilot 
 
 ## What leaves your Mac
 
-- **To X:** only what your browser session would send anyway, plus the actions you or the agent take on your behalf (likes, posts, bookmarks) under the confirmation settings you chose.
+- **To X:** only what your browser session would send anyway, plus the actions you or the agent take on your behalf (likes, posts) under the confirmation settings you chose.
 - **To the model behind Codex:** the text of your messages, the page context the sidebar shows you, tool results (page text the agent reads, search results, your liked-post search hits), and scheduled-task prompts. This is sent by the Codex CLI to the model provider you logged in with, under that provider's terms.
 - **Web search:** when enabled, Codex sends its search queries to its search provider. Every query is shown in the sidebar. Scheduled tasks have web search off unless the task asks for it.
 - **Nothing else.** No analytics, crash reports, or update pings. "Check for Updates" only opens the releases page in your browser.
