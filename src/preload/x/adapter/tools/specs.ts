@@ -9,7 +9,7 @@ import { toolSpec, type ToolDef, type ToolSpec, clampedInt } from '../../../../s
 export const pageStateDef = {
   name: 'x_get_page_state',
   description:
-    'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, and newPostsAvailable when a "Show N posts" pill is on screen.',
+    'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, bookmarks, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, and newPostsAvailable when a "Show N posts" pill is on screen.',
   args: z.strictObject({
     timeoutMs: z.int().min(0).default(8000).describe('How long to wait for the page layout to render before reporting'),
   }),
@@ -68,6 +68,13 @@ export const likeInPageDef = {
   annotations: { destructiveHint: true, internal: true },
 } satisfies ToolDef;
 
+export const bookmarkInPageDef = {
+  name: 'x_bookmark_in_page',
+  description: 'Internal: bookmark or unbookmark a post rendered in this window by post URL or id.',
+  args: z.strictObject({ url: z.string(), action: z.enum(['bookmark', 'unbookmark']).optional(), timeoutMs: z.int().default(8000) }),
+  annotations: { destructiveHint: true, internal: true },
+} satisfies ToolDef;
+
 export const selectHomeTabDef = {
   name: 'x_select_home_tab',
   description: 'Internal: click the Home tab whose label matches (e.g. "For you", "Following").',
@@ -118,6 +125,7 @@ export const adapterToolSpecs: ToolSpec[] = [
   typeInComposerDef,
   clickPostButtonDef,
   likeInPageDef,
+  bookmarkInPageDef,
   selectHomeTabDef,
   readWidgetsDef,
   showNewPostsDef,

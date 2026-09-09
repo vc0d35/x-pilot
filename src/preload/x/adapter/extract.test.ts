@@ -23,6 +23,7 @@ describe('pageKindFromUrl', () => {
     ['https://x.com/alice/article/123', 'article'],
     ['https://x.com/search?q=rust', 'search'],
     ['https://x.com/alice/likes', 'likes'],
+    ['https://x.com/i/bookmarks', 'bookmarks'],
     ['https://x.com/alice', 'profile'],
     ['https://x.com/compose/post', 'compose'],
     ['https://x.com/intent/post?text=hi', 'compose'],

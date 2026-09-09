@@ -83,6 +83,7 @@ export interface TaskRegistryDeps {
   approvals: ApprovalBroker;
   postingMode: () => 'confirm' | 'autonomous';
   likesMode: () => 'auto' | 'confirm';
+  bookmarksMode: () => 'auto' | 'confirm';
   /** Everything the app tools need; the runs' `testSelector` is always null. */
   appCtx: Omit<AppToolCtx, 'testSelector'>;
 }
@@ -105,6 +106,7 @@ export function createTaskRegistryFactory(deps: TaskRegistryDeps): (task: { visi
         approvals: deps.approvals,
         postingMode: deps.postingMode,
         likesMode: deps.likesMode,
+        bookmarksMode: deps.bookmarksMode,
         drafts: new DraftStore(),
       }),
     );
@@ -327,6 +329,7 @@ export function createApp(opts: AppOptions): XPilotApp {
       approvals,
       postingMode: () => settings.get().posting.mode,
       likesMode: () => settings.get().likes.mode,
+      bookmarksMode: () => settings.get().bookmarks.mode,
       drafts: new DraftStore(),
     }),
   );
@@ -446,6 +449,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     approvals,
     postingMode: () => settings.get().posting.mode,
     likesMode: () => settings.get().likes.mode,
+    bookmarksMode: () => settings.get().bookmarks.mode,
     appCtx,
   });
   app.on('will-quit', () => store.close());

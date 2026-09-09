@@ -40,6 +40,13 @@ describe('SettingsSchema', () => {
     expect(DEFAULT_SETTINGS.likes.mode).toBe('confirm');
   });
 
+  it('confirms agent bookmarks by default, and takes a patch for them', () => {
+    expect(DEFAULT_SETTINGS.bookmarks.mode).toBe('confirm');
+    expect(normalizeSettings({ bookmarks: { mode: 'auto' } }).bookmarks.mode).toBe('auto');
+    expect(parse({ bookmarks: { mode: 'auto' } })).toEqual({ bookmarks: { mode: 'auto' } });
+    expect(() => parse({ bookmarks: { mode: 'autonomous' } })).toThrow();
+  });
+
   it('confirms agent-written page styles by default, since CSS can cover what the user clicks', () => {
     expect(DEFAULT_SETTINGS.styles.mode).toBe('confirm');
     expect(normalizeSettings({ styles: { mode: 'autonomous' } }).styles.mode).toBe('autonomous');

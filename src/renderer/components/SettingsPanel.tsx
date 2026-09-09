@@ -245,6 +245,13 @@ export function SettingsPanel({
         </select>
       </label>
       <label>
+        Bookmarks
+        <select value={settings.bookmarks.mode} onChange={(e) => set({ bookmarks: { mode: e.target.value as 'auto' | 'confirm' } })}>
+          <option value="confirm">Confirm each bookmark in the sidebar</option>
+          <option value="auto">Autonomous (needed for scheduled bookmarking)</option>
+        </select>
+      </label>
+      <label>
         Page styles
         <select
           value={settings.styles.mode}

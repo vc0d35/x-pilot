@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { fixture } from '../../../../../tests/fixtures';
-import { likeInPage, selectHomeTab } from './engage';
+import { bookmarkInPage, likeInPage, selectHomeTab } from './engage';
 import { runTool, type ToolModule } from '../../../../shared/tools';
 
 const ctx = {};
@@ -33,6 +33,41 @@ describe('x_like_in_page', () => {
   it('fails when the post is not on the page', async () => {
     document.body.innerHTML = '';
     expect(await run(likeInPage, { url: 'https://x.com/x/status/999', timeoutMs: 50 })).toEqual({
+      success: false,
+      error: 'Post 999 is not rendered on this page',
+    });
+  });
+});
+
+describe('x_bookmark_in_page', () => {
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    // Simulate X flipping the button on click.
+    for (const b of document.querySelectorAll<HTMLElement>('button[data-testid="bookmark"], button[data-testid="removeBookmark"]')) {
+      b.addEventListener('click', () => {
+        b.dataset.testid = b.dataset.testid === 'bookmark' ? 'removeBookmark' : 'bookmark';
+      });
+    }
+  });
+  it('bookmarks a post rendered on the page and reports the change', async () => {
+    expect(await run(bookmarkInPage, { url: 'https://x.com/alice/status/111' })).toEqual({
+      success: true,
+      content: { postId: '111', bookmarked: true, changed: true },
+    });
+  });
+  it('is idempotent when the post is already bookmarked, and can unbookmark', async () => {
+    expect(await run(bookmarkInPage, { url: '222' })).toEqual({
+      success: true,
+      content: { postId: '222', bookmarked: true, changed: false },
+    });
+    expect(await run(bookmarkInPage, { url: '222', action: 'unbookmark' })).toEqual({
+      success: true,
+      content: { postId: '222', bookmarked: false, changed: true },
+    });
+  });
+  it('fails when the post is not on the page', async () => {
+    document.body.innerHTML = '';
+    expect(await run(bookmarkInPage, { url: 'https://x.com/x/status/999', timeoutMs: 50 })).toEqual({
       success: false,
       error: 'Post 999 is not rendered on this page',
     });

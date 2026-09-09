@@ -186,7 +186,18 @@ describe('SelectorOverrides', () => {
       .filter((i) => i.locked)
       .map((i) => i.key)
       .sort();
-    expect(locked).toEqual(['composerTextarea', 'dialog', 'homeTab', 'likeButton', 'postButton', 'showMore', 'toast', 'unlikeButton']);
+    expect(locked).toEqual([
+      'bookmarkButton',
+      'composerTextarea',
+      'dialog',
+      'homeTab',
+      'likeButton',
+      'postButton',
+      'removeBookmarkButton',
+      'showMore',
+      'toast',
+      'unlikeButton',
+    ]);
   });
 
   it('ignores a key it does not know, so a file from a newer version still works', () => {

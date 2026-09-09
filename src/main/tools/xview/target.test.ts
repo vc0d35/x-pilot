@@ -33,6 +33,7 @@ function ctx(xview: XViewLike, background: XViewLike): XViewToolCtx {
     approvals: new ApprovalBroker(),
     postingMode: () => 'confirm',
     likesMode: () => 'auto',
+    bookmarksMode: () => 'auto',
     drafts: new DraftStore(),
   };
 }

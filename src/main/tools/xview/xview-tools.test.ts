@@ -46,6 +46,7 @@ function ctx(current = 'https://x.com/home') {
     approvals: new ApprovalBroker(),
     postingMode: () => 'confirm' as const,
     likesMode: () => 'auto' as const,
+    bookmarksMode: () => 'auto' as const,
     drafts: new DraftStore(),
   };
 }

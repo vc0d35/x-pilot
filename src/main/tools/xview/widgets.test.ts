@@ -36,6 +36,7 @@ function ctx(visible: WidgetSection[] | Error, bg: WidgetSection[] = [news, tren
       approvals: new ApprovalBroker(),
       postingMode: () => 'confirm' as const,
       likesMode: () => 'auto' as const,
+      bookmarksMode: () => 'auto' as const,
       drafts: new DraftStore(),
     },
   };

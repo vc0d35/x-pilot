@@ -15,7 +15,7 @@ export const PostSchema = z.object({
 });
 export type Post = z.infer<typeof PostSchema>;
 
-export const PageKindSchema = z.enum(['home', 'post', 'article', 'profile', 'search', 'likes', 'compose', 'other']);
+export const PageKindSchema = z.enum(['home', 'post', 'article', 'profile', 'search', 'likes', 'bookmarks', 'compose', 'other']);
 export type PageKind = z.infer<typeof PageKindSchema>;
 
 export const PageStateSchema = z.object({

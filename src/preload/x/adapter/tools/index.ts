@@ -4,7 +4,7 @@ import { pageState } from './page-state';
 import { readVisiblePosts } from './read-visible';
 import { readCurrentPost } from './read-current-post';
 import { scroll } from './scroll';
-import { likeInPage, selectHomeTab } from './engage';
+import { bookmarkInPage, likeInPage, selectHomeTab } from './engage';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
 import { readWidgets, showNewPosts } from './widgets';
 import { inspectPage } from './inspect-page';
@@ -19,6 +19,7 @@ export const adapterTools: ToolModule<PreloadCtx>[] = [
   typeInComposer,
   clickPostButton,
   likeInPage,
+  bookmarkInPage,
   selectHomeTab,
   readWidgets,
   showNewPosts,

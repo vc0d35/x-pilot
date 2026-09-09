@@ -3,7 +3,7 @@ import type { PreloadCtx } from '../../context';
 import { sleep, waitFor } from '../dom';
 import { extractPost } from '../extract';
 import { SEL } from '../selectors';
-import { likeInPageDef, selectHomeTabDef } from './specs';
+import { bookmarkInPageDef, likeInPageDef, selectHomeTabDef } from './specs';
 
 const POST_ID = /\/status\/(\d+)/;
 
@@ -33,6 +33,32 @@ export const likeInPage = defineTool({
     await sleep(300);
     const nowLiked = !!article!.querySelector(SEL.unlikeButton);
     return ok({ postId: id, liked: nowLiked, changed: nowLiked === (action === 'like') });
+  },
+});
+
+/** Internal: bookmarks or unbookmarks a post rendered in this page. Main decides whether it may run. */
+export const bookmarkInPage = defineTool({
+  ...bookmarkInPageDef,
+  execute: async (args, _ctx: PreloadCtx) => {
+    const id = POST_ID.exec(args.url)?.[1] ?? args.url;
+    const action = args.action ?? 'bookmark';
+    let article: Element | null = null;
+    try {
+      await waitFor(() => (article = findArticleByPostId(document, id)), args.timeoutMs);
+    } catch {
+      return fail(`Post ${id} is not rendered on this page`);
+    }
+    const wanted = article!.querySelector<HTMLElement>(action === 'bookmark' ? SEL.bookmarkButton : SEL.removeBookmarkButton);
+    if (!wanted) {
+      const already = article!.querySelector(action === 'bookmark' ? SEL.removeBookmarkButton : SEL.bookmarkButton);
+      return already
+        ? ok({ postId: id, bookmarked: action === 'bookmark', changed: false })
+        : fail(`No ${action} button found for post ${id}`);
+    }
+    wanted.click();
+    await sleep(300);
+    const nowBookmarked = !!article!.querySelector(SEL.removeBookmarkButton);
+    return ok({ postId: id, bookmarked: nowBookmarked, changed: nowBookmarked === (action === 'bookmark') });
   },
 });
 

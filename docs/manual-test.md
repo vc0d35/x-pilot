@@ -90,6 +90,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Like <url of a post not on screen>" → liked via the hidden window; the visible window does not move.
 - [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
 - [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.
+- [ ] Bookmarks: "bookmark this" with a post on screen → the confirm card names the post; accept and its bookmark icon fills. "what did I bookmark about compilers?" → the hidden window reads the bookmarks page; the visible window does not move.
 
 ## News, trends and new posts
 

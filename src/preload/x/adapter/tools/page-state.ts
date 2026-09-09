@@ -10,7 +10,7 @@ import { pageStateDef } from './specs';
 const needsLayout = (kind: PageState['kind']) => kind !== 'other' && kind !== 'compose';
 
 /** Kinds whose whole point is a list of posts, so an empty extraction is a signal, not a state. */
-export const TIMELINE_KINDS: ReadonlySet<PageKind> = new Set<PageKind>(['home', 'search', 'profile', 'likes']);
+export const TIMELINE_KINDS: ReadonlySet<PageKind> = new Set<PageKind>(['home', 'search', 'profile', 'likes', 'bookmarks']);
 
 export function computeHealth(kind: PageKind, root: Document = document): PageState['health'] {
   const health: PageState['health'] = { layout: !needsLayout(kind) || !!root.querySelector(SEL.primaryColumn) };

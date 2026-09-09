@@ -13,6 +13,7 @@ export function pageKindFromUrl(url: string): PageKind {
   if (parts[0] === 'search') return 'search';
   if (parts[0] === 'compose' || parts[0] === 'intent') return 'compose';
   if (parts[0] === 'i' && parts[1] === 'article') return 'article';
+  if (parts[0] === 'i' && parts[1] === 'bookmarks') return 'bookmarks';
   if (parts.length >= 3 && parts[1] === 'article') return 'article';
   if (parts.length >= 3 && parts[1] === 'status') return 'post';
   if (parts.length === 2 && parts[1] === 'likes') return 'likes';

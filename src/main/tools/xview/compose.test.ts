@@ -28,6 +28,7 @@ function ctx(mode: 'confirm' | 'autonomous', composerText = 'hello world') {
       approvals,
       postingMode: () => mode,
       likesMode: () => 'auto' as const,
+      bookmarksMode: () => 'auto' as const,
       drafts: new DraftStore(),
     },
     events,

@@ -19,5 +19,6 @@ export interface XViewToolCtx {
   approvals: ApprovalBroker;
   postingMode(): 'confirm' | 'autonomous';
   likesMode(): 'auto' | 'confirm';
+  bookmarksMode(): 'auto' | 'confirm';
   drafts: DraftStore;
 }

@@ -23,7 +23,7 @@ Codex keeps its own login and its conversation history under `~/.codex`. Claude 
 
 ## What leaves your Mac
 
-- **To X:** only what your browser session would send anyway, plus the actions you or the agent take on your behalf (likes, posts) under the confirmation settings you chose.
+- **To X:** only what your browser session would send anyway, plus the actions you or the agent take on your behalf (likes, posts, bookmarks) under the confirmation settings you chose.
 - **To the model behind your agent CLI:** the text of your messages, the page context the sidebar shows you, tool results (page text the agent reads, search results, your liked-post search hits), and scheduled-task prompts. This is sent by the CLI you chose — Codex to OpenAI, Claude Code to Anthropic — under the terms of the account you logged that CLI in with. Nothing about your XPilot settings, likes or PDFs is sent beyond what a turn's messages and tool results contain, and the turn is isolated from your own Claude Code setup: no CLAUDE.md, hooks, memory or connectors of yours are loaded into it.
 - **Web search:** when enabled, the CLI sends its search queries to its search provider. Every query is shown in the sidebar. Scheduled tasks have web search off unless the task asks for it.
 - **Nothing else.** No analytics, crash reports, or update pings. "Check for Updates" only opens the releases page in your browser.

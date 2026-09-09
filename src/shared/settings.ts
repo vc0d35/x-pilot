@@ -26,6 +26,11 @@ export const SettingsSchema = z.object({
   /** Agent-made likes: a like is a public write on the user's account, so it is confirmed by default. */
   likes: z.object({ mode: z.enum(['auto', 'confirm']).default('confirm') }),
   /**
+   * Agent-made bookmarks. A bookmark is private to the user, but it still writes to their account
+   * and shapes what they come back to, so it is confirmed by default like a like.
+   */
+  bookmarks: z.object({ mode: z.enum(['auto', 'confirm']).default('confirm') }),
+  /**
    * Agent-written page styles. CSS on the page the user is looking at can cover a control with an
    * invisible one, so what the agent writes is shown and confirmed before it is applied.
    */
@@ -92,6 +97,7 @@ const claudeShape = z.object(claudePatchShape);
 export const SettingsPatchSchema = z.strictObject({
   posting: patchOf(SettingsSchema.shape.posting).optional(),
   likes: patchOf(SettingsSchema.shape.likes).optional(),
+  bookmarks: patchOf(SettingsSchema.shape.bookmarks).optional(),
   styles: patchOf(SettingsSchema.shape.styles).optional(),
   library: patchOf(SettingsSchema.shape.library).optional(),
   agent: z
@@ -138,6 +144,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const shaped = {
     posting: isObj(r.posting) ? r.posting : {},
     likes: isObj(r.likes) ? r.likes : {},
+    bookmarks: isObj(r.bookmarks) ? r.bookmarks : {},
     styles: isObj(r.styles) ? r.styles : {},
     library: isObj(r.library) ? r.library : {},
     agent: { ...agent, codex, claude },

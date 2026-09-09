@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { likePost, readTimeline } from './engage';
+import { bookmarkPost, likePost, readBookmarks, readTimeline } from './engage';
 import { DraftStore } from './drafts';
 import { ApprovalBroker } from '../../approvals';
 import { ok, fail } from '../../../shared/tools';
@@ -15,9 +15,12 @@ function view(rendered: string[], posts: Array<Record<string, unknown>> = [], pa
       state.url = u;
     }),
     callPreload: vi.fn(async (name: string, args: Record<string, unknown>) => {
-      if (name === 'x_like_in_page') {
+      if (name === 'x_like_in_page' || name === 'x_bookmark_in_page') {
         const id = /status\/(\d+)/.exec(String(args.url))![1];
-        return rendered.includes(id) ? ok({ postId: id, liked: true, changed: true }) : fail(`Post ${id} is not rendered on this page`);
+        if (!rendered.includes(id)) return fail(`Post ${id} is not rendered on this page`);
+        return name === 'x_like_in_page'
+          ? ok({ postId: id, liked: true, changed: true })
+          : ok({ postId: id, bookmarked: true, changed: true });
       }
       if (name === 'x_select_home_tab') return ok({ label: args.label, changed: true });
       if (name === 'x_read_visible_posts') return ok(paged ? posts.slice(state.scrolls, state.scrolls + 2) : posts);
@@ -30,8 +33,9 @@ function view(rendered: string[], posts: Array<Record<string, unknown>> = [], pa
   };
 }
 
+/** One mode drives both confirm settings, so a test names the behaviour it wants once. */
 function ctx(
-  likesMode: 'auto' | 'confirm',
+  mode: 'auto' | 'confirm',
   visibleIds: string[],
   bgIds: string[],
   onScreen: Array<Record<string, unknown>> = [],
@@ -50,7 +54,8 @@ function ctx(
       allowHosts: () => DEFAULT_ALLOW_HOSTS,
       approvals,
       postingMode: () => 'confirm' as const,
-      likesMode: () => likesMode,
+      likesMode: () => mode,
+      bookmarksMode: () => mode,
       drafts: new DraftStore(),
     },
     approvals,
@@ -112,6 +117,65 @@ describe('x_like_post', () => {
   });
 });
 
+describe('x_bookmark_post', () => {
+  it('bookmarks in the visible window when the post is on screen', async () => {
+    const { c } = ctx('auto', ['111'], []);
+    expect(await bookmarkPost.execute({ url: 'https://x.com/alice/status/111' }, c)).toEqual(
+      ok({ postId: '111', bookmarked: true, changed: true }),
+    );
+    expect(c.bg.navigate).not.toHaveBeenCalled();
+  });
+  it('falls back to the hidden window otherwise, without moving the visible one', async () => {
+    const { c } = ctx('auto', [], ['222']);
+    expect(await bookmarkPost.execute({ url: 'https://x.com/bob/status/222' }, c)).toEqual(
+      ok({ postId: '222', bookmarked: true, changed: true }),
+    );
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/222', undefined);
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+  it('asks first in confirm mode and treats a decline as final', async () => {
+    const { c, approvals, events } = ctx('confirm', ['111'], []);
+    const p = bookmarkPost.execute({ url: 'https://x.com/alice/status/111' }, c);
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string } }).request;
+    expect(req.title).toBe('Bookmark this post?');
+    approvals.resolve(req.id, 'cancel');
+    expect(await p).toMatchObject({ success: true, content: { done: false, status: 'cancelled_by_user' } });
+    expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_bookmark_in_page', expect.anything());
+  });
+
+  it('names the removal on the card, with the post when it can be read off the screen', async () => {
+    const { c, approvals, events } = ctx(
+      'confirm',
+      ['111'],
+      [],
+      [{ id: '111', url: 'https://x.com/alice/status/111', authorHandle: 'alice', text: 'A post   about\ncompilers' }],
+    );
+    const p = bookmarkPost.execute({ url: 'https://x.com/alice/status/111', action: 'unbookmark' }, c);
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string; detail: string } }).request;
+    expect(req.title).toBe('Remove this bookmark?');
+    expect(req.detail).toBe('@alice — A post about compilers\nhttps://x.com/alice/status/111');
+    approvals.resolve(req.id, 'cancel');
+    await p;
+  });
+
+  it('falls back to the url when the post is not on screen', async () => {
+    const { c, approvals, events } = ctx('confirm', [], []);
+    const p = bookmarkPost.execute({ url: 'https://x.com/bob/status/222' }, c);
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; detail: string } }).request;
+    expect(req.detail).toBe('https://x.com/bob/status/222');
+    approvals.resolve(req.id, 'cancel');
+    await p;
+  });
+  it('rejects non-post urls', async () => {
+    expect(await bookmarkPost.execute({ url: 'https://x.com/alice' }, ctx('auto', [], []).c)).toEqual(
+      fail('Not a post URL: https://x.com/alice'),
+    );
+  });
+});
+
 type TimelineResult = { success: true; content: { tab: string; posts: { id: string }[]; sinceId: string | null; newest: string | null } };
 
 // Snowflakes, newest last, as a timeline read returns them.
@@ -155,5 +219,32 @@ describe('x_read_timeline', () => {
     expect(readTimeline.args.safeParse({ sinceId: '19; DROP' }).success).toBe(false);
     expect(readTimeline.args.safeParse({ sinceId: '1'.repeat(33) }).success).toBe(false);
     expect(readTimeline.args.safeParse({ sinceId: '1900000000000000005' }).success).toBe(true);
+  });
+});
+
+type BookmarksResult = { success: true; content: { pages: number; posts: { id: string }[]; newest: string | null } };
+
+describe('x_read_bookmarks', () => {
+  it('scrolls the hidden window through the bookmarks page and dedupes posts', async () => {
+    const { c } = ctx('auto', [], []);
+    const r = (await readBookmarks.execute({ pages: 3 }, c)) as BookmarksResult;
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/i/bookmarks', undefined);
+    expect(r.content.pages).toBe(3);
+    expect(r.content.posts.map((p) => p.id)).toEqual(['a', 'b', 'c']);
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+
+  it('drives the visible window when the user asked to see them', async () => {
+    const { c } = ctx('auto', [], []);
+    await readBookmarks.execute({ pages: 1, view: 'visible' }, c);
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/i/bookmarks', undefined);
+    expect(c.bg.navigate).not.toHaveBeenCalled();
+  });
+
+  it('reports the largest id it saw, and null when no post carries a snowflake', async () => {
+    const withIds = (await readBookmarks.execute({ pages: 3 }, ctx('auto', [], [], [], SNOWFLAKES).c)) as BookmarksResult;
+    expect(withIds.content.newest).toBe('1900000000000000009');
+    const withoutIds = (await readBookmarks.execute({ pages: 3 }, ctx('auto', [], []).c)) as BookmarksResult;
+    expect(withoutIds.content.newest).toBeNull();
   });
 });
