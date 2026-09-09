@@ -29,6 +29,7 @@ function ctx(mode: 'confirm' | 'autonomous', composerText = 'hello world') {
       postingMode: () => mode,
       likesMode: () => 'auto' as const,
       bookmarksMode: () => 'auto' as const,
+      likes: { recordLike: vi.fn(), recordUnlike: vi.fn() },
       drafts: new DraftStore(),
     },
     events,
@@ -75,7 +76,7 @@ describe('x_compose_post', () => {
 describe('x_submit_post', () => {
   it('in confirm mode waits for approval and posts on "post"', async () => {
     const { c, events, approvals } = ctx('confirm');
-    const draft = c.drafts.create({ text: 'hello world', target: 'new post' });
+    const draft = c.drafts.create({ text: 'hello world', target: 'new post', view: 'visible' });
     const p = submitPost.execute({ draftId: draft.id }, c);
     await new Promise((r) => setTimeout(r, 0));
     const req = (events[0] as { request: { id: string; detail: string; kind: string } }).request;
@@ -87,7 +88,7 @@ describe('x_submit_post', () => {
   });
   it('in confirm mode cancel navigates home and reports not posted', async () => {
     const { c, events, approvals } = ctx('confirm');
-    const draft = c.drafts.create({ text: 'hello world', target: 'new post' });
+    const draft = c.drafts.create({ text: 'hello world', target: 'new post', view: 'visible' });
     const p = submitPost.execute({ draftId: draft.id }, c);
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'cancel');
@@ -113,7 +114,7 @@ describe('x_submit_post', () => {
       if (name === 'x_click_post_button') return ok({ clicked: true, toast: 'sent', url: 'https://x.com/me/status/1' });
       return fail('unexpected ' + name);
     });
-    const draft = c.drafts.create({ text: 'hello world', target: 'new post' });
+    const draft = c.drafts.create({ text: 'hello world', target: 'new post', view: 'visible' });
     const p = submitPost.execute({ draftId: draft.id }, c);
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'post');
@@ -124,15 +125,101 @@ describe('x_submit_post', () => {
 
   it('in autonomous mode posts without asking', async () => {
     const { c, events } = ctx('autonomous');
-    const draft = c.drafts.create({ text: 'hello world', target: 'new post' });
+    const draft = c.drafts.create({ text: 'hello world', target: 'new post', view: 'visible' });
     expect(await submitPost.execute({ draftId: draft.id }, c)).toEqual(ok({ posted: true, url: 'https://x.com/me/status/1' }));
     expect(events).toEqual([]);
   });
   it('fails for unknown drafts or a closed composer', async () => {
     const { c } = ctx('autonomous');
     expect(await submitPost.execute({ draftId: 'nope' }, c)).toEqual(fail('Unknown draftId; call x_compose_post first'));
-    const draft = c.drafts.create({ text: 't', target: 'new post' });
+    const draft = c.drafts.create({ text: 't', target: 'new post', view: 'visible' });
     c.xview.callPreload.mockImplementationOnce(async () => fail('No composer is open'));
     expect(await submitPost.execute({ draftId: draft.id }, c)).toEqual(fail('No composer is open'));
+  });
+});
+
+/** A scheduled run that may not touch the user's window: its visible view refuses everything. */
+function runCtx(mode: 'confirm' | 'autonomous') {
+  const approvals = new ApprovalBroker();
+  const events: AgentEvent[] = [];
+  approvals.onEvent((e) => events.push(e));
+  const refusing = {
+    isAvailable: () => false,
+    currentUrl: () => '',
+    navigate: vi.fn(async () => {
+      throw new Error("Scheduled runs cannot move the user's window");
+    }),
+    callPreload: vi.fn(async () => fail("The user's window is not available in a scheduled run; use background reads")),
+  };
+  const hidden = {
+    currentUrl: () => 'https://x.com/home',
+    navigate: vi.fn(async () => {}),
+    callPreload: vi.fn(async (name: string) => {
+      if (name === 'x_read_composer') return ok({ present: true, text: 'Amsterdam: 14°C, light rain', canSubmit: true });
+      if (name === 'x_click_post_button') return ok({ clicked: true, toast: 'sent', url: 'https://x.com/me/status/9' });
+      return fail('unexpected ' + name);
+    }),
+  };
+  return {
+    c: {
+      xview: refusing,
+      hidden,
+      background: async () => hidden,
+      allowHosts: () => DEFAULT_ALLOW_HOSTS,
+      approvals,
+      postingMode: () => mode,
+      likesMode: () => 'auto' as const,
+      bookmarksMode: () => 'auto' as const,
+      likes: { recordLike: vi.fn(), recordUnlike: vi.fn() },
+      drafts: new DraftStore(),
+    },
+    events,
+    approvals,
+  };
+}
+
+describe('posting from a scheduled run with no window of its own', () => {
+  it('composes in the run\u2019s hidden window instead of refusing', async () => {
+    const { c } = runCtx('confirm');
+    const r = (await composePost.execute({ text: 'Amsterdam: 14°C, light rain' }, c)) as {
+      success: true;
+      content: { draftId: string; preview: string };
+    };
+    expect(r.success).toBe(true);
+    expect(c.hidden.navigate).toHaveBeenCalledWith('https://x.com/intent/post?text=Amsterdam%3A%2014%C2%B0C%2C%20light%20rain', undefined);
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+    expect(c.drafts.get(r.content.draftId)?.view).toBe('background');
+  });
+
+  it('still asks for confirmation, and posts through the window that holds the draft', async () => {
+    const { c, events, approvals } = runCtx('confirm');
+    const composed = (await composePost.execute({ text: 'Amsterdam: 14°C, light rain' }, c)) as {
+      content: { draftId: string };
+    };
+    const p = submitPost.execute({ draftId: composed.content.draftId }, c);
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string; detail: string } }).request;
+    expect(req.title).toBe('Post this new post?');
+    expect(req.detail).toBe('Amsterdam: 14°C, light rain');
+    approvals.resolve(req.id, 'post');
+    expect(await p).toEqual(ok({ posted: true, url: 'https://x.com/me/status/9' }));
+    expect(c.hidden.callPreload).toHaveBeenCalledWith('x_click_post_button', {}, undefined);
+    expect(c.xview.callPreload).not.toHaveBeenCalled();
+  });
+
+  it('posts with no card when the user set posting to autonomous', async () => {
+    const { c, events } = runCtx('autonomous');
+    const composed = (await composePost.execute({ text: 'Amsterdam: 14°C, light rain' }, c)) as { content: { draftId: string } };
+    expect(await submitPost.execute({ draftId: composed.content.draftId }, c)).toEqual(
+      ok({ posted: true, url: 'https://x.com/me/status/9' }),
+    );
+    expect(events).toEqual([]);
+  });
+
+  it('leaves a run that has the user\u2019s window composing on screen, as before', async () => {
+    const { c } = ctx('confirm');
+    const r = (await composePost.execute({ text: 'hello world' }, c)) as { content: { draftId: string } };
+    expect(c.drafts.get(r.content.draftId)?.view).toBe('visible');
+    expect(c.xview.navigate).toHaveBeenCalled();
   });
 });

@@ -3,21 +3,10 @@ import type { DeepPartial, PostingMode, Settings, StylesMode } from '../../share
 import { confirmPostingMode, confirmStylesMode } from '../posting-mode';
 import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
+import { formatBytes } from '../../shared/bytes';
 import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
 import { modelLabel, providerState } from '../provider-ui';
 import { providerFixHint } from '../setup';
-
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ['KB', 'MB', 'GB'];
-  let value = bytes / 1024;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024;
-    unit++;
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
-}
 
 const set = (patch: DeepPartial<Settings>) => void window.xpilot.setSettings(patch);
 
@@ -25,7 +14,12 @@ const set = (patch: DeepPartial<Settings>) => void window.xpilot.setSettings(pat
  * Which backend answers, and the settings of the one that does. Both are offered whatever is in
  * use: Connect proves the other one works before it is switched to, on its own throwaway process.
  */
-function ModelsSection(props: { settings: Settings; connected: ProviderKind[]; onConnected: (kind: ProviderKind) => void }) {
+function ModelsSection(props: {
+  settings: Settings;
+  connected: ProviderKind[];
+  onConnected: (kind: ProviderKind) => void;
+  onSwitched: () => void;
+}) {
   const active = props.settings.agent.provider;
   const [list, setList] = useState<ModelList | null>(null);
   const [checking, setChecking] = useState<ProviderKind | null>(null);
@@ -99,7 +93,7 @@ function ModelsSection(props: { settings: Settings; connected: ProviderKind[]; o
               {providerState({ active: kind === active, checking: checking === kind, connected: props.connected.includes(kind) })}
             </span>
             <div className="spacer" />
-            <button disabled={kind === active} onClick={() => void window.xpilot.setProvider(kind)}>
+            <button disabled={kind === active} onClick={() => void window.xpilot.setProvider(kind).then(props.onSwitched)}>
               Use
             </button>
             <button disabled={checking !== null} onClick={() => check(kind)}>
@@ -196,11 +190,14 @@ export function SettingsPanel({
   settings,
   connected,
   onConnected,
+  onProviderSwitched,
 }: {
   settings: Settings;
   /** Providers that answered a Connect in this session; the rows say so until the app restarts. */
   connected: ProviderKind[];
   onConnected: (kind: ProviderKind) => void;
+  /** The switch is done and main has started a fresh thread: the chat pane has to follow it. */
+  onProviderSwitched: () => void;
 }) {
   const [stats, setStats] = useState<HistoryStats | null>(null);
   const [pageConfig, setPageConfig] = useState<PageConfigStatus | null>(null);
@@ -223,7 +220,7 @@ export function SettingsPanel({
 
   return (
     <div className="panel settings">
-      <ModelsSection settings={settings} connected={connected} onConnected={onConnected} />
+      <ModelsSection settings={settings} connected={connected} onConnected={onConnected} onSwitched={onProviderSwitched} />
       <label>
         Posting mode
         <select

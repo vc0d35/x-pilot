@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { locateCodex, candidateDirs } from './locate';
+import { codexMissingMessage } from './binary';
 
 function fakeFs(files: string[], dirs: Record<string, string[]> = {}) {
   return {
@@ -16,9 +17,11 @@ describe('locateCodex', () => {
     await expect(locateCodex({ ...base, ...fs, explicit: '/opt/custom/codex' })).resolves.toBe('/opt/custom/codex');
   });
 
-  it('ignores an explicit setting that does not exist and falls through', async () => {
+  it('finds nothing when the explicit setting is gone, rather than falling back to another install', async () => {
     const fs = fakeFs(['/usr/local/bin/codex']);
-    await expect(locateCodex({ ...base, ...fs, explicit: '/gone/codex' })).resolves.toBe('/usr/local/bin/codex');
+    await expect(locateCodex({ ...base, ...fs, explicit: '/gone/codex' })).resolves.toBeNull();
+    // Blank is not a choice: an empty setting still searches.
+    await expect(locateCodex({ ...base, ...fs, explicit: '  ' })).resolves.toBe('/usr/local/bin/codex');
   });
 
   it('finds it on PATH before the well-known directories', async () => {
@@ -92,5 +95,13 @@ describe('locateCodex', () => {
     await expect(locateCodex({ ...win, home: null, platform: 'win32', env: { PATH: 'C:/npm;C:/windows' } })).resolves.toBe(
       'C:/npm/codex.cmd',
     );
+  });
+});
+
+describe('codexMissingMessage', () => {
+  it('names the configured path so the setup card says which one failed', () => {
+    expect(codexMissingMessage('/gone/codex')).toContain('/gone/codex');
+    expect(codexMissingMessage('/gone/codex')).toMatch(/codex cli not found/i);
+    expect(codexMissingMessage(null)).toBe(codexMissingMessage('   '));
   });
 });

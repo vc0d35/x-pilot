@@ -37,6 +37,7 @@ function ctx(visible: WidgetSection[] | Error, bg: WidgetSection[] = [news, tren
       postingMode: () => 'confirm' as const,
       likesMode: () => 'auto' as const,
       bookmarksMode: () => 'auto' as const,
+      likes: { recordLike: vi.fn(), recordUnlike: vi.fn() },
       drafts: new DraftStore(),
     },
   };

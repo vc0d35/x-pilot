@@ -115,6 +115,7 @@ describe('the tool set of one scheduled run', () => {
       postingMode: () => 'confirm',
       likesMode: () => 'confirm',
       bookmarksMode: () => 'confirm',
+      likes: { recordLike: () => {}, recordUnlike: () => {} },
       appCtx: {} as Omit<AppToolCtx, 'testSelector'>,
     });
   const hidden = () => factory()({ visibleWindow: false });

@@ -106,6 +106,25 @@ describe('xpilot_write_page_styles', () => {
     expect(c.set).toHaveBeenCalledWith(css);
   });
 
+  it('says on the card what the proposal costs, so a sheet that drops most of the file shows it', async () => {
+    const current = `a { color: red }\n${'/* a rule the user already had */\n'.repeat(200)}`;
+    const c = ctx({ mode: 'confirm', css: current });
+    const css = 'a { color: green }';
+    await writePageStyles.execute({ css }, c.value);
+    expect(c.asked[0].summary).toBe('Replaces the current stylesheet (6.7 KB → 18 B)');
+  });
+
+  it('refuses a sheet that opens with the literal word undefined, before it reaches the page', async () => {
+    const c = ctx({ mode: 'confirm' });
+    expect(await writePageStyles.execute({ css: 'undefined\n\nbody { font-size: 18px }' }, c.value)).toEqual({
+      success: false,
+      error: 'Rejected: starts with the literal word `undefined`; send the stylesheet text itself',
+    });
+    expect(c.previews).toEqual([]);
+    expect(c.asked).toHaveLength(0);
+    expect(c.set).not.toHaveBeenCalled();
+  });
+
   it('returns the note when the user asks for an adjustment, and writes nothing', async () => {
     const c = ctx({ mode: 'confirm', decision: 'adjust', note: 'too much padding on the sidebar' });
     expect(await writePageStyles.execute({ css: 'a {}' }, c.value)).toEqual({

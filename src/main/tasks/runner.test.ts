@@ -13,7 +13,11 @@ const noTools = { list: () => [], call: async () => fail('no tools in this test'
 /** The runner is handed the whole agent slice; every test but the web-search ones uses the defaults. */
 const AGENT_SETTINGS = { ...DEFAULT_SETTINGS.agent, provider: 'codex' as const };
 
-function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type: 'turn.completed', turnId: 't', status: 'completed' }]) {
+function fakeProvider(
+  threadId = 'task-thread',
+  outcome: AgentEvent[] = [{ type: 'turn.completed', turnId: 't', status: 'completed' }],
+  turnMs = 5,
+) {
   const listeners = new Set<(e: AgentEvent) => void>();
   const p: AgentProvider & { starts: StartOptions[]; sent: string[] } = {
     id: 'fake',
@@ -34,7 +38,7 @@ function fakeProvider(threadId = 'task-thread', outcome: AgentEvent[] = [{ type:
           ...outcome,
         ])
           for (const l of listeners) l(e);
-      }, 5);
+      }, turnMs);
     }),
     interrupt: vi.fn(async () => {}),
     listModels: vi.fn(async () => []),
@@ -274,6 +278,35 @@ describe('TaskRunner', () => {
     expect(p.interrupt).toHaveBeenCalled();
     expect(p.stop).toHaveBeenCalled();
     r.stop(); // nothing is running now; stopping again is a no-op
+  });
+
+  it('interrupts the provider at once and stays interrupted when the turn completes afterwards', async () => {
+    const store = new AppStore(':memory:');
+    const order: string[] = [];
+    const p = fakeProvider('t-late', [{ type: 'turn.completed', turnId: 't', status: 'completed' }], 60);
+    p.interrupt = vi.fn(async () => {
+      order.push('interrupt');
+    });
+    p.stop = vi.fn(async () => {
+      order.push('stop');
+    });
+    const r = new TaskRunner({
+      createProvider: () => p,
+      toolsFor: () => noTools,
+      settings: () => AGENT_SETTINGS,
+      workspaceDir: '/tmp',
+      store,
+      timeoutMs: 5000,
+    });
+    const running = r.run(task);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    r.stop();
+    expect(await running).toBe('interrupted');
+    expect(order[0]).toBe('interrupt');
+    expect(order).toContain('stop');
+    // The turn the provider was already running reports `completed` afterwards; the run stays interrupted.
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(await running).toBe('interrupted');
   });
 
   it("starts a fresh thread when the run's tools are not the ones its thread was started with", async () => {

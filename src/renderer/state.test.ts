@@ -133,6 +133,28 @@ describe('sidebar reducer', () => {
     expect(s.everSucceeded).toBe(true);
   });
 
+  it('switching backends leaves nothing of the old thread on screen', () => {
+    // What Settings' Use does: main starts a fresh thread on the new backend, the pane resets, and
+    // the new thread's events are all that is left in it.
+    const before = run([
+      { type: 'thread', threadId: 'codex-1' },
+      { type: 'status', status: 'ready' },
+      { type: 'user.message', text: 'Which page am I on?' },
+      { type: 'message.completed', itemId: 'm1', text: 'Home.' },
+    ]);
+    const after = run(
+      [
+        { type: 'thread', threadId: 'claude-1' },
+        { type: 'status', status: 'ready' },
+      ],
+      reduce(before, { type: 'reset' }),
+    );
+    expect(after.entries).toEqual([]);
+    expect(after.threadId).toBe('claude-1');
+    expect(after.viewing).toBeNull();
+    expect(after.foreign).toBeNull();
+  });
+
   it('reset clears entries but keeps status', () => {
     const s = run([
       { type: 'status', status: 'ready' },

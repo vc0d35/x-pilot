@@ -7,7 +7,10 @@ import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target
 const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
 const EXCERPT_MAX = 280;
 const POST_ID_MAX = 32;
+const TEXT_MAX = 4000;
+const NAME_MAX = 128;
 const DIGITS = /^\d+$/;
+const PERMALINK = /^https:\/\/x\.com\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,32})$/;
 
 interface VisiblePostRow {
   url?: unknown;
@@ -15,26 +18,72 @@ interface VisiblePostRow {
   text?: unknown;
 }
 
+/** A post as some read handed it back. Main trusts its shape no more than its content. */
+interface ReadRow {
+  authorName?: unknown;
+  text?: unknown;
+  postedAt?: unknown;
+  kind?: unknown;
+}
+
 /** The rows arrive as parsed JSON from the preload: anything that is not a string is not a field. */
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
+const tidy = (value: unknown, max: number): string => str(value).replace(/\s+/g, ' ').trim().slice(0, max);
+
+/** The post on screen, or null. Read at most once per call: the card and the index both want it. */
+function onScreenPost(ctx: XViewToolCtx, target: string): () => Promise<VisiblePostRow | null> {
+  let cached: Promise<VisiblePostRow | null> | undefined;
+  return () =>
+    (cached ??= ctx.xview
+      .callPreload('x_read_visible_posts', { limit: 100 })
+      .then((seen) =>
+        seen.success && Array.isArray(seen.content)
+          ? ((seen.content as VisiblePostRow[]).find((p) => normalizePostUrl(str(p?.url)) === target) ?? null)
+          : null,
+      )
+      .catch(() => null));
+}
 
 /**
  * What to show on the confirmation card. A status id is not something a user can check, so the
  * post is read off the screen when it happens to be there; otherwise the URL is all there is.
  */
-async function cardDetail(ctx: XViewToolCtx, target: string): Promise<string> {
-  try {
-    const seen = await ctx.xview.callPreload('x_read_visible_posts', { limit: 100 });
-    if (!seen.success || !Array.isArray(seen.content)) return target;
-    const match = (seen.content as VisiblePostRow[]).find((p) => normalizePostUrl(str(p?.url)) === target);
-    if (!match) return target;
-    const text = str(match.text).replace(/\s+/g, ' ').trim().slice(0, EXCERPT_MAX);
-    const handle = str(match.authorHandle).replace(/\s+/g, ' ').trim();
-    if (!text && !handle) return target;
-    return `${handle ? `@${handle}` : 'Unknown author'} — ${text}\n${target}`;
-  } catch {
-    return target;
-  }
+function cardDetail(seen: VisiblePostRow | null, target: string): string {
+  if (!seen) return target;
+  const text = tidy(seen.text, EXCERPT_MAX);
+  const handle = tidy(seen.authorHandle, 64);
+  if (!text && !handle) return target;
+  return `${handle ? `@${handle}` : 'Unknown author'} — ${text}\n${target}`;
+}
+
+/**
+ * Records what `x_like_post` did in the liked-post index, so an agent like the user asked for is
+ * searchable beside the ones they clicked themselves. Authorship and the id come from the
+ * permalink, never from what the page said about itself, and the text is whatever the read gave
+ * us: a like is never dropped because the page would not hand over its words.
+ */
+function indexLike(ctx: XViewToolCtx, action: 'like' | 'unlike', target: string, read: ReadRow | null): void {
+  const m = PERMALINK.exec(target);
+  if (!m) return;
+  const [, handle, id] = m;
+  if (action === 'unlike') return ctx.likes.recordUnlike(id);
+  ctx.likes.recordLike({
+    id,
+    url: target,
+    authorHandle: handle,
+    authorName: tidy(read?.authorName, NAME_MAX),
+    text: tidy(read?.text, TEXT_MAX),
+    postedAt: typeof read?.postedAt === 'string' ? read.postedAt.slice(0, 64) : null,
+    kind: read?.kind === 'article' ? 'article' : 'post',
+  });
+}
+
+/** The post the hidden window is on, for a like of something that was not on the user's screen. */
+async function postInView(view: XViewLike, signal?: AbortSignal): Promise<ReadRow | null> {
+  const read = await view.callPreload('x_read_current_post', {}, signal).catch(() => null);
+  if (!read?.success) return null;
+  const post = (read.content as { post?: unknown }).post;
+  return post && typeof post === 'object' ? post : null;
 }
 
 export const likePost = defineTool({
@@ -49,8 +98,9 @@ export const likePost = defineTool({
     const action = args.action ?? 'like';
     const stopped = cancelled(signal);
     if (stopped) return stopped;
+    const seen = onScreenPost(ctx, target);
     if (ctx.likesMode() === 'confirm') {
-      const detail = await cardDetail(ctx, target);
+      const detail = cardDetail(await seen(), target);
       const { decision } = await ctx.approvals.request(
         {
           kind: 'post',
@@ -73,12 +123,17 @@ export const likePost = defineTool({
       if (afterApproval) return afterApproval;
     }
     // Prefer the visible window when the post is already rendered there.
-    const onScreen = await ctx.xview.callPreload('x_like_in_page', { url: target, action }, signal);
-    if (onScreen.success) return onScreen;
+    const inPage = await ctx.xview.callPreload('x_like_in_page', { url: target, action }, signal);
+    if (inPage.success) {
+      indexLike(ctx, action, target, await seen());
+      return inPage;
+    }
     return withView(ctx, 'background', async (view) => {
       const gone = await navigateStep(view, target, signal);
       if (gone) return gone;
-      return view.callPreload('x_like_in_page', { url: target, action }, signal);
+      const done = await view.callPreload('x_like_in_page', { url: target, action }, signal);
+      if (done.success) indexLike(ctx, action, target, await postInView(view, signal));
+      return done;
     });
   },
 });
@@ -96,7 +151,7 @@ export const bookmarkPost = defineTool({
     const stopped = cancelled(signal);
     if (stopped) return stopped;
     if (ctx.bookmarksMode() === 'confirm') {
-      const detail = await cardDetail(ctx, target);
+      const detail = cardDetail(await onScreenPost(ctx, target)(), target);
       const { decision } = await ctx.approvals.request(
         {
           kind: 'post',

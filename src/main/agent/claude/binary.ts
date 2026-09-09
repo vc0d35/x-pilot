@@ -1,8 +1,20 @@
 import { homedir } from 'node:os';
-import { isSafeExecutable, joinPath as join, listDir, locateBinary, loginShell, spawnEnv, type LocateDeps } from '../binary';
+import {
+  isSafeExecutable,
+  joinPath as join,
+  listDir,
+  locateBinary,
+  loginShell,
+  missingBinaryMessage,
+  spawnEnv,
+  type LocateDeps,
+} from '../binary';
 
 export const CLAUDE_MISSING_MESSAGE =
   'Claude Code not found. Install it from claude.com/code, run `claude` once to log in, or set the binary path in Settings.';
+
+export const claudeMissingMessage = (explicit: string | null | undefined): string =>
+  missingBinaryMessage('Claude Code', CLAUDE_MISSING_MESSAGE, explicit);
 
 const BIN_NAME = (platform: string): string => (platform === 'win32' ? 'claude.cmd' : 'claude');
 

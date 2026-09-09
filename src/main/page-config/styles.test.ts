@@ -34,6 +34,20 @@ describe('validateCss', () => {
     expect(validateCss(`${PAGE_STYLES_HEADER}\nbody { font-size: 18px }\n`)).toBeNull();
   });
 
+  it('rejects a sheet that opens with a bare word, which is how `undefined` gets prepended', () => {
+    expect(validateCss("undefined\n\n[data-testid='tweetText'] { font-size: 16px }")).toBe(
+      'starts with the literal word `undefined`; send the stylesheet text itself',
+    );
+    expect(validateCss(`${PAGE_STYLES_HEADER}undefined\n\n/* larger post text */\nbody { font-size: 18px }`)).toMatch(/`undefined`/);
+    expect(validateCss('nonsense\nbody { color: red }')).toBe(
+      'starts with the bare word `nonsense` on a line of its own; send the stylesheet text itself',
+    );
+    // A selector that happens to sit on its own line above its brace, or above a comma, is fine.
+    expect(validateCss('body\n{ color: red }')).toBeNull();
+    expect(validateCss('html\n, body { color: red }')).toBeNull();
+    expect(validateCss('@media (min-width: 100px)\n{ a { color: red } }')).toBeNull();
+  });
+
   it('rejects @import however it is cased', () => {
     expect(validateCss('@import url("data:text/css,");')).toBe('@import is not allowed');
     expect(validateCss('@IMPORT "x.css";')).toBe('@import is not allowed');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatBytes } from './SettingsPanel';
+import { formatBytes } from './bytes';
 
 describe('formatBytes', () => {
   it('reads as a size at every scale', () => {

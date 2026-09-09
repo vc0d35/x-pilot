@@ -7,7 +7,7 @@ import type { ToolResult, ToolSpec } from '../../../shared/tools';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, ProviderKind, StartOptions } from '../provider';
 import { buildTurnText } from '../codex/turn-text';
-import { CLAUDE_MISSING_MESSAGE, claudeSpawnEnv, resolveClaudeBinary } from './binary';
+import { claudeMissingMessage, claudeSpawnEnv, resolveClaudeBinary } from './binary';
 import { ClaudeStream } from './events';
 import { CLAUDE_MODELS } from './models';
 import type { ClaudeQueryHandle, ClaudeTool, RunQuery } from './query';
@@ -109,8 +109,9 @@ export class ClaudeProvider implements AgentProvider {
     const explicit = opts.settings.claude.binPath ?? null;
     const found = await (this.deps.binary ? this.deps.binary(explicit) : resolveClaudeBinary(explicit));
     if (!found) {
-      this.emit({ type: 'status', status: 'error', message: CLAUDE_MISSING_MESSAGE });
-      throw new Error(CLAUDE_MISSING_MESSAGE);
+      const message = claudeMissingMessage(explicit);
+      this.emit({ type: 'status', status: 'error', message });
+      throw new Error(message);
     }
     this.binaryPath = found;
     this.tools = opts.tools;

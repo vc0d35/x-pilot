@@ -25,7 +25,7 @@ const schedule = z.strictObject({
 export const scheduleTask = defineTool({
   name: 'xpilot_schedule_task',
   description:
-    'Creates a recurring task the app runs while it is open: at each scheduled time a fresh agent run receives `prompt` and acts with the same tools (posting still follows the user\'s confirm/autonomous setting). Runs are unattended, by default in a hidden window that loads pages fresh and can neither see nor move the user\'s own window, so write the prompt as what that run should read and do rather than as gestures on a screen unless visibleWindow is set. threadMode "resume" (default) keeps one thread across runs so the task remembers what it did; "new" starts clean each time.',
+    'Creates a recurring task the app runs while it is open: at each scheduled time a fresh agent run receives `prompt` and acts with the same tools. Runs are unattended, by default in a hidden window that loads pages fresh and can neither see nor move the user\'s own window, so write the prompt as what that run should read and do rather than as gestures on a screen unless visibleWindow is set. A run can post: it composes in whichever window it has, and posting follows the user\'s confirm/autonomous setting exactly as it does in conversation, so a task that posts while they are away needs autonomous posting or it will wait for their answer. threadMode "resume" (default) keeps one thread across runs so the task remembers what it did; "new" starts clean each time.',
   args: z.strictObject({ title: z.string(), prompt: z.string(), schedule, threadMode, webSearch, visibleWindow }),
   execute: async (args, ctx: AppToolCtx) =>
     attempt(() =>

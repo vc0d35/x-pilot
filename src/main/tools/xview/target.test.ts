@@ -34,6 +34,7 @@ function ctx(xview: XViewLike, background: XViewLike): XViewToolCtx {
     postingMode: () => 'confirm',
     likesMode: () => 'auto',
     bookmarksMode: () => 'auto',
+    likes: { recordLike: vi.fn(), recordUnlike: vi.fn() },
     drafts: new DraftStore(),
   };
 }

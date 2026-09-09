@@ -25,6 +25,8 @@ export function App() {
   // Which backends answered a Connect: a session-long note, so a Settings row reopened still says so.
   const [connected, setConnected] = useState<ProviderKind[]>([]);
   const rememberConnected = (kind: ProviderKind) => setConnected((c) => (c.includes(kind) ? c : [...c, kind]));
+  // Bumped whenever the conversation list behind the History panel changes underneath it.
+  const [historyKey, setHistoryKey] = useState(0);
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => window.xpilot.onSidebarCollapsed(setCollapsed), []);
 
@@ -82,6 +84,14 @@ export function App() {
       );
     });
   };
+  /**
+   * Back to an empty live conversation. New thread asks main for one; switching backends has already
+   * started one, and without this the previous backend's transcript stays on screen above it.
+   */
+  const showFreshThread = () => {
+    dispatch({ type: 'reset' });
+    setHistoryKey((k) => k + 1);
+  };
   const backToChat = () => {
     if (state.threadId) openConversation(state.threadId);
     else dispatch({ type: 'reset' });
@@ -105,7 +115,7 @@ export function App() {
         pillLabel={pillText({ status: state.status, statusMessage: state.statusMessage, provider, modelId, models })}
         canReconnect={showReconnect(state.status, provider)}
         onNewThread={() => {
-          dispatch({ type: 'reset' });
+          showFreshThread();
           void window.xpilot.newThread();
         }}
         onReconnect={reconnect}
@@ -126,11 +136,13 @@ export function App() {
         <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
       )}
       {panel === 'history' ? (
-        <HistoryPanel currentThreadId={state.threadId} activeProvider={provider} onOpen={openConversation} />
+        <HistoryPanel key={historyKey} currentThreadId={state.threadId} activeProvider={provider} onOpen={openConversation} />
       ) : panel === 'library' ? (
         <LibraryPanel />
       ) : panel === 'settings' ? (
-        settings && <SettingsPanel settings={settings} connected={connected} onConnected={rememberConnected} />
+        settings && (
+          <SettingsPanel settings={settings} connected={connected} onConnected={rememberConnected} onProviderSwitched={showFreshThread} />
+        )
       ) : (
         <>
           {state.viewing && (

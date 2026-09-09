@@ -15,6 +15,8 @@ export interface ApprovalRequest {
   id: string;
   kind: 'command' | 'fileChange' | 'post';
   title: string;
+  /** One line above the detail, for what the detail alone does not show - a size, a count, a scope. */
+  summary?: string;
   detail: string;
   options: ApprovalOption[];
 }

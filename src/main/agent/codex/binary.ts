@@ -1,5 +1,14 @@
 import { homedir } from 'node:os';
-import { augmentedPath, isSafeExecutable, listDir, loginShell, spawnEnv, type ExecutableFs, type StatLike } from '../binary';
+import {
+  augmentedPath,
+  isSafeExecutable,
+  listDir,
+  loginShell,
+  missingBinaryMessage,
+  spawnEnv,
+  type ExecutableFs,
+  type StatLike,
+} from '../binary';
 import { locateCodex } from './locate';
 
 export { augmentedPath, isSafeExecutable };
@@ -7,6 +16,9 @@ export type { ExecutableFs, StatLike };
 
 export const CODEX_MISSING_MESSAGE =
   'Codex CLI not found. Install it with `npm i -g @openai/codex`, run `codex login`, or set the binary path in Settings.';
+
+export const codexMissingMessage = (explicit: string | null | undefined): string =>
+  missingBinaryMessage('Codex CLI', CODEX_MISSING_MESSAGE, explicit);
 
 const loginShellLookup = () => loginShell('command -v codex');
 

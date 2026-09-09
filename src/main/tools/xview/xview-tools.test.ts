@@ -47,6 +47,7 @@ function ctx(current = 'https://x.com/home') {
     postingMode: () => 'confirm' as const,
     likesMode: () => 'auto' as const,
     bookmarksMode: () => 'auto' as const,
+    likes: { recordLike: vi.fn(), recordUnlike: vi.fn() },
     drafts: new DraftStore(),
   };
 }

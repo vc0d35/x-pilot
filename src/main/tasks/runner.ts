@@ -92,6 +92,7 @@ export class TaskRunner {
     const tools = registry.list();
     let threadId: string | null = null;
     let watermark: string | null = null;
+    let stopped = false;
     let finish!: (status: RunStatus) => void;
     const done = new Promise<RunStatus>((resolve) => {
       finish = resolve;
@@ -110,7 +111,18 @@ export class TaskRunner {
         if (e.type === 'status' && (e.status === 'disconnected' || e.status === 'error')) resolve('failed');
       });
     });
-    this.current = () => finish('interrupted');
+    // Stop tears the provider down there and then: the turn's abort controller is what ends the
+    // tool call in flight, and waiting for the run's own path to unwind would let the turn finish
+    // and report `completed` first. Once stopped, `interrupted` is the outcome whatever it reports.
+    this.current = () => {
+      stopped = true;
+      void provider
+        .interrupt()
+        .catch(() => undefined)
+        .then(() => provider.stop())
+        .catch(() => undefined);
+      finish('interrupted');
+    };
     this.deps.onRunEvent?.({ type: 'task.run', taskId: task.id, title: task.title, visibleWindow: task.visibleWindow, running: true });
     try {
       // Web search is an egress channel and nobody is watching an unattended run, so it is off
@@ -130,12 +142,20 @@ export class TaskRunner {
       threadId = started.threadId;
       this.lastThreadId = threadId;
       this.deps.store.upsertConversation({ threadId, kind: 'task', taskId: task.id, toolsHash, provider: kind });
-      await provider.send(buildRunPrompt(task, task.lastRunAt), null);
+      // The send is not awaited: a turn the provider only answers when it ends would otherwise keep
+      // Stop waiting on it. Its failure is an outcome like any other, so it goes through `done`.
+      void provider.send(buildRunPrompt(task, task.lastRunAt), null).catch((err) => {
+        if (stopped) return;
+        this.deps.log?.(`[xpilot] task ${task.id} failed: ${err instanceof Error ? err.message : String(err)}`);
+        finish('failed');
+      });
       const timeout = new Promise<RunStatus>((resolve) => setTimeout(() => resolve('interrupted'), this.deps.timeoutMs ?? 10 * 60_000));
       const status = await Promise.race([done, timeout]);
+      if (stopped) return 'interrupted';
       if (status === 'interrupted') await provider.interrupt().catch(() => undefined);
       return status;
     } catch (err) {
+      if (stopped) return 'interrupted';
       this.deps.log?.(`[xpilot] task ${task.id} failed: ${err instanceof Error ? err.message : String(err)}`);
       return 'failed';
     } finally {
@@ -168,8 +188,8 @@ export class TaskRunner {
   }
 
   /**
-   * Stops the run in flight. The run's own path then interrupts the turn and stops its provider, and
-   * the outcome it reports is `interrupted`, so that is what the task row records.
+   * Stops the run in flight: its provider is interrupted and torn down at once, and the run reports
+   * `interrupted` however its turn ends, so that is what the task row records.
    */
   stop(): void {
     this.current?.();

@@ -43,6 +43,7 @@ export function ApprovalCard({
   return (
     <div className={`approval approval-${request.kind}`} ref={cardRef}>
       <div className="approval-title">{request.title}</div>
+      {request.summary && <div className="approval-summary">{request.summary}</div>}
       <pre className="approval-detail">{collapseBlankLines(request.detail)}</pre>
       {decision ? (
         <div className="approval-decision">

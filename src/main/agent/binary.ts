@@ -172,8 +172,11 @@ export async function locateBinary(spec: LocateSpec, deps: LocateDeps): Promise<
   const platform = String(deps.platform ?? process.platform);
   const bin = spec.binName(platform);
 
+  // A configured path is a choice, not a hint. When it is gone or is no longer safe to run, falling
+  // through to the search would quietly start a different binary than the one the user picked, so
+  // the search stops here and the provider says which path failed.
   const explicit = deps.explicit?.trim();
-  if (explicit && deps.exists(explicit)) return explicit;
+  if (explicit) return deps.exists(explicit) ? explicit : null;
 
   const sep = platform === 'win32' ? ';' : ':';
   const pathEntries = (deps.env?.PATH ?? deps.env?.Path ?? '').split(sep).filter(Boolean);
@@ -191,4 +194,16 @@ export async function locateBinary(spec: LocateSpec, deps: LocateDeps): Promise<
     if (deps.exists(full)) return full;
   }
   return null;
+}
+
+/**
+ * What to tell the user when the CLI could not be run. An explicit `binPath` is the only place
+ * XPilot looks once it is set, so a path that is gone — or that no longer passes the safety check —
+ * is named on the setup card rather than silently replaced by whatever else is installed.
+ */
+export function missingBinaryMessage(label: string, generic: string, explicit: string | null | undefined): string {
+  const path = explicit?.trim();
+  return path
+    ? `${label} not found at ${path}, the binary path set in Settings. Clear that path, or point it at the ${label} you have installed.`
+    : generic;
 }

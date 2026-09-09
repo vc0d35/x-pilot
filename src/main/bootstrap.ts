@@ -32,7 +32,7 @@ import { PageStyles, PAGE_STYLES_FILE } from './page-config/styles';
 import { SelectorOverrides, SELECTORS_FILE } from './page-config/selectors';
 import { registerPageConfigIpc } from './page-config/ipc';
 import { xviewTools } from './tools/xview';
-import type { XViewLike } from './tools/xview/context';
+import type { XViewLike, XViewToolCtx } from './tools/xview/context';
 import { DraftStore } from './tools/xview/drafts';
 import { AppStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
@@ -67,6 +67,7 @@ export function toolsForScheduledRuns<T extends { spec: { name: string } }>(tool
 
 /** The visible view as a run that may not touch it sees it: every call refuses, with the reason. */
 export const REFUSING_XVIEW: XViewLike = {
+  isAvailable: () => false,
   currentUrl: () => '',
   navigate: () => Promise.reject(new Error("Scheduled runs cannot move the user's window")),
   callPreload: async () => fail("The user's window is not available in a scheduled run; use background reads"),
@@ -84,6 +85,7 @@ export interface TaskRegistryDeps {
   postingMode: () => 'confirm' | 'autonomous';
   likesMode: () => 'auto' | 'confirm';
   bookmarksMode: () => 'auto' | 'confirm';
+  likes: XViewToolCtx['likes'];
   /** Everything the app tools need; the runs' `testSelector` is always null. */
   appCtx: Omit<AppToolCtx, 'testSelector'>;
 }
@@ -107,6 +109,7 @@ export function createTaskRegistryFactory(deps: TaskRegistryDeps): (task: { visi
         postingMode: deps.postingMode,
         likesMode: deps.likesMode,
         bookmarksMode: deps.bookmarksMode,
+        likes: deps.likes,
         drafts: new DraftStore(),
       }),
     );
@@ -330,6 +333,8 @@ export function createApp(opts: AppOptions): XPilotApp {
       postingMode: () => settings.get().posting.mode,
       likesMode: () => settings.get().likes.mode,
       bookmarksMode: () => settings.get().bookmarks.mode,
+      // Through the store rather than as it, because the database is opened further down.
+      likes: { recordLike: (post) => store.likes.recordLike(post), recordUnlike: (id) => store.likes.recordUnlike(id) },
       drafts: new DraftStore(),
     }),
   );
@@ -450,6 +455,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     postingMode: () => settings.get().posting.mode,
     likesMode: () => settings.get().likes.mode,
     bookmarksMode: () => settings.get().bookmarks.mode,
+    likes: store.likes,
     appCtx,
   });
   app.on('will-quit', () => store.close());

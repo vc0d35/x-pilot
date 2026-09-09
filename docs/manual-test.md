@@ -10,7 +10,7 @@ Run `npm run dev`, logged into x.com in the X view.
 ## Agent
 
 - [ ] The header pill names the model in use (e.g. `GPT-5.6-Luna` or `Sonnet 5`) with a breathing dot; clicking it opens Settings. While the agent is starting it reads `connecting…`, and a dead agent shows `disconnected`/`error` with a `reconnect` link next to it.
-- [ ] "Which page am I on?" → `x_get_page_state` tool row, correct answer.
+- [ ] "Which page am I on?" → the right answer; a model that reads it off the page hint without a tool row is fine. Then "how many posts are on my screen?", which the hint cannot answer: that one must show a tool row.
 - [ ] Stop button interrupts a long answer.
 - [ ] Open a post with a factual claim and ask "is this true?" → a `web_search` tool row appears and the answer cites non-X sources; Settings → Web search → Off makes the agent stop searching the web.
 - [ ] Ctrl+D from anywhere (even with the sidebar collapsed) focuses the agent input.
@@ -80,13 +80,13 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Every hour, post a one-line Amsterdam weather update" → the agent creates a task (visible in Scheduled tasks with next run); "Run now" starts a run, a task conversation appears in History, and posting goes through the confirm card.
 - [ ] While a task is running, open its run from History: it is marked "running", the banner says "Viewing a scheduled run", new events appear as the run makes them, and the composer is read-only. "Back to chat" returns to your own conversation with its transcript intact and the composer usable again.
 - [ ] "Every 30 minutes, on my screen while I'm away, scroll my timeline and open anything about Electron" → the task is created with visibleWindow and shows a "screen" badge in Scheduled tasks; a task asked for without that phrasing has no badge.
-- [ ] Type in the sidebar composer (or click in the X view), then "Run now" that task: nothing runs, the row says `deferred` and the next run is two minutes out; wait without touching the app and it runs, this time moving the window you are looking at.
+- [ ] "Run now" runs immediately even while you are active — it is you asking for it. A scheduled tick while you are active is what defers: use the app, wait for the task's own next run to come due, and the row says `deferred` with the next run two minutes out; leave the app alone and it runs then, moving the window you are looking at.
 - [ ] While it runs, the sidebar shows "A scheduled task is using your window: …" on top of your own conversation, and it is still there on the History and Settings panels. Stop ends the run: the banner goes and the task row says `interrupted`.
 - [ ] Pause/Resume/Delete work; a paused task has no next run.
 
 ## Liking and timeline reading
 
-- [ ] "Like the first post" → the post on screen gets liked without navigation; it appears in liked history.
+- [ ] "Like the first post" → the post on screen gets liked without navigation, and a row for it appears in the liked index (ask "what did I like about <a word from that post>?"): a like the agent made for you is one of yours.
 - [ ] "Like <url of a post not on screen>" → liked via the hidden window; the visible window does not move.
 - [ ] Settings → Agent likes → Confirm: liking asks first; Cancel is reported as the user's decision.
 - [ ] "Every 30 minutes scroll my For You timeline and like all posts by @dhh" → task created; Run now reads the timeline in the hidden window and likes matching posts.

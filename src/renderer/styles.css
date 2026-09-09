@@ -101,6 +101,7 @@ code { font: inherit; }
 .approval-title { font-weight: 700; position: sticky; top: 0; background: var(--bg); padding: 2px 0; }
 /* Bounded to ~12 lines with its own scrollbar: a padded detail cannot push the buttons off screen. */
 .approval-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; max-height: 17.4em; overflow: auto; }
+.approval-summary { color: var(--muted); font-size: 12px; }
 .approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .approval-decision { color: var(--muted); font-size: 12px; }
 .approval-option-noting { font-weight: 700; }

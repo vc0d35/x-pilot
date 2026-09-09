@@ -1,10 +1,18 @@
 import { z } from 'zod';
 import { defineTool, fail, ok } from '../../../shared/tools';
-import type { XViewToolCtx } from './context';
+import type { ViewTarget, XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { cancelled, navigateStep, withView } from './target';
 
 const POST_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Where the composer is opened. The window the user is looking at, so they see the draft being
+ * written; in a scheduled run that may not touch it, the run's own hidden window, which is on the
+ * same logged-in session. Nothing else about posting changes: the confirm card, the autonomous
+ * setting and the re-read before Post are the same wherever the draft is.
+ */
+const composeIn = (ctx: XViewToolCtx): ViewTarget => (ctx.xview.isAvailable?.() === false ? 'background' : 'visible');
 
 export function buildIntentUrl(text: string, replyToUrl?: string, quoteUrl?: string): string {
   let body = text;
@@ -18,7 +26,7 @@ export function buildIntentUrl(text: string, replyToUrl?: string, quoteUrl?: str
 export const composePost = defineTool({
   name: 'x_compose_post',
   description:
-    'Opens the composer with the given text (optionally as a reply to replyToUrl or quoting quoteUrl) and returns a draftId plus the exact preview. Does NOT post; call x_submit_post with the draftId to send.',
+    "Opens the composer with the given text (optionally as a reply to replyToUrl or quoting quoteUrl) and returns a draftId plus the exact preview. Does NOT post; call x_submit_post with the draftId to send. Works in a scheduled run too: a run that may not touch the user's window composes in its own hidden window instead.",
   args: z.strictObject({ text: z.string(), replyToUrl: z.string().optional(), quoteUrl: z.string().optional() }),
   execute: async (args, ctx: XViewToolCtx, signal) => {
     const text = args.text.trim();
@@ -26,7 +34,8 @@ export const composePost = defineTool({
     const { replyToUrl, quoteUrl } = args;
     if (replyToUrl && !normalizePostUrl(replyToUrl)?.includes('/status/')) return fail(`replyToUrl is not a post URL: ${replyToUrl}`);
     if (quoteUrl && !normalizePostUrl(quoteUrl)) return fail(`quoteUrl is not a post URL: ${quoteUrl}`);
-    return withView(ctx, 'visible', async (view) => {
+    const where = composeIn(ctx);
+    return withView(ctx, where, async (view) => {
       const stopped = await navigateStep(view, buildIntentUrl(text, replyToUrl, quoteUrl), signal);
       if (stopped) return stopped;
       let composer = await view.callPreload('x_read_composer', { timeoutMs: 10_000 }, signal);
@@ -48,7 +57,7 @@ export const composePost = defineTool({
         : quoteUrl
           ? `quote of ${normalizePostUrl(quoteUrl)}`
           : 'new post';
-      const draft = ctx.drafts.create({ text: state.text, target });
+      const draft = ctx.drafts.create({ text: state.text, target, view: where });
       return ok({ draftId: draft.id, preview: state.text, target });
     });
   },
@@ -60,10 +69,11 @@ export const submitPost = defineTool({
     'Sends the draft created by x_compose_post. In confirm mode the user must click Post in the sidebar first; in autonomous mode it posts immediately. Returns posted=true with the new post URL when available; posted=false with status cancelled_by_user means the user declined (their decision is final).',
   args: z.strictObject({ draftId: z.string() }),
   annotations: { destructiveHint: true },
-  execute: async (args, ctx: XViewToolCtx, signal) =>
-    withView(ctx, 'visible', async (view) => {
-      const draft = ctx.drafts.get(args.draftId);
-      if (!draft) return fail('Unknown draftId; call x_compose_post first');
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const draft = ctx.drafts.get(args.draftId);
+    if (!draft) return fail('Unknown draftId; call x_compose_post first');
+    // The draft lives in whichever window composed it, and that is where it is re-read and sent.
+    return withView(ctx, draft.view, async (view) => {
       const stopped = cancelled(signal);
       if (stopped) return stopped;
       const composer = await view.callPreload('x_read_composer', { timeoutMs: 3000 }, signal);
@@ -122,5 +132,6 @@ export const submitPost = defineTool({
       ctx.drafts.delete(draft.id);
       const res = clicked.content as { url: string | null };
       return ok({ posted: true, url: res.url });
-    }),
+    });
+  },
 });

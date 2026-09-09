@@ -8,7 +8,7 @@ import type { UserInputBroker } from '../../user-input';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, ProviderKind, StartOptions } from '../provider';
 import { JsonRpcStdio } from './jsonrpc';
-import { CODEX_MISSING_MESSAGE, codexSpawnEnv, resolveCodexBinary } from './binary';
+import { codexMissingMessage, codexSpawnEnv, resolveCodexBinary } from './binary';
 import { handleNotification, handleServerRequest, newItemPhases, type ItemPhases } from './events';
 import { buildTurnText } from './turn-text';
 
@@ -202,8 +202,9 @@ export class CodexProvider implements AgentProvider {
     const explicit = opts.settings.codex.binPath ?? null;
     const found = await (this.deps.binary ? this.deps.binary(explicit) : resolveCodexBinary(explicit));
     if (found) return found;
-    this.emit({ type: 'status', status: 'error', message: CODEX_MISSING_MESSAGE });
-    throw new Error(CODEX_MISSING_MESSAGE);
+    const message = codexMissingMessage(explicit);
+    this.emit({ type: 'status', status: 'error', message });
+    throw new Error(message);
   }
 
   async send(text: string, pageContext?: PageContext | null): Promise<void> {

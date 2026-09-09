@@ -25,6 +25,14 @@ export const PREVIEW_MAX_MS = 10 * 60 * 1000;
 /** Function-shaped ways CSS names a resource, none of which a page-restyling sheet needs. */
 const BANNED_TOKENS = ['@import', '@namespace', '@font-face', 'image-set(', '-webkit-image-set(', 'element(', 'cross-fade(', '://', '//'];
 
+/**
+ * A stylesheet never opens with a bare word on a line of its own. A model that builds the sheet by
+ * concatenation sends `undefined` where the current sheet should have been, and CSS reads it as a
+ * descendant combinator: the first rule silently does nothing, and keeping the card replaces the
+ * user's whole file with the fragment. Cheap to spot, and no real sheet is written this way.
+ */
+const LEADING_BARE_WORD = /^([A-Za-z_][\w-]*)[ \t]*\r?\n\s*[^\s{,]/;
+
 /** Comments cannot split a CSS token, so removing them first is what makes a substring scan sound. */
 export function stripCssComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, ' ');
@@ -34,6 +42,11 @@ export function stripCssComments(css: string): string {
 export function validateCss(css: string): string | null {
   if (Buffer.byteLength(css) > MAX_CSS_BYTES) return `the stylesheet is larger than ${MAX_CSS_BYTES / 1024} KB`;
   const text = stripCssComments(css);
+  const bare = LEADING_BARE_WORD.exec(text.trimStart());
+  if (bare)
+    return bare[1] === 'undefined'
+      ? 'starts with the literal word `undefined`; send the stylesheet text itself'
+      : `starts with the bare word \`${bare[1]}\` on a line of its own; send the stylesheet text itself`;
   // An escape is the one way a CSS token can spell itself differently from how it reads
   // (`u\72l(` is `url(`), and nothing a restyling sheet needs is written with one.
   if (text.includes('\\')) return 'a backslash escape is not allowed';

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { defineTool, fail, ok, type ToolResult } from '../../../shared/tools';
+import { formatBytes } from '../../../shared/bytes';
 import { validateCss } from '../../page-config/styles';
 import type { ApprovalOption } from '../../../shared/agent';
 import type { AppToolCtx } from './context';
@@ -30,7 +31,7 @@ export const readPageStyles = defineTool({
  */
 async function previewAndAsk(
   ctx: AppToolCtx,
-  opts: { title: string; detail: string; preview: string | null; adjustable: boolean },
+  opts: { title: string; summary?: string; detail: string; preview: string | null; adjustable: boolean },
 ): Promise<ToolResult | null> {
   ctx.styles.preview(opts.preview);
   try {
@@ -40,7 +41,7 @@ async function previewAndAsk(
       { id: 'revert', label: 'Revert' },
     ];
     const { decision, note } = await ctx.approvals.request(
-      { kind: 'post', title: opts.title, detail: opts.detail, options },
+      { kind: 'post', title: opts.title, summary: opts.summary, detail: opts.detail, options },
       STYLES_CONFIRM_TIMEOUT_MS,
     );
     if (decision === 'keep') return null;
@@ -77,8 +78,11 @@ export const writePageStyles = defineTool({
     const invalid = validateCss(args.css);
     if (invalid) return fail(`Rejected: ${invalid}`);
     if (ctx.stylesMode() === 'confirm') {
+      // The card carries the whole sheet, but not what it costs: a proposal that quietly drops the
+      // rules the user already had looks like any other until the two sizes sit next to each other.
       const answered = await previewAndAsk(ctx, {
         title: 'Keep these page styles?',
+        summary: `Replaces the current stylesheet (${formatBytes(Buffer.byteLength(ctx.styles.get()))} → ${formatBytes(Buffer.byteLength(args.css))})`,
         detail: args.css,
         preview: args.css,
         adjustable: true,

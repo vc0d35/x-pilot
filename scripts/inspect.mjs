@@ -13,14 +13,20 @@ if (target === '--list' || !target) {
   await browser.close();
   process.exit(0);
 }
-const pick = () => {
+// The hidden agent windows are x.com pages too, and they often sort first: only the view on screen
+// answers `visible`, so `x` asks the pages rather than trusting their order.
+const visibleFirst = async (xPages) => {
+  const states = await Promise.all(xPages.map((p) => p.evaluate(() => document.visibilityState).catch(() => null)));
+  return xPages[states.indexOf('visible')] ?? xPages[0];
+};
+const pick = async () => {
   if (target === 'sidebar') return pages.find((p) => /localhost:\d+\/?$|out\/renderer\/index\.html/.test(p.url()));
   const xPages = pages.filter((p) => /https:\/\/(x|twitter)\.com/.test(p.url()));
-  if (target === 'x') return xPages[0];
+  if (target === 'x') return visibleFirst(xPages);
   if (target === 'bg') return xPages[1];
   return pages.find((p) => p.url().includes(target));
 };
-const page = pick();
+const page = await pick();
 if (!page) {
   console.error(`No page for "${target}". Open pages:\n` + pages.map((p) => '  ' + p.url()).join('\n'));
   await browser.close();
