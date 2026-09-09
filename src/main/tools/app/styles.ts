@@ -7,7 +7,7 @@ import type { AppToolCtx } from './context';
 const WHAT_IT_IS =
   'Page styles are the CSS XPilot applies to the x.com page the user is looking at; the hidden windows XPilot reads in are never styled. The file is plain CSS the user can also edit by hand.';
 
-const STYLES_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+const STYLES_CONFIRM_TIMEOUT_MS = 10 * 60 * 1000;
 
 export const readPageStyles = defineTool({
   name: 'xpilot_read_page_styles',
@@ -54,7 +54,7 @@ async function previewAndAsk(
       decision === 'timeout'
         ? {
             status: 'confirmation_timed_out',
-            reason: 'The user did not answer within 5 minutes; the preview was taken off and the stylesheet was left as it was.',
+            reason: 'The user did not answer within 10 minutes; the preview was taken off and the stylesheet was left as it was.',
           }
         : {
             status: 'cancelled_by_user',

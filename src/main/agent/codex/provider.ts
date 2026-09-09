@@ -41,6 +41,17 @@ export interface CodexProviderDeps {
   turnIdleWarnMs?: number;
 }
 
+const LIFECYCLE_EVENTS = new Set([
+  'status',
+  'turn.started',
+  'turn.completed',
+  'approval.requested',
+  'approval.resolved',
+  'input.requested',
+  'input.resolved',
+  'thread',
+  'user.message',
+]);
 const TURN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const TURN_IDLE_WARN_MS = 2 * 60 * 1000;
 const WATCHDOG_SHELL = '/bin/sh';
@@ -68,6 +79,8 @@ export class CodexProvider implements AgentProvider {
   private turnAbort: AbortController | null = null;
   private idleTimer: NodeJS.Timeout | null = null;
   private idleWarned = false;
+  private pendingRequests = 0;
+  private suppressLateEvents = false;
   /** Detached `sh` that kills the codex child if this process dies without stopping it. */
   private watchdog: DetachedProcess | null = null;
   private loggedInputParams = false;
@@ -195,6 +208,7 @@ export class CodexProvider implements AgentProvider {
     this.lastContextKey = contextKey(pageContext) ?? this.lastContextKey;
     this.emit({ type: 'user.message', text });
     this.running = true;
+    this.suppressLateEvents = false;
     this.turnAbort = new AbortController();
     this.emit({ type: 'status', status: 'running' });
     this.touchIdle();
@@ -320,6 +334,10 @@ export class CodexProvider implements AgentProvider {
 
   private onIdle(): void {
     if (!this.running) return;
+    if (this.pendingRequests > 0) {
+      this.armIdle();
+      return;
+    }
     if (!this.idleWarned) {
       this.idleWarned = true;
       this.emit({ type: 'activity', activity: 'waiting' });
@@ -330,12 +348,15 @@ export class CodexProvider implements AgentProvider {
     // would throw away the thread. The user decides with Stop / Reconnect.
     const { timeout } = this.idleLimits();
     const message = `Codex sent nothing for ${Math.round(timeout / 1000)}s, so XPilot stopped waiting for this turn.`;
+    this.suppressLateEvents = true;
+    void this.interrupt().catch(() => undefined);
     this.abortTurn(new Error(message));
     this.finishTurn('failed', message);
     this.emit({ type: 'status', status: 'error', message: `${message} Press Stop, then Reconnect, if the agent stays stuck.` });
   }
 
   private emit(e: AgentEvent): void {
+    if (this.suppressLateEvents && !LIFECYCLE_EVENTS.has(e.type)) return;
     if (e.type === 'activity') {
       const key = `${e.activity}:${e.detail ?? ''}`;
       if (key === this.lastActivity) return; // consecutive duplicates carry no information
@@ -367,13 +388,19 @@ export class CodexProvider implements AgentProvider {
 
   private async onServerRequest(method: string, params: unknown): Promise<unknown> {
     this.touchIdle();
-    return handleServerRequest(method, params, {
-      callTool: (name, args, signal) => this.deps.callTool(name, args, signal),
-      approvals: this.deps.approvals,
-      userInput: this.deps.userInput,
-      signal: this.turnAbort?.signal,
-      onUserInputParams: (p) => this.logInputParamsOnce(p),
-    });
+    this.pendingRequests++;
+    try {
+      return await handleServerRequest(method, params, {
+        callTool: (name, args, signal) => this.deps.callTool(name, args, signal),
+        approvals: this.deps.approvals,
+        userInput: this.deps.userInput,
+        signal: this.turnAbort?.signal,
+        onUserInputParams: (p) => this.logInputParamsOnce(p),
+      });
+    } finally {
+      this.pendingRequests--;
+      this.touchIdle();
+    }
   }
 
   private logInputParamsOnce(params: unknown): void {

@@ -134,10 +134,10 @@ describe('xpilot_write_page_styles', () => {
     vi.useFakeTimers();
     const c = ctx({ mode: 'confirm', decision: 'timeout' });
     const pending = writePageStyles.execute({ css: 'a {}' }, c.value);
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 10);
+    await vi.advanceTimersByTimeAsync(10 * 60 * 1000 + 10);
     expect(await pending).toEqual({
       success: true,
-      content: { status: 'confirmation_timed_out', reason: expect.stringContaining('within 5 minutes') },
+      content: { status: 'confirmation_timed_out', reason: expect.stringContaining('within 10 minutes') },
     });
     expect(c.previews).toEqual(['a {}', null]);
     expect(c.set).not.toHaveBeenCalled();

@@ -365,6 +365,40 @@ describe('CodexProvider', () => {
     await provider.stop();
   });
 
+  it('does not count time spent waiting on the app side (a tool call or approval) as Codex silence', async () => {
+    let release: ((r: ToolResult) => void) | null = null;
+    const { provider, events } = makeProvider(
+      () =>
+        new Promise<ToolResult>((r) => {
+          release = r;
+        }),
+      { turnIdleTimeoutMs: 300, turnIdleWarnMs: 80 },
+    );
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('What page?');
+    await waitUntil(() => release !== null);
+    await new Promise((r) => setTimeout(r, 700));
+    expect(provider.isRunning()).toBe(true);
+    expect(events.some((e) => e.type === 'turn.completed')).toBe(false);
+    expect(events.some((e) => e.type === 'activity' && e.activity === 'waiting')).toBe(false);
+    release!(ok({}));
+    await waitFor(events, 'turn.completed');
+    expect((events.find((e) => e.type === 'turn.completed') as { status: string }).status).toBe('completed');
+    await provider.stop();
+  });
+
+  it('drops item and activity events that arrive after the watchdog failed the turn', async () => {
+    const { provider, events } = makeProvider(undefined, { turnIdleTimeoutMs: 300, turnIdleWarnMs: 80 });
+    await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
+    await provider.send('SILENT');
+    await waitFor(events, 'turn.completed');
+    const before = events.length;
+    await new Promise((r) => setTimeout(r, 300));
+    const late = events.slice(before).filter((e) => e.type === 'activity' || e.type.startsWith('tool.') || e.type.startsWith('message.'));
+    expect(late).toEqual([]);
+    await provider.stop();
+  });
+
   it('keeps waiting while notifications keep arriving, so a slow turn is not cut off', async () => {
     const { provider, events } = makeProvider(undefined, { turnIdleTimeoutMs: 400, turnIdleWarnMs: 100 });
     await provider.start({ tools, settings: DEFAULT_SETTINGS.agent.codex, workspaceDir: '/tmp' });
