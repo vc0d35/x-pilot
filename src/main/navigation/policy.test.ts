@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { decideNavigation, attachNavigationPolicy, type WindowOpenResponse } from './policy';
+import { decideNavigation, attachNavigationPolicy, type NavigationDetails, type WindowOpenResponse } from './policy';
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 
 describe('decideNavigation', () => {
@@ -35,9 +35,13 @@ describe('attachNavigationPolicy', () => {
     const em = new EventEmitter();
     let handler: ((d: { url: string }) => WindowOpenResponse) | null = null;
     return {
-      on: (ev: string, l: (e: { preventDefault(): void }, url: string) => void) => em.on(ev, l),
+      on: (ev: string, l: (details: NavigationDetails) => void) => em.on(ev, l),
       setWindowOpenHandler: (h: (d: { url: string }) => WindowOpenResponse) => { handler = h; },
-      emit: (ev: string, url: string) => { const e = { prevented: false, preventDefault() { this.prevented = true; } }; em.emit(ev, e, url); return e.prevented; },
+      emit: (ev: string, url: string, isMainFrame = true) => {
+        const d = { url, isMainFrame, prevented: false, preventDefault() { this.prevented = true; } };
+        em.emit(ev, d);
+        return d.prevented;
+      },
       open: (url: string) => handler!({ url }),
     };
   }
@@ -61,6 +65,63 @@ describe('attachNavigationPolicy', () => {
     const popup = c.open('https://accounts.google.com/x');
     expect(popup.action).toBe('allow');
     expect(popup).toEqual({ action: 'allow', overrideBrowserWindowOptions: { webPreferences: { preload: undefined, sandbox: true, contextIsolation: true, nodeIntegration: false } } });
+  });
+
+  it('blocks an off-allowlist subframe navigation without opening the browser', () => {
+    const c = fakeContents();
+    const openExternal = vi.fn();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal });
+    expect(c.emit('will-frame-navigate', 'https://evil.example/frame', false)).toBe(true);
+    expect(c.emit('will-frame-navigate', 'http://x.com/frame', false)).toBe(true);
+    expect(c.emit('will-frame-navigate', 'javascript:alert(1)', false)).toBe(true);
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('lets an allowlisted https subframe load', () => {
+    const c = fakeContents();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal: vi.fn() });
+    expect(c.emit('will-frame-navigate', 'https://x.com/i/embed', false)).toBe(false);
+  });
+
+  it('leaves the main frame to will-navigate so a navigation is not decided twice', () => {
+    const c = fakeContents();
+    const openExternal = vi.fn();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal });
+    expect(c.emit('will-frame-navigate', 'https://example.com/a', true)).toBe(false);
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('is replaced, not stacked, when a second policy is attached to the same contents', () => {
+    const c = fakeContents();
+    const first = vi.fn();
+    const second = vi.fn();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal: first });
+    attachNavigationPolicy(c, { allowHosts: () => [...DEFAULT_ALLOW_HOSTS, 'accounts.google.com'], openExternal: second });
+    expect(c.emit('will-navigate', 'https://accounts.google.com/o/oauth2')).toBe(false);
+    expect(first).not.toHaveBeenCalled();
+    expect(c.emit('will-navigate', 'https://example.com/a')).toBe(true);
+    expect(first).not.toHaveBeenCalled();
+    expect(second).toHaveBeenCalledWith('https://example.com/a');
+  });
+
+  it('lets a narrower policy attached afterwards take away the browser', () => {
+    const c = fakeContents();
+    const openExternal = vi.fn();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal });
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal: () => {} });
+    expect(c.emit('will-navigate', 'https://example.com/a')).toBe(true);
+    expect(c.open('https://example.com/a').action).toBe('deny');
+    expect(openExternal).not.toHaveBeenCalled();
+  });
+
+  it('blocks a subframe redirect silently: a subframe must never reach the system browser', () => {
+    const c = fakeContents();
+    const openExternal = vi.fn();
+    attachNavigationPolicy(c, { allowHosts: () => DEFAULT_ALLOW_HOSTS, openExternal });
+    expect(c.emit('will-redirect', 'https://landed.example/x', false)).toBe(true);
+    expect(openExternal).not.toHaveBeenCalled();
+    expect(c.emit('will-redirect', 'https://landed.example/x', true)).toBe(true);
+    expect(openExternal.mock.calls).toEqual([['https://landed.example/x']]);
   });
 });
 

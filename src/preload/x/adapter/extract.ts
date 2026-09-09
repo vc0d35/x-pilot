@@ -43,9 +43,11 @@ export function parseStats(label: string): NonNullable<Post['stats']> {
   return stats;
 }
 
-const PERMALINK = /^\/([^/]+)\/status\/(\d+)/;
+// Handles are page-controlled, and the match is used to rebuild a URL: only X's own handle shape is
+// accepted, and the id must end the segment, so `\n` and lookalike paths cannot ride along.
+const PERMALINK = /^\/([A-Za-z0-9_]{1,15})\/status\/(\d{1,25})(?:[/?#]|$)/;
 // `i` is X's reserved namespace, so it must not be read as a handle: try it first.
-const ARTICLE_PERMALINK = /^\/(?:i\/article|([^/]+)\/article)\/(\d+)/;
+const ARTICLE_PERMALINK = /^\/(?:i\/article|([A-Za-z0-9_]{1,15})\/article)\/(\d{1,25})(?:[/?#]|$)/;
 
 /** Fallback for X Article pages that render no `article[data-testid="tweet"]`: synthesises the post from the URL alone. */
 export function postFromArticleUrl(url: string, title = ''): Post | null {
@@ -75,21 +77,40 @@ function permalinkOf(article: Element): { handle: string; id: string; postedAt: 
   return { handle: m[1], id: m[2], postedAt: time?.getAttribute('datetime') ?? null };
 }
 
-function authorOf(article: Element): { handle: string; name: string } {
+/**
+ * Display name only. The `@handle` in the name box is page-written text, so it is never read as
+ * identity: the handle always comes from the permalink.
+ */
+function displayNameOf(article: Element): string {
   const box = article.querySelector(SEL.userName);
-  let name = '';
-  let handle = '';
   for (const a of box?.querySelectorAll('a[role="link"]') ?? []) {
     const t = (a.textContent ?? '').trim();
-    if (t.startsWith('@')) handle = handle || t.slice(1);
-    else name = name || t;
+    if (t && !t.startsWith('@')) return t;
   }
-  return { handle, name };
+  return '';
+}
+
+/**
+ * Whether the element is actually shown to the user. jsdom (tests) has no layout engine at all, so
+ * nothing ever reports geometry there; fall back to the styles it does resolve.
+ */
+export function isRendered(el: Element): boolean {
+  const h = el as HTMLElement;
+  if (h.getClientRects?.().length) return true;
+  if (h.offsetParent) return true;
+  const doc = el.ownerDocument;
+  if (doc.documentElement.getClientRects?.().length) return false;
+  const view = doc.defaultView;
+  if (!view) return true;
+  for (let n: Element | null = el; n; n = n.parentElement) {
+    const style = view.getComputedStyle(n);
+    if (style.display === 'none' || style.visibility === 'hidden') return false;
+  }
+  return true;
 }
 
 export function extractPost(article: Element, fallbackUrl?: string): Post | null {
   const link = permalinkOf(article);
-  const author = authorOf(article);
   let id: string; let handle: string; let postedAt: string | null;
   if (link) { id = link.id; handle = link.handle; postedAt = link.postedAt; }
   else {
@@ -102,8 +123,8 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
   return {
     id,
     url: `https://x.com/${handle}/status/${id}`,
-    authorHandle: author.handle || handle,
-    authorName: author.name,
+    authorHandle: handle,
+    authorName: displayNameOf(article),
     text,
     postedAt,
     kind: 'post',
@@ -121,15 +142,15 @@ export function extractVisiblePosts(root: ParentNode): Post[] {
   return out;
 }
 
-/** On a status page, the main article is the one whose permalink equals the page path; otherwise the first article. */
+/**
+ * On a status page, the main article is the rendered one whose permalink id equals the page id — and
+ * nothing else, so an injected article cannot stand in for the post the user opened.
+ */
 export function findMainArticle(root: ParentNode, url: string): Element | null {
-  const articles = [...root.querySelectorAll(SEL.article)];
+  const articles = [...root.querySelectorAll(SEL.article)].filter(isRendered);
   if (articles.length === 0) return null;
   const m = PERMALINK.exec(new URL(url).pathname);
-  if (m) {
-    const hit = articles.find((a) => permalinkOf(a)?.id === m[2]);
-    if (hit) return hit;
-  }
+  if (m) return articles.find((a) => permalinkOf(a)?.id === m[2]) ?? null;
   return articles[0];
 }
 

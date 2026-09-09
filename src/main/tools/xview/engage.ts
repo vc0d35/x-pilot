@@ -4,6 +4,26 @@ import { normalizePostUrl } from './read-post';
 import { VIEW_ARG, isToolResult, parseView, pickView } from './target';
 
 const LIKE_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
+const EXCERPT_MAX = 280;
+
+interface VisiblePostRow { url?: unknown; authorHandle?: unknown; text?: unknown }
+
+/**
+ * What to show on the confirmation card. A status id is not something a user can check, so the
+ * post is read off the screen when it happens to be there; otherwise the URL is all there is.
+ */
+async function likeDetail(ctx: XViewToolCtx, target: string): Promise<string> {
+  try {
+    const seen = await ctx.xview.callPreload('x_read_visible_posts', { limit: 100 });
+    if (!seen.success || !Array.isArray(seen.content)) return target;
+    const match = (seen.content as VisiblePostRow[]).find((p) => normalizePostUrl(String(p?.url ?? '')) === target);
+    if (!match) return target;
+    const text = String(match.text ?? '').replace(/\s+/g, ' ').trim().slice(0, EXCERPT_MAX);
+    const handle = String(match.authorHandle ?? '').replace(/\s+/g, ' ').trim();
+    if (!text && !handle) return target;
+    return `${handle ? `@${handle}` : 'Unknown author'} — ${text}\n${target}`;
+  } catch { return target; }
+}
 
 export const likePost: ToolModule<XViewToolCtx> = {
   spec: {
@@ -17,7 +37,8 @@ export const likePost: ToolModule<XViewToolCtx> = {
     if (!target || !target.includes('/status/')) return fail(`Not a post URL: ${String(args.url ?? '')}`);
     const action = args.action === 'unlike' ? 'unlike' : 'like';
     if (ctx.likesMode() === 'confirm') {
-      const decision = await ctx.approvals.request({ kind: 'post', title: `${action === 'like' ? 'Like' : 'Unlike'} this post?`, detail: target, options: [{ id: 'yes', label: action === 'like' ? 'Like' : 'Unlike' }, { id: 'cancel', label: 'Cancel' }] }, LIKE_CONFIRM_TIMEOUT_MS);
+      const detail = await likeDetail(ctx, target);
+      const decision = await ctx.approvals.request({ kind: 'post', title: `${action === 'like' ? 'Like' : 'Unlike'} this post?`, detail, options: [{ id: 'yes', label: action === 'like' ? 'Like' : 'Unlike' }, { id: 'cancel', label: 'Cancel' }] }, LIKE_CONFIRM_TIMEOUT_MS);
       if (decision !== 'yes') return ok({ done: false, status: decision === 'timeout' ? 'confirmation_timed_out' : 'cancelled_by_user', reason: 'The user chose not to do this; their decision is final.' });
     }
     // Prefer the visible window when the post is already rendered there.

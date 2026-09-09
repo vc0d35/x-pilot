@@ -48,6 +48,16 @@ describe('x_navigate', () => {
     expect(await navigate.execute({ url: 'https://example.com' }, c)).toEqual(fail('Refusing to navigate outside x.com: https://example.com'));
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
+  it('refuses x.com paths that act on the account or the session', async () => {
+    const c = ctx();
+    for (const url of ['https://x.com/logout', 'https://x.com/settings', 'https://x.com/settings/deactivate', 'https://x.com/i/flow/login', 'https://x.com/intent/follow?screen_name=evil', 'https://x.com/compose/post', 'https://x.com/account/switch', 'https://x.com/SETTINGS/x']) {
+      const r = await navigate.execute({ url }, c);
+      expect(r.success, url).toBe(false);
+    }
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+    expect(await navigate.execute({ url: 'https://x.com/alice/status/1' }, c)).toMatchObject({ success: true });
+    expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/alice/status/1');
+  });
 });
 
 describe('x_search', () => {
@@ -60,10 +70,12 @@ describe('x_search', () => {
 });
 
 describe('x_read_post', () => {
-  it('reads in place when visible, otherwise in the background', async () => {
+  it('reads in the background even when the visible window claims to be on that post', async () => {
     const c = ctx('https://x.com/alice/status/111');
     await readPost.execute({ url: 'https://x.com/alice/status/111?s=1' }, c);
     expect(c.xview.navigate).not.toHaveBeenCalled();
+    expect(c.xview.callPreload).not.toHaveBeenCalled();
+    expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/alice/status/111');
     await readPost.execute({ url: 'https://x.com/bob/status/2' }, c);
     expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2');
     expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {});
@@ -93,10 +105,11 @@ describe('background vs visible routing', () => {
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
 
-  it('x_read_post uses the visible window when it already shows the post, or when asked', async () => {
+  it('x_read_post uses the visible window only when asked, and stays put when it is already there', async () => {
     const c = ctx('https://x.com/alice/status/111');
-    await readPost.execute({ url: 'https://x.com/alice/status/111' }, c);
+    await readPost.execute({ url: 'https://x.com/alice/status/111', view: 'visible' }, c);
     expect(c.xview.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {});
+    expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(c.bg.navigate).not.toHaveBeenCalled();
     await readPost.execute({ url: 'https://x.com/bob/status/2', view: 'visible' }, c);
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2');

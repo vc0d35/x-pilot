@@ -61,6 +61,8 @@ code { font: inherit; }
 .msg-agent p, .msg-agent ul, .msg-agent ol, .msg-agent pre, .msg-agent blockquote { margin: 0 0 .6em; }
 .msg-agent ul, .msg-agent ol { padding-left: 1.4em; }
 .msg-agent a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; }
+/* The real destination of a link whose text names a different host. */
+.link-host { color: var(--muted); font-size: .9em; text-decoration: none; }
 .msg-agent code { background: var(--bg); border: 1px solid var(--line); border-radius: 3px; padding: 0 3px; }
 .msg-agent pre { background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 6px 8px; overflow-x: auto; }
 .msg-agent pre code { border: 0; padding: 0; background: transparent; }
@@ -82,10 +84,12 @@ code { font: inherit; }
 .tool-status-failed { color: var(--fg); }
 .tool-group-body { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 0 12px; }
 
-.approval { border: 1px solid var(--fg); border-radius: 4px; padding: 8px; }
-.approval-title { font-weight: 700; margin-bottom: 4px; }
-.approval-detail { white-space: pre-wrap; font-size: 12px; margin: 0 0 8px; }
-.approval-actions { display: flex; gap: 8px; }
+.approval { border: 1px solid var(--fg); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+/* Sticky, so the question stays on screen however far the detail is scrolled. */
+.approval-title { font-weight: 700; position: sticky; top: 0; background: var(--bg); padding: 2px 0; }
+/* Bounded to ~12 lines with its own scrollbar: a padded detail cannot push the buttons off screen. */
+.approval-detail { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; margin: 0; max-height: 17.4em; overflow: auto; }
+.approval-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .approval-decision { color: var(--muted); font-size: 12px; }
 
 .composer { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border-top: 1px solid var(--line); }

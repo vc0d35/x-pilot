@@ -9,7 +9,7 @@ import type { ApprovalBroker } from './approvals';
 import type { SettingsStore } from './settings';
 import type { HistoryStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
-import type { DeepPartial, Settings } from '../shared/settings';
+import { SettingsPatchSchema } from '../shared/settings';
 import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
@@ -50,7 +50,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   ipcMain.handle(IPC.agentResolveApproval, guarded((_e, raw) => { const { id, decision } = ResolveSchema.parse(raw); approvals.resolve(id, decision); }));
   ipcMain.handle(IPC.agentListModels, guarded(() => agent.listModels()));
   ipcMain.handle(IPC.settingsGet, guarded(() => settings.get()));
-  ipcMain.handle(IPC.settingsSet, guarded((_e, patch) => settings.update(patch as DeepPartial<Settings>)));
+  ipcMain.handle(IPC.settingsSet, guarded((_e, raw) => settings.update(SettingsPatchSchema.parse(raw))));
   settings.onChange((s) => { if (!sidebar.isDestroyed()) sidebar.send(IPC.settingsChanged, s); });
   ipcMain.handle(IPC.linkOpen, guarded((_e, raw) => { openLink(z.object({ url: z.string().max(2048) }).parse(raw).url); }));
   ipcMain.handle(IPC.sidebarSetCollapsed, guarded((_e, raw) => { setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed); }));

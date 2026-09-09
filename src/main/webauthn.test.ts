@@ -12,6 +12,13 @@ describe('resolveKeychainGroup', () => {
     expect(resolveKeychainGroup({ XPILOT_TEAM_ID: 'A1B2C3D4E5' }, 'darwin')).toBe('A1B2C3D4E5.com.vicnicius.xpilot.webauthn');
     expect(resolveKeychainGroup({ XPILOT_KEYCHAIN_GROUP: 'X.y.z' }, 'darwin')).toBe('X.y.z');
   });
+
+  it('ignores the environment in a packaged build and uses the team id baked into the bundle', () => {
+    const env = { XPILOT_KEYCHAIN_GROUP: 'ABC', XPILOT_TEAM_ID: 'ZZZZZZZZZZ' };
+    expect(resolveKeychainGroup(env, 'darwin', { packaged: true })).toBeNull();
+    expect(resolveKeychainGroup(env, 'darwin', { packaged: true, bundleTeamId: 'A1B2C3D4E5' })).toBe('A1B2C3D4E5.com.vicnicius.xpilot.webauthn');
+    expect(resolveKeychainGroup(env, 'darwin', { packaged: false })).toBe('ABC');
+  });
 });
 
 describe('configureTouchIdPasskeys', () => {

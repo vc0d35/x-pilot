@@ -20,8 +20,15 @@ export function parseSchedule(input: Partial<Record<'every' | 'cron', unknown>>)
     return { every: input.every.trim() };
   }
   if (typeof input.cron === 'string') {
-    try { new Cron(input.cron.trim()); } catch (err) { throw new Error(`Invalid cron expression "${input.cron}": ${err instanceof Error ? err.message : String(err)}`); }
-    return { cron: input.cron.trim() };
+    const expr = input.cron.trim();
+    let cron: Cron;
+    try { cron = new Cron(expr); } catch (err) { throw new Error(`Invalid cron expression "${expr}": ${err instanceof Error ? err.message : String(err)}`); }
+    const first = cron.nextRun();
+    if (!first) throw new Error(`cron "${expr}" never runs`);
+    // The same 5-minute floor as "every": a cron expression is just another way to say how often.
+    const second = cron.nextRun(first);
+    if (second && second.getTime() - first.getTime() < MIN_EVERY_MS) throw new Error('cron must not fire more often than every 5 minutes');
+    return { cron: expr };
   }
   throw new Error('schedule must be { every: "30m" | "1h" | "1d" } or { cron: "0 * * * *" }');
 }

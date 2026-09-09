@@ -12,6 +12,8 @@ export function installLikeCapture(doc: Document, getUrl: () => string, send: (c
   let snapshot: PointerSnapshot | null = null;
 
   const onPointerDown = (ev: Event) => {
+    // Page script can dispatch like/unlike events at will; only a real user gesture may write history.
+    if (!ev.isTrusted) return;
     const target = ev.target as Element | null;
     const btn = target?.closest?.(`${SEL.likeButton}, ${SEL.unlikeButton}`) as HTMLElement | null;
     if (!btn) { snapshot = null; return; }
@@ -21,6 +23,7 @@ export function installLikeCapture(doc: Document, getUrl: () => string, send: (c
   };
 
   const handler = (ev: Event) => {
+    if (!ev.isTrusted) return;
     const target = ev.target as Element | null;
     const btn = target?.closest?.(`${SEL.likeButton}, ${SEL.unlikeButton}`) as HTMLElement | null;
     if (!btn) { snapshot = null; return; }

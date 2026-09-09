@@ -5,8 +5,19 @@
  */
 export const BUNDLE_ID = 'com.vicnicius.xpilot';
 
-export function resolveKeychainGroup(env: Record<string, string | undefined>, platform: string): string | null {
+/**
+ * A packaged app takes its keychain group from the identity it was built and signed with (the team
+ * id baked into its own package.json), never from the environment it happens to be launched in:
+ * the group is attacker-influenced input to a Keychain API otherwise. The environment switches stay
+ * available in development, where there is no bundle to read the team id from.
+ */
+export function resolveKeychainGroup(
+  env: Record<string, string | undefined>,
+  platform: string,
+  opts: { packaged?: boolean; bundleTeamId?: string | null } = {},
+): string | null {
   if (platform !== 'darwin') return null;
+  if (opts.packaged) return opts.bundleTeamId ? `${opts.bundleTeamId}.${BUNDLE_ID}.webauthn` : null;
   const explicit = env.XPILOT_KEYCHAIN_GROUP?.trim();
   if (explicit) return explicit;
   const team = env.XPILOT_TEAM_ID?.trim();

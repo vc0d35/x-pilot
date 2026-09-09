@@ -37,6 +37,12 @@ describe('locateCodex', () => {
     }
   });
 
+  it('probes system directories before user-writable ones', () => {
+    const dirs = candidateDirs({ home: '/Users/x', listDir: () => [] });
+    expect(dirs.slice(0, 2)).toEqual(['/opt/homebrew/bin', '/usr/local/bin']);
+    expect(dirs[dirs.length - 1]).toBe('/Users/x/.codex/bin');
+  });
+
   it('picks the newest nvm node version', async () => {
     const dirs = { '/Users/x/.nvm/versions/node': ['v18.20.0', 'v22.3.1', 'v20.11.0'] };
     const fs = fakeFs(['/Users/x/.nvm/versions/node/v18.20.0/bin/codex', '/Users/x/.nvm/versions/node/v22.3.1/bin/codex'], dirs);
@@ -45,7 +51,7 @@ describe('locateCodex', () => {
       .toEqual(['/Users/x/.nvm/versions/node/v22.3.1/bin', '/Users/x/.nvm/versions/node/v20.11.0/bin', '/Users/x/.nvm/versions/node/v18.20.0/bin']);
   });
 
-  it('asks the login shell last and only when nothing else matched', async () => {
+  it('asks the login shell after PATH, and not at all when PATH already answered', async () => {
     const loginShellLookup = vi.fn(async () => '/Users/x/.asdf/shims/codex\n');
     const fs = fakeFs(['/Users/x/.asdf/shims/codex']);
     await expect(locateCodex({ ...base, ...fs, loginShellLookup })).resolves.toBe('/Users/x/.asdf/shims/codex');
@@ -54,6 +60,15 @@ describe('locateCodex', () => {
     loginShellLookup.mockClear();
     await expect(locateCodex({ ...base, ...fakeFs(['/usr/bin/codex']), loginShellLookup })).resolves.toBe('/usr/bin/codex');
     expect(loginShellLookup).not.toHaveBeenCalled();
+  });
+
+  it('prefers what the login shell reports over a binary planted in a guessed directory', async () => {
+    const planted = '/Users/x/.codex/bin/codex';
+    const real = '/Users/x/.nvm/versions/node/v24.13.0/bin/codex';
+    const fs = fakeFs([planted, real], { '/Users/x/.nvm/versions/node': ['v24.13.0'] });
+    const loginShellLookup = vi.fn(async () => real);
+    await expect(locateCodex({ ...base, ...fs, loginShellLookup })).resolves.toBe(real);
+    await expect(locateCodex({ ...base, ...fakeFs([planted]), loginShellLookup: async () => null })).resolves.toBe(planted);
   });
 
   it('returns null when codex is nowhere', async () => {

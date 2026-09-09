@@ -13,6 +13,13 @@ describe('parseSchedule', () => {
     expect(() => parseSchedule({ cron: 'every hour' })).toThrow(/cron/);
     expect(() => parseSchedule({} as never)).toThrow(/schedule/);
   });
+  it('holds cron to the same 5-minute floor as "every"', () => {
+    expect(() => parseSchedule({ cron: '* * * * * *' })).toThrow(/every 5 minutes/);
+    expect(() => parseSchedule({ cron: '*/10 * * * * *' })).toThrow(/every 5 minutes/);
+    expect(() => parseSchedule({ cron: '* * * * *' })).toThrow(/every 5 minutes/);
+    expect(parseSchedule({ cron: '*/5 * * * *' })).toEqual({ cron: '*/5 * * * *' });
+    expect(parseSchedule({ cron: '0 9 * * 1-5' })).toEqual({ cron: '0 9 * * 1-5' });
+  });
 });
 
 describe('nextRun', () => {

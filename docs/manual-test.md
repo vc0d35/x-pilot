@@ -64,6 +64,25 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] On Home: "what's in Today's News?" → the hidden window loads Explore (source: background); the visible window does not move.
 - [ ] Wait for the "Show N posts" pill on Home, then "show me the new posts" → x_show_new_posts clicks it and the timeline refreshes on screen.
 
+## Security
+Open DevTools on the X view (`XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs x "…"`)
+for the first two checks; both must fail to do anything.
+- [ ] Synthetic like: run
+      `document.querySelector('button[data-testid="like"]').click()` in the X view console → no new row in
+      liked history ("what did I like about …?" and Settings → history count are unchanged). Then like the
+      same post by hand (mouse, and again with X's `l` shortcut) → the row does appear.
+- [ ] Injected post: add an `article[data-testid="tweet"]` with `style="display:none"`, a `@nytimes`
+      display name and an `/attacker/status/<id>` permalink to a status page → "what post am I looking at?"
+      still reports the real post and author; a scripted click on its like button records nothing.
+- [ ] Popup from a popup (fixed in the navigation lane): from an allowed popup, open another window and
+      send it off-allowlist → it lands in the system browser, never in an app window without chrome.
+- [ ] Long approval detail: ask for something that needs approval with a very long detail (e.g. a command
+      with a few hundred blank lines) → the card's title and its Allow/Deny buttons are both visible without
+      scrolling; only the detail block scrolls, and the list does not scroll past a pending card.
+- [ ] Deceptive link: have the agent write `[https://x.com/safe](https://evil.com/phish)` → the sidebar
+      shows `https://x.com/safe (evil.com)`, hovering shows the full href, and clicking opens evil.com in
+      the system browser (never in the X view).
+
 ## Inspecting the live app
 Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --list` and
 `node scripts/inspect.mjs x "document.title"` (targets: x, bg, sidebar, or a URL substring;

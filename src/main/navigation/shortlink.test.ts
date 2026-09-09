@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { resolveShortLink, isShortLinkHost, routeShortLink, sidebarLinkAction } from './shortlink';
+import { resolveShortLink, isFollowableHop, isShortLinkHost, routeShortLink, sidebarLinkAction } from './shortlink';
 import { DEFAULT_ALLOW_HOSTS } from '../../shared/settings';
 
 const fetcher = (hops: Record<string, string | null>) => vi.fn(async (url: string) => {
@@ -28,6 +28,52 @@ describe('resolveShortLink', () => {
   it('returns the input when the request fails', async () => {
     const f = vi.fn(async () => { throw new Error('offline'); });
     await expect(resolveShortLink('https://t.co/a', f)).resolves.toBe('https://t.co/a');
+  });
+
+  it('stops at the default hop limit of five', async () => {
+    const f = vi.fn(async (url: string) => ({ status: 301, location: `${url}x` }));
+    await expect(resolveShortLink('https://t.co/a', f)).resolves.toBe('https://t.co/axxxxx');
+    expect(f).toHaveBeenCalledTimes(5);
+  });
+
+  it('refuses a hop that leaves https, and never fetches it', async () => {
+    for (const hop of ['file:///etc/passwd', 'http://169.254.169.254/latest/meta-data', 'ftp://example.com/x']) {
+      const f = fetcher({ 'https://t.co/a': hop });
+      await expect(resolveShortLink('https://t.co/a', f)).resolves.toBe('https://t.co/a');
+      expect(f).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('refuses a hop to a private or link-local address', async () => {
+    for (const hop of ['https://127.0.0.1/x', 'https://localhost/x', 'https://169.254.169.254/x', 'https://10.0.0.1/x', 'https://192.168.1.1/x', 'https://172.16.0.1/x', 'https://[::1]/x', 'https://printer.local/x']) {
+      const f = fetcher({ 'https://t.co/a': hop });
+      await expect(resolveShortLink('https://t.co/a', f), hop).resolves.toBe('https://t.co/a');
+      expect(f).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('resolves a live chain through to an x.com status, so the view branch is reachable again', async () => {
+    const f = fetcher({ 'https://t.co/a': 'https://bit.ly/b', 'https://bit.ly/b': 'https://x.com/attacker/status/1', 'https://x.com/attacker/status/1': null });
+    const target = await resolveShortLink('https://t.co/a', f);
+    expect(target).toBe('https://x.com/attacker/status/1');
+    expect(routeShortLink(target, DEFAULT_ALLOW_HOSTS)).toBe('view');
+  });
+
+  it('never fetches a starting url that is not a public https url', async () => {
+    const f = fetcher({});
+    await expect(resolveShortLink('file:///etc/hosts', f)).resolves.toBe('file:///etc/hosts');
+    expect(f).not.toHaveBeenCalled();
+  });
+});
+
+describe('isFollowableHop', () => {
+  it('accepts public https and rejects everything else', () => {
+    expect(isFollowableHop('https://example.com/a')).toBe(true);
+    expect(isFollowableHop('https://t.co/a')).toBe(true);
+    expect(isFollowableHop('http://example.com/a')).toBe(false);
+    expect(isFollowableHop('file:///etc/passwd')).toBe(false);
+    expect(isFollowableHop('https://0.0.0.0/a')).toBe(false);
+    expect(isFollowableHop('not a url')).toBe(false);
   });
 });
 

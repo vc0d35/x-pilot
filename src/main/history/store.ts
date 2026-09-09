@@ -75,9 +75,12 @@ function stamp(): string { const t = Math.max(Date.now(), lastStamp + 1); lastSt
 
 const titleFrom = (text: string) => { const t = text.replace(/\s+/g, ' ').trim(); return t.length > TITLE_MAX ? t.slice(0, TITLE_MAX) + '…' : t; };
 
+/** Matching prefix terms cost seconds each in FTS5, and the query runs on the main thread. */
+const MAX_FTS_TOKENS = 32;
+
 /** Turns free text into an FTS5 query: each token becomes a quoted prefix term, ANDed together. */
 export function toFtsQuery(text: string): string {
-  return text.split(/\s+/).map((t) => t.replace(/"/g, '').replace(/[^\p{L}\p{N}_@#]/gu, '')).filter(Boolean).map((t) => `"${t}"*`).join(' ');
+  return text.split(/\s+/).map((t) => t.replace(/"/g, '').replace(/[^\p{L}\p{N}_@#]/gu, '')).filter(Boolean).slice(0, MAX_FTS_TOKENS).map((t) => `"${t}"*`).join(' ');
 }
 
 export class HistoryStore {

@@ -12,12 +12,31 @@ const canNotarize = Boolean(
   env.APPLE_KEYCHAIN_PROFILE || (env.APPLE_ID && env.APPLE_APP_SPECIFIC_PASSWORD && env.APPLE_TEAM_ID),
 );
 
+// Baked into the packaged app so a shipped build derives its keychain group from the identity it
+// was signed with, never from the environment it happens to run in (see resolveKeychainGroup).
+const teamId = (env.XPILOT_TEAM_ID ?? '').trim();
+
 module.exports = {
   appId: 'com.vicnicius.xpilot',
   productName: 'XPilot',
+  // The fuses are flipped right before signing. enableCookieEncryption is a one-way transition:
+  // once a profile's cookies are written encrypted, a build with the fuse off cannot read them.
+  electronFuses: {
+    runAsNode: false,
+    enableCookieEncryption: true,
+    enableNodeOptionsEnvironmentVariable: false,
+    enableNodeCliInspectArguments: false,
+    enableEmbeddedAsarIntegrityValidation: true,
+    onlyLoadAppFromAsar: true,
+    // Left on: the sidebar renderer is loaded with loadFile out of the asar, and with this fuse off
+    // the packaged app cannot read it (ERR_FILE_NOT_FOUND on out/renderer/index.html).
+    grantFileProtocolExtraPrivileges: true,
+    // Flipping fuses invalidates the ad-hoc signature an unsigned local build carries.
+    resetAdHocDarwinSignature: true,
+  },
   // Injected into the bundled package.json so app.getName() is XPilot and the packaged app
   // uses its own profile folder instead of sharing (and single-instance-locking) the dev one.
-  extraMetadata: { productName: 'XPilot' },
+  extraMetadata: { productName: 'XPilot', ...(teamId ? { xpilotTeamId: teamId } : {}) },
   directories: { buildResources: 'build', output: 'dist' },
   files: ['out/**', 'package.json'],
   artifactName: '${productName}-${version}-${arch}.${ext}',

@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      allow_unsigned:
+        description: 'Build and publish without a signing certificate (test builds only)'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -12,28 +18,38 @@ jobs:
   release:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           cache: npm
-      - run: npm ci
+      # No dependency install script runs in the job that later holds the signing secrets. The
+      # only one this build needs is Electron's binary download, which is invoked explicitly.
+      - run: npm ci --ignore-scripts
+      - run: node node_modules/electron/install.js
       - run: npm run typecheck
       - run: npm test
-      # Without a certificate electron-builder still searches the keychain and fails the
-      # build, so tell it not to look: a secret-less repo then produces unsigned artifacts.
+      # An unsigned bundle seals nothing: its app.asar can be rewritten in place and Gatekeeper
+      # teaches users to right-click-Open. A tag push therefore requires a certificate; going
+      # without one has to be asked for by hand, and it never reaches a release page.
       - name: Choose signing mode
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
+          ALLOW_UNSIGNED: ${{ inputs.allow_unsigned }}
         run: |
-          if [ -z "$CSC_LINK" ]; then
-            echo "No CSC_LINK secret: building unsigned."
+          if [ -n "$CSC_LINK" ]; then
+            echo "CSC_LINK secret present: signing and publishing."
+            echo "PUBLISH_MODE=always" >> "$GITHUB_ENV"
+          elif [ "$ALLOW_UNSIGNED" = "true" ]; then
+            echo "::warning::No signing certificate: building unsigned artifacts and NOT publishing them."
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "PUBLISH_MODE=never" >> "$GITHUB_ENV"
           else
-            echo "CSC_LINK secret present: signing."
+            echo "::error::No CSC_LINK secret configured; refusing to build an unsigned release. Re-run from the Actions tab with allow_unsigned to produce unpublished test artifacts."
+            exit 1
           fi
       - name: Build and publish
-        run: npm run build && node scripts/render-entitlements.mjs && npx electron-builder --mac --publish always
+        run: npm run build && node scripts/render-entitlements.mjs && npx electron-builder --mac --publish "$PUBLISH_MODE"
         env:
           GH_TOKEN: ${{ github.token }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
@@ -44,3 +60,10 @@ jobs:
           # Only set XPILOT_TEAM_ID once build/embedded.provisionprofile ships with the
           # repo: the passkey entitlement without a profile is SIGKILLed at launch.
           XPILOT_TEAM_ID: ${{ secrets.XPILOT_TEAM_ID }}
+      - name: Verify the published bundle is really signed
+        if: env.PUBLISH_MODE == 'always'
+        run: |
+          APP="dist/mac-arm64/XPilot.app"
+          codesign --verify --deep --strict "$APP"
+          codesign -dvvv "$APP" 2>&1 | grep -q 'flags=.*runtime'
+          npx @electron/fuses read --app "$APP" | grep -q 'EnableCookieEncryption is Enabled'

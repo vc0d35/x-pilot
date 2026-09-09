@@ -7,6 +7,9 @@ import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
 import { JsonRpcError, JsonRpcStdio } from './jsonrpc';
 import { CODEX_MISSING_MESSAGE, codexSpawnEnv, resolveCodexBinary } from './binary';
+import { fence, fenceBlock, fenceLine, pageContentBlock } from '../fence';
+
+export { fence } from '../fence';
 
 export interface CodexProviderDeps {
   callTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
@@ -23,10 +26,11 @@ const STDERR_IN_MESSAGE = 400;
 const SIGKILL_AFTER_MS = 2000;
 const EXIT_WAIT_MS = 4000;
 
-/** Escapes the delimiters that fence untrusted text, so page content cannot close its own fence. */
-export function fence(text: string): string {
-  return text.replace(/<\/(page-content|tool-output)/gi, '<\\/$1');
-}
+/** Caps on page-controlled fields, so one hostile post cannot crowd out the turn. */
+const HANDLE_MAX = 64;
+const URL_MAX = 512;
+const TITLE_MAX = 200;
+const TEXT_MAX = 4000;
 
 export function wrapToolOutput(text: string): string {
   return `<tool-output untrusted source="x.com">\n${fence(text)}\n</tool-output>`;
@@ -38,24 +42,31 @@ export function contextKey(ctx: PageContext | null | undefined): string | null {
   return ctx.post ? `post:${ctx.post.id}` : `visible:${(ctx.visible ?? []).map((v) => v.id).join(',')}`;
 }
 
+/**
+ * The page controls every field below, identity included, so all of them go inside the fence:
+ * the only lines outside it are ours.
+ */
 export function buildTurnText(text: string, ctx: PageContext | null | undefined, lastKey: string | null): string {
   if (!ctx) return text;
+  const unchanged = lastKey === contextKey(ctx);
   const p = ctx.post;
   if (p) {
-    if (lastKey === contextKey(ctx)) return `Current page: still the ${p.kind} by @${p.authorHandle} at ${p.url}\n\n${text}`;
-    const lines = [`Current page: ${p.kind} by @${p.authorHandle} at ${p.url}`, '<page-content untrusted>'];
-    if (p.articleTitle) lines.push(`Title: ${fence(p.articleTitle)}`);
-    lines.push(fence(p.text));
-    if (p.articleBody) lines.push('', fence(p.articleBody.slice(0, 4000)));
-    lines.push('</page-content>');
-    return `${lines.join('\n')}\n\n${text}`;
+    const author = p.authorName ? `@${fenceLine(p.authorHandle, HANDLE_MAX)} (${fenceLine(p.authorName, HANDLE_MAX)})` : `@${fenceLine(p.authorHandle, HANDLE_MAX)}`;
+    const head = `${fenceLine(p.kind, HANDLE_MAX)} by ${author} at ${fenceLine(p.url, URL_MAX)}`;
+    if (unchanged) return `Current page, unchanged since the last turn:\n${pageContentBlock([head])}\n\n${text}`;
+    const lines = [head];
+    if (p.articleTitle) lines.push(`Title: ${fenceLine(p.articleTitle, TITLE_MAX)}`);
+    if (p.text) lines.push(fenceBlock(p.text, TEXT_MAX));
+    if (p.articleBody) lines.push('', fenceBlock(p.articleBody, TEXT_MAX));
+    return `Current page:\n${pageContentBlock(lines)}\n\n${text}`;
   }
   const visible = ctx.visible ?? [];
   if (visible.length === 0) return text;
-  if (lastKey === contextKey(ctx)) return `Current page: still the same view of ${ctx.url}\n\n${text}`;
-  const lines = [`Current page: ${ctx.kind} at ${ctx.url}. Posts on screen, top to bottom:`];
-  visible.forEach((v, i) => lines.push(`${i + 1}. @${v.authorHandle} — ${v.url}`, `<page-content untrusted>${fence(v.text)}</page-content>`));
-  return `${lines.join('\n')}\n\n${text}`;
+  const view = `view: ${fenceLine(ctx.kind, HANDLE_MAX)} at ${fenceLine(ctx.url, URL_MAX)}`;
+  if (unchanged) return `Current page, unchanged since the last turn:\n${pageContentBlock([view])}\n\n${text}`;
+  const blocks = [pageContentBlock([view])];
+  visible.forEach((v, i) => blocks.push(pageContentBlock([`${i + 1}. @${fenceLine(v.authorHandle, HANDLE_MAX)} — ${fenceLine(v.url, URL_MAX)}`, fenceBlock(v.text, TEXT_MAX)])));
+  return `Current page, posts on screen top to bottom:\n${blocks.join('\n')}\n\n${text}`;
 }
 
 export class CodexProvider implements AgentProvider {

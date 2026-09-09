@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { Entry, State, ToolCall } from '../state';
+import { collapseBlankLines } from '../display-safety';
 import { groupEntries } from '../grouping';
 import { Markdown } from './Markdown';
 
@@ -21,12 +22,12 @@ function ToolRow({ call }: { call: ToolCall }) {
   );
 }
 
-function ApprovalCard({ entry, onResolve }: { entry: Extract<Entry, { kind: 'approval' }>; onResolve: (id: string, d: string) => void }) {
+function ApprovalCard({ entry, onResolve, cardRef }: { entry: Extract<Entry, { kind: 'approval' }>; onResolve: (id: string, d: string) => void; cardRef?: RefObject<HTMLDivElement | null> }) {
   const { request, decision } = entry;
   return (
-    <div className={`approval approval-${request.kind}`}>
+    <div className={`approval approval-${request.kind}`} ref={cardRef}>
       <div className="approval-title">{request.title}</div>
-      <pre className="approval-detail">{request.detail}</pre>
+      <pre className="approval-detail">{collapseBlankLines(request.detail)}</pre>
       {decision
         ? <div className="approval-decision">Decision: {decision}</div>
         : <div className="approval-actions">{request.options.map((o) => <button key={o.id} onClick={() => onResolve(request.id, o.id)}>{o.label}</button>)}</div>}
@@ -67,7 +68,13 @@ function ThinkingRow({ steps }: { steps: { id: string; text: string }[] }) {
 
 export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; activity: State['activity']; onResolve: (id: string, d: string) => void }) {
   const endRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ block: 'end' }); }, [entries, activity]);
+  const pendingRef = useRef<HTMLDivElement>(null);
+  const pendingId = entries.filter((en): en is Extract<Entry, { kind: 'approval' }> => en.kind === 'approval' && !en.decision).at(-1)?.request.id;
+  // A pending card must never be scrolled past: an approval the user cannot see is one they cannot judge.
+  useEffect(() => {
+    if (pendingRef.current) pendingRef.current.scrollIntoView({ block: 'nearest' });
+    else endRef.current?.scrollIntoView({ block: 'end' });
+  }, [entries, activity, pendingId]);
   return (
     <main className="entries">
       {groupEntries(entries).map((en, i) => {
@@ -77,7 +84,7 @@ export function EntryList({ entries, activity, onResolve }: { entries: Entry[]; 
         }
         if (en.kind === 'tools') return <ToolGroup key={en.key} calls={en.calls} />;
         if (en.kind === 'thinking') return <ThinkingRow key={'th-' + en.id} steps={en.steps} />;
-        return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} />;
+        return <ApprovalCard key={en.request.id} entry={en} onResolve={onResolve} cardRef={en.request.id === pendingId ? pendingRef : undefined} />;
       })}
       <ActivityLine activity={activity} />
       <div ref={endRef} />

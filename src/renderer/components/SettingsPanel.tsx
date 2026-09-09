@@ -33,8 +33,8 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       )}
       <label>Agent likes
         <select value={settings.likes.mode} onChange={(e) => set({ likes: { mode: e.target.value as 'auto' | 'confirm' } })}>
-          <option value="auto">Autonomous (needed for scheduled liking)</option>
           <option value="confirm">Confirm each like in the sidebar</option>
+          <option value="auto">Autonomous (needed for scheduled liking)</option>
         </select>
       </label>
       <label>Web search

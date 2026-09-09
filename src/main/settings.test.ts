@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { SettingsStore } from './settings';
@@ -59,6 +59,32 @@ describe('SettingsStore', () => {
     const s = new SettingsStore(file);
     s.update({ posting: { mode: 'autonomous' } });
     expect(readdirSync(dirname(file))).toEqual(['settings.json']);
+    expect(JSON.parse(readFileSync(file, 'utf8')).posting.mode).toBe('autonomous');
+  });
+
+  it('writes the file readable only by its owner', () => {
+    const file = tmpFile();
+    new SettingsStore(file).update({ posting: { mode: 'autonomous' } });
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('narrows a world-readable settings file on the next read', () => {
+    const file = tmpFile();
+    writeFileSync(file, JSON.stringify({ posting: { mode: 'autonomous' } }));
+    chmodSync(file, 0o644);
+    expect(new SettingsStore(file).get().posting.mode).toBe('autonomous');
+    expect(statSync(file).mode & 0o777).toBe(0o600);
+  });
+
+  it('cannot be aimed at another file by planting the temp name as a symlink', () => {
+    const file = tmpFile();
+    const dir = dirname(file);
+    const canary = join(dir, 'canary');
+    writeFileSync(canary, 'ORIGINAL');
+    symlinkSync(canary, `${file}.tmp`);
+    const s = new SettingsStore(file);
+    s.update({ posting: { mode: 'autonomous' } });
+    expect(readFileSync(canary, 'utf8')).toBe('ORIGINAL');
     expect(JSON.parse(readFileSync(file, 'utf8')).posting.mode).toBe('autonomous');
   });
 });

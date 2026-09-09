@@ -1,6 +1,6 @@
-import { app, net, BrowserWindow, dialog, ipcMain, screen, session, shell, type WebContents } from 'electron';
+import { app, net, BrowserWindow, dialog, ipcMain, screen, session, shell } from 'electron';
 import { join } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createMainWindow } from './window';
 import { IPC } from '../shared/ipc';
 import { fail } from '../shared/tools';
@@ -9,7 +9,7 @@ import { installAppMenu } from './menu';
 import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { installPermissionHandlers } from './permissions';
-import { hardenWebContents } from './hardening';
+import { hardenWebContents, reviveOnCrash } from './hardening';
 import { createLinkRouter, rateLimit } from './links';
 import { SettingsStore } from './settings';
 import { AppToolSource, ToolRegistry } from './tools/registry';
@@ -49,10 +49,25 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) process.on(signal, () => ap
 async function start(): Promise<void> {
   try {
     await app.whenReady();
-    installPermissionHandlers({ x: session.fromPartition('persist:x'), default: session.defaultSession });
-    app.on('web-contents-created', (_e, contents) => hardenWebContents(contents));
+    // The profile holds the X session, the agent's settings and its history: keep it to this user.
+    const userData = app.getPath('userData');
+    restrictDir(userData);
+    const workspaceDir = join(userData, 'workspace');
+    restrictDir(workspaceDir);
 
-    const settings = new SettingsStore(join(app.getPath('userData'), 'settings.json'));
+    const settings = new SettingsStore(join(userData, 'settings.json'));
+    const allowHosts = () => settings.get().navigation.allowHosts;
+    const openExternalCalls: string[] | null = E2E ? [] : null;
+    const openExternal = rateLimit((url: string) => {
+      if (openExternalCalls) openExternalCalls.push(url);
+      else void shell.openExternal(url);
+    }, { max: 5, windowMs: 10_000 });
+
+    installPermissionHandlers({ x: session.fromPartition('persist:x'), default: session.defaultSession, allowHosts });
+    // Every WebContents, however it came to exist, gets the navigation policy: grandchild popups and
+    // the PDF export window are covered here rather than by per-site wiring nobody remembers to add.
+    app.on('web-contents-created', (_e, contents) => hardenWebContents(contents, (c) => attachNavigationPolicy(c, { allowHosts, openExternal })));
+
     const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
       bounds: pickInitialBounds(settings.get().window.bounds, screen.getAllDisplays().map((d) => d.workArea)),
       onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
@@ -62,28 +77,12 @@ async function start(): Promise<void> {
       rendererFile: join(__dirname, '../renderer/index.html'),
     });
     app.on('second-instance', () => { if (win.isMinimized()) win.restore(); win.focus(); });
-    configureTouchIdPasskeys({ app, onSelectAccount: (l) => { xView.webContents.session.on('select-webauthn-account', l); }, group: resolveKeychainGroup(process.env, process.platform) });
+    configureTouchIdPasskeys({ app, onSelectAccount: (l) => { xView.webContents.session.on('select-webauthn-account', l); }, group: resolveKeychainGroup(process.env, process.platform, { packaged: app.isPackaged, bundleTeamId: bundleTeamId() }) });
 
-    const reviveOnCrash = (contents: WebContents, what: string) => {
-      contents.on('render-process-gone', (_e, details) => {
-        console.warn(`[xpilot] ${what} renderer gone (${details.reason}); reloading`);
-        if (!contents.isDestroyed()) contents.reload();
-      });
-    };
     reviveOnCrash(xView.webContents, 'X view');
     reviveOnCrash(sidebar.webContents, 'sidebar');
     app.on('child-process-gone', (_e, details) => console.warn(`[xpilot] child process gone: ${details.type} (${details.reason})`));
 
-    const openExternalCalls: string[] | null = E2E ? [] : null;
-    const openExternal = rateLimit((url: string) => {
-      if (openExternalCalls) openExternalCalls.push(url);
-      else void shell.openExternal(url);
-    }, { max: 5, windowMs: 10_000 });
-    const headFetch = async (url: string) => {
-      const res = await net.fetch(url, { method: 'HEAD', redirect: 'manual' });
-      return { status: res.status, location: res.headers.get('location') };
-    };
-    const allowHosts = () => settings.get().navigation.allowHosts;
     const links = createLinkRouter({ allowHosts, headFetch, openExternal, loadInView: (url) => { void xView.webContents.loadURL(url); } });
     attachNavigationPolicy(xView.webContents, { allowHosts, openExternal, openShortLink: links.openShortLink });
     // The sidebar is our own renderer: it never navigates and never opens windows.
@@ -110,11 +109,13 @@ async function start(): Promise<void> {
     }));
     registry.onChange(() => console.log('[xpilot] tools:', registry.list().map((t) => t.name).join(', ')));
 
-    const history = new HistoryStore(join(app.getPath('userData'), 'history.sqlite'));
+    const historyPath = join(userData, 'history.sqlite');
+    const history = new HistoryStore(historyPath);
+    // node:sqlite creates the database and its write-ahead log with the process umask; the log
+    // holds the same rows as the database, so all three are narrowed once they exist.
+    for (const suffix of ['', '-wal', '-shm']) restrictFile(`${historyPath}${suffix}`);
     registerHistoryIpc({ ipc: ipcMain, xContentsId: xView.webContents.id, store: history });
     const libraryDir = () => settings.get().library.dir ?? join(app.getPath('documents'), 'X Pilot');
-    const workspaceDir = join(app.getPath('userData'), 'workspace');
-    mkdirSync(workspaceDir, { recursive: true });
     const taskRunner = new TaskRunner({
       createProvider: () => new CodexProvider({ callTool: (n, a) => taskRegistry.call(n, a), approvals, clientVersion: app.getVersion() }),
       tools: () => taskRegistry.list(), settings: () => settings.get().agent.codex, workspaceDir, store: history, log: (m) => console.log(m),
@@ -125,8 +126,10 @@ async function start(): Promise<void> {
       exportPdf: (url: string, outDir: string) => exportPdf({ url, outDir }, {
         createWindow: () => {
           const w = new BrowserWindow({ show: false, width: 900, height: 1400, webPreferences: { partition: 'persist:x', sandbox: true, contextIsolation: true } });
-          attachNavigationPolicy(w.webContents, { allowHosts, openExternal });
-          return { loadURL: (u) => w.loadURL(u), executeJavaScript: (c) => w.webContents.executeJavaScript(c, true), printToPDF: (o) => w.webContents.printToPDF(o), destroy: () => w.destroy() };
+          // The global hook already attached the policy; an unattended export opens nothing at all.
+          attachNavigationPolicy(w.webContents, { allowHosts, openExternal: () => { /* an export never opens the browser */ } });
+          w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+          return { loadURL: (u) => w.loadURL(u), executeJavaScript: (c) => w.webContents.executeJavaScript(c, true), printToPDF: (o) => w.webContents.printToPDF(o), getURL: () => w.webContents.getURL(), destroy: () => w.destroy() };
         },
       }),
       openPath: (p: string) => shell.openPath(p),
@@ -203,3 +206,54 @@ async function start(): Promise<void> {
 }
 
 app.on('window-all-closed', () => app.quit());
+
+/** Creates a profile directory the user alone can enter, or narrows one an older build left open. */
+function restrictDir(dir: string): void {
+  try {
+    if (existsSync(dir)) chmodSync(dir, 0o700);
+    else mkdirSync(dir, { recursive: true, mode: 0o700 });
+  } catch (err) {
+    console.warn(`[xpilot] could not restrict ${dir}`, err);
+  }
+}
+
+function restrictFile(file: string): void {
+  try {
+    chmodSync(file, 0o600);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') console.warn(`[xpilot] could not restrict ${file}`, err);
+  }
+}
+
+/**
+ * The Apple team id electron-builder baked into the packaged app's own package.json. It has to match
+ * the signing identity or the app is SIGKILLed at launch, which is what makes it bundle identity.
+ */
+function bundleTeamId(): string | null {
+  try {
+    const pkg = JSON.parse(readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')) as { xpilotTeamId?: string };
+    const team = pkg.xpilotTeamId?.trim();
+    return team && /^[A-Z0-9]{10}$/.test(team) ? team : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * A HEAD that reports the redirect instead of following it. `net.fetch` with `redirect: 'manual'`
+ * throws on a redirect rather than returning it, so the resolver is built on `net.request`, which
+ * also gives the per-hop timeout somewhere to abort.
+ */
+function headFetch(url: string, timeoutMs = 5_000): Promise<{ status: number; location: string | null }> {
+  return new Promise((resolve, reject) => {
+    const request = net.request({ url, method: 'HEAD', redirect: 'manual' });
+    let settled = false;
+    const finish = (act: () => void) => { if (settled) return; settled = true; clearTimeout(timer); act(); };
+    const timer = setTimeout(() => finish(() => { request.abort(); reject(new Error(`HEAD ${url} timed out`)); }), timeoutMs);
+    request.on('redirect', (status, _method, redirectUrl) => finish(() => { request.abort(); resolve({ status, location: redirectUrl }); }));
+    // A HEAD has no body worth reading, but the response is drained so the socket is released.
+    request.on('response', (response) => { response.on('data', () => {}); finish(() => resolve({ status: response.statusCode, location: null })); });
+    request.on('error', (err) => finish(() => reject(err)));
+    request.end();
+  });
+}
