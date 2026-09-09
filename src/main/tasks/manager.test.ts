@@ -149,6 +149,20 @@ describe('TaskManager', () => {
     expect(m.get(t.id)).toMatchObject({ lastStatus: 'completed', nextRunAt: '2026-09-08T12:02:00.000Z' });
   });
 
+  it('runs a visible-window task immediately on Run now even while the user is active', async () => {
+    const run = vi.fn(async () => 'completed' as const);
+    const m = new TaskManager({
+      store: new AppStore(':memory:'),
+      now: () => new Date('2026-09-08T11:00:00.000Z'),
+      run,
+      userActive: () => true,
+    });
+    const t = m.create({ title: 'screen', prompt: 'p', schedule: { every: '1h' }, visibleWindow: true });
+    await m.runNow(t.id);
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(m.get(t.id)?.lastStatus).toBe('completed');
+  });
+
   it('never defers a run that stays in a hidden window', async () => {
     let clock = now;
     const run = vi.fn(async () => 'completed' as const);

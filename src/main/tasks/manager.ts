@@ -97,7 +97,7 @@ export class TaskManager {
   runNow(id: number): Promise<void> {
     const task = this.deps.store.getTask(id);
     if (!task) throw new Error(`No task with id ${id}`);
-    return this.enqueue(task);
+    return this.enqueue(task, { explicit: true });
   }
 
   async tick(): Promise<void> {
@@ -108,11 +108,12 @@ export class TaskManager {
     while (this.active.size > 0) await this.queue;
   }
 
-  private enqueue(task: ScheduledTask): Promise<void> {
+  private enqueue(task: ScheduledTask, opts: { explicit?: boolean } = {}): Promise<void> {
     const queued = this.active.get(task.id);
     if (queued) return queued;
-    // A run that drives the user's own window waits until they have stopped using it.
-    if (task.visibleWindow && this.deps.userActive?.()) {
+    // A scheduled run that drives the user's own window waits until they have stopped using it;
+    // "Run now" is the user asking for it, so it never waits.
+    if (task.visibleWindow && !opts.explicit && this.deps.userActive?.()) {
       this.deps.store.updateTask(task.id, {
         nextRunAt: new Date(this.now().getTime() + DEFER_MS).toISOString(),
         lastStatus: 'deferred',
