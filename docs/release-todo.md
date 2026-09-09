@@ -70,6 +70,6 @@ Still open from the first review:
 ## Documentation and project hygiene
 
 - [ ] README screenshots or a short GIF of the sidebar in use.
-- [x] `SECURITY.md` with a disclosure contact and PGP key, GitHub private vulnerability reporting enabled; `CONTRIBUTING.md`; Contributor Covenant code of conduct.
+- [x] `SECURITY.md` with a disclosure contact and PGP key, GitHub private vulnerability reporting enabled; `CONTRIBUTING.md`; a short conduct notice.
 - [x] A short privacy note: `docs/privacy.md`.
 - [ ] Refresh `docs/manual-test.md` and run the full checklist on a signed, packaged build on both Apple Silicon and Intel, from a fresh macOS user account.
