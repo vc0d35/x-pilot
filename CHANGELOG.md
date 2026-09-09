@@ -21,6 +21,9 @@ All notable changes to XPilot are documented here. The format follows
 
 - Stop cancels in-flight tool calls; turns idle for five minutes are failed with a hint. Codex clarifying questions appear as a card in the sidebar. Transcript retention and database size in Settings. Scheduled tasks opt in to web search per task. Page health reported per extractor.
 
+- Page styles: a user-editable `page-styles.css` applied to the X view before it renders; the agent can read, replace or reset it, with an Apply card by default.
+- Configurable selectors: `selectors.json` overrides the adapter's read selectors, kept across app updates and flagged stale when a shipped default changes; the agent can list, test, inspect markup, set and reset them. Action selectors are locked to hand edits.
+
 ### Security
 
 - Renderer sandbox and a production CSP for the x.com view, hardened `webContents` defaults, and dev-only switches gated on unpackaged builds.
