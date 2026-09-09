@@ -16,8 +16,10 @@ if (target === '--list' || !target) {
 // The hidden agent windows are x.com pages too, and they often sort first: only the view on screen
 // answers `visible`, so `x` asks the pages rather than trusting their order.
 const visibleFirst = async (xPages) => {
-  const states = await Promise.all(xPages.map((p) => p.evaluate(() => document.visibilityState).catch(() => null)));
-  return xPages[states.indexOf('visible')] ?? xPages[0];
+  const views = await Promise.all(
+    xPages.map((p) => p.evaluate(() => document.documentElement.dataset.xpilotView ?? null).catch(() => null)),
+  );
+  return xPages[views.indexOf('visible')] ?? xPages[0];
 };
 const pick = async () => {
   if (target === 'sidebar') return pages.find((p) => /localhost:\d+\/?$|out\/renderer\/index\.html/.test(p.url()));

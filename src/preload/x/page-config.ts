@@ -43,6 +43,8 @@ export function installPageConfig(): void {
   };
   const apply = (payload: unknown): void => {
     const css = stylesOf(payload);
+    const view = (payload as { view?: unknown } | null)?.view;
+    if (view === 'visible' || view === 'hidden') document.documentElement.dataset.xpilotView = view;
     try {
       applySelectorOverrides(selectorsOf(payload));
     } catch (err) {

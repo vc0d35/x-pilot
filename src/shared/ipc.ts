@@ -55,6 +55,8 @@ export const IPC = {
  * is looking at is null in the hidden windows, which must see the page as X ships it.
  */
 export interface PageConfig {
+  /** Which X view this page is; hidden reading windows never get styles. */
+  view: 'visible' | 'hidden';
   styles: string | null;
   /** The user's selector overrides only; the adapter's shipped defaults stand for every other key. */
   selectors: Partial<Record<string, string>>;

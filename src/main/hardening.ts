@@ -63,7 +63,7 @@ export function resolveSidebarAsset(root: string, requestUrl: string): { path: s
 
 export interface HardenableContents {
   setWindowOpenHandler(handler: (details: { url: string }) => { action: 'deny' }): void;
-  on(event: 'will-attach-webview', listener: (e: { preventDefault(): void }) => void): unknown;
+  on(event: 'will-attach-webview' | 'will-prevent-unload', listener: (e: { preventDefault(): void }) => void): unknown;
 }
 
 /**
@@ -76,6 +76,9 @@ export interface HardenableContents {
 export function hardenWebContents<T extends HardenableContents>(contents: T, attachPolicy?: (contents: T) => void): void {
   contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   contents.on('will-attach-webview', (e) => e.preventDefault());
+  // Without a handler Electron silently honours a page's beforeunload veto, which leaves an
+  // agent-driven navigation (discarding a draft, say) stuck with no dialog to answer.
+  contents.on('will-prevent-unload', (e) => e.preventDefault());
   attachPolicy?.(contents);
 }
 

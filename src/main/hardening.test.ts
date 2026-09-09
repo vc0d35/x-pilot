@@ -11,6 +11,7 @@ function fakeContents() {
   let handler: ((d: { url: string }) => { action: string }) | null = null;
   return {
     on: (ev: string, l: (...args: never[]) => void) => em.on(ev, l as never),
+    emit: (ev: string, ...args: unknown[]) => em.emit(ev, ...args),
     setWindowOpenHandler: (h: (d: { url: string }) => { action: string }) => {
       handler = h;
     },
@@ -45,6 +46,14 @@ describe('hardenWebContents', () => {
     const c = fakeContents();
     hardenWebContents(c as never);
     expect(c.open('https://example.com')).toEqual({ action: 'deny' });
+  });
+
+  it('lets a navigation proceed past a page that tries to prevent unload', () => {
+    const c = fakeContents();
+    hardenWebContents(c);
+    let prevented = false;
+    c.emit('will-prevent-unload', { preventDefault: () => (prevented = true) });
+    expect(prevented).toBe(true);
   });
 
   it('prevents a <webview> from attaching', () => {

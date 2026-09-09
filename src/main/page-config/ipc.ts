@@ -51,12 +51,13 @@ export function registerPageConfigIpc(deps: PageConfigIpcDeps): void {
   const configFor = (id: number): PageConfig => {
     try {
       return {
+        view: deps.isVisibleContents(id) ? 'visible' : 'hidden',
         styles: deps.isVisibleContents(id) ? deps.styles.get() : null,
         selectors: deps.selectors.overrides(),
       };
     } catch (err) {
       console.error('[xpilot] page config could not be read; the page gets none', err);
-      return { styles: null, selectors: {} };
+      return { view: 'hidden', styles: null, selectors: {} };
     }
   };
   deps.ipc.on(IPC.pageConfigGet, (event) => {

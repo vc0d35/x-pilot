@@ -44,7 +44,7 @@ export function SetupCard({
       {fix.commands.map((c) => (
         <Command key={c} text={c} />
       ))}
-      {issue.problem === 'other' && <pre className="setup-detail">{issue.message}</pre>}
+      {(issue.problem === 'other' || issue.problem === 'missing') && <pre className="setup-detail">{issue.message}</pre>}
       <p className="hint">{fix.hint}</p>
       <div className="row">
         <button onClick={onRetry}>Try again</button>
