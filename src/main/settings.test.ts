@@ -3,7 +3,6 @@ import { chmodSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { SettingsStore } from './settings';
-import { AUTONOMOUS_WARNING, confirmPostingMode } from '../shared/settings';
 
 const tmpFile = () => join(mkdtempSync(join(tmpdir(), 'xpilot-')), 'settings.json');
 
@@ -86,22 +85,6 @@ describe('SettingsStore', () => {
     s.update({ posting: { mode: 'autonomous' } });
     expect(readFileSync(canary, 'utf8')).toBe('ORIGINAL');
     expect(JSON.parse(readFileSync(file, 'utf8')).posting.mode).toBe('autonomous');
-  });
-});
-
-describe('confirmPostingMode', () => {
-  it('warns once before switching to autonomous and honours the answer', () => {
-    const seen: string[] = [];
-    const yes = (m: string) => { seen.push(m); return true; };
-    const no = (m: string) => { seen.push(m); return false; };
-    expect(confirmPostingMode('autonomous', yes)).toBe('autonomous');
-    expect(confirmPostingMode('autonomous', no)).toBeNull();
-    expect(seen).toEqual([AUTONOMOUS_WARNING, AUTONOMOUS_WARNING]);
-  });
-
-  it('never warns when switching back to confirm', () => {
-    const confirmFn = () => { throw new Error('should not be asked'); };
-    expect(confirmPostingMode('confirm', confirmFn)).toBe('confirm');
   });
 });
 

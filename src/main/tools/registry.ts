@@ -1,4 +1,4 @@
-import { fail, type ToolModule, type ToolResult, type ToolSpec } from '../../shared/tools';
+import { fail, runTool, type ToolModule, type ToolResult, type ToolSpec } from '../../shared/tools';
 
 export interface ToolSource {
   id: string;
@@ -16,7 +16,7 @@ export class AppToolSource<Ctx> implements ToolSource {
   async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
     const m = this.byName.get(name);
     if (!m) return fail(`Unknown tool: ${name}`);
-    return m.execute(args, this.ctx, signal);
+    return runTool(m, args, this.ctx, signal);
   }
 }
 

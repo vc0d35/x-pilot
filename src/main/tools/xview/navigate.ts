@@ -1,4 +1,5 @@
-import { fail, type ToolModule } from '../../../shared/tools';
+import { z } from 'zod';
+import { defineTool, fail } from '../../../shared/tools';
 import { decideNavigation } from '../../navigation/policy';
 import type { XViewToolCtx } from './context';
 import { navigateStep, withView } from './target';
@@ -10,14 +11,12 @@ import { navigateStep, withView } from './target';
  */
 const OFF_LIMITS = /^\/(logout|settings|account|intent|compose|login|signup|i\/flow)(\/|$)/;
 
-export const navigate: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_navigate',
-    description: 'Navigates the window the USER is looking at to a URL on x.com (home, a profile, a post, search, likes…) and returns the page state. Only use when the user asked to open, show, or go somewhere; for reading use x_read_post or x_search instead.',
-    inputSchema: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'], additionalProperties: false },
-  },
-  execute: async (args, ctx, signal) => {
-    const url = String(args.url ?? '');
+export const navigate = defineTool({
+  name: 'x_navigate',
+  description: 'Navigates the window the USER is looking at to a URL on x.com (home, a profile, a post, search, likes…) and returns the page state. Only use when the user asked to open, show, or go somewhere; for reading use x_read_post or x_search instead.',
+  args: z.strictObject({ url: z.string() }),
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const url = args.url;
     if (decideNavigation(url, ctx.allowHosts()) !== 'allow') return fail(`Refusing to navigate outside x.com: ${url}`);
     let path = '';
     try { path = new URL(url).pathname.toLowerCase(); } catch { return fail(`Not a URL: ${url}`); }
@@ -28,4 +27,4 @@ export const navigate: ToolModule<XViewToolCtx> = {
       return view.callPreload('x_get_page_state', {}, signal);
     });
   },
-};
+});

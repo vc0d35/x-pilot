@@ -7,6 +7,7 @@ import type { ToolRegistry } from '../tools/registry';
 import type { HistoryStore } from '../history/store';
 import type { Conversation } from '../../shared/sidebar-api';
 import type { AgentProvider, ModelInfo } from './provider';
+import { ThreadState } from './thread-state';
 
 /** Tool output beyond this is elided in the stored transcript; a full page read can be megabytes. */
 export const MAX_TRANSCRIPT_OUTPUT = 4000;
@@ -30,6 +31,8 @@ export interface AgentControllerDeps {
   createProvider: () => AgentProvider;
   /** Conversation store; optional so lightweight tests can omit it. */
   history?: HistoryStore;
+  /** Where the live thread id and its tool fingerprint are kept; defaults to a file beside settings.json. */
+  threadState?: ThreadState;
 }
 
 export class AgentController {
@@ -40,8 +43,11 @@ export class AgentController {
   private restartPending = false;
   private generation = 0;
   private readonly listeners = new Set<(e: AgentEvent) => void>();
+  private readonly threadState: ThreadState;
 
-  constructor(private readonly deps: AgentControllerDeps) {}
+  constructor(private readonly deps: AgentControllerDeps) {
+    this.threadState = deps.threadState ?? ThreadState.beside(deps.settings.filePath);
+  }
 
   onEvent(cb: (e: AgentEvent) => void): () => void { this.listeners.add(cb); return () => this.listeners.delete(cb); }
 
@@ -56,13 +62,13 @@ export class AgentController {
     const gen = ++this.generation;
     await this.stop();
     if (gen !== this.generation) return; // superseded by a newer start() while we awaited stop()
-    if (!opts.resume) this.deps.settings.update({ threadId: null, threadToolsHash: null });
+    if (!opts.resume) this.threadState.set({ threadId: null, threadToolsHash: null });
     // Resuming a stored conversation compares the hash the thread was started with, not the current one.
-    else if (opts.threadId) this.deps.settings.update({ threadId: opts.threadId, threadToolsHash: this.deps.history?.getConversation(opts.threadId)?.toolsHash ?? null });
+    else if (opts.threadId) this.threadState.set({ threadId: opts.threadId, threadToolsHash: this.deps.history?.getConversation(opts.threadId)?.toolsHash ?? null });
     this.threadId = null;
     const tools = this.deps.registry.list();
     const toolsHash = toolsFingerprint(tools);
-    const stored = this.deps.settings.get();
+    const stored = this.threadState.get();
     let resumeThreadId: string | null = null;
     if (opts.resume && stored.threadId) {
       if (stored.threadToolsHash === toolsHash) resumeThreadId = stored.threadId;
@@ -95,7 +101,7 @@ export class AgentController {
       this.threadId = threadId;
       this.deps.history?.upsertConversation({ threadId, kind: 'chat', toolsHash });
       this.deps.history?.pruneEmptyConversations(threadId);
-      this.deps.settings.update({ threadId, threadToolsHash: toolsHash });
+      this.threadState.set({ threadId, threadToolsHash: toolsHash });
     } catch (err) {
       if (gen !== this.generation) { unsubscribe(); void provider.stop(); return; }
       this.emit({ type: 'status', status: 'error', message: err instanceof Error ? err.message : String(err) });

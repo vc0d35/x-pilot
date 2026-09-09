@@ -1,11 +1,11 @@
-import { ok, type ToolModule } from '../../../../shared/tools';
+import { defineTool, ok } from '../../../../shared/tools';
 import type { PageKind, PageState } from '../../../../shared/page';
 import type { PreloadCtx } from '../../context';
 import { extractArticle, extractVisiblePosts, pageKindFromUrl } from '../extract';
 import { waitFor } from '../dom';
 import { SEL } from '../selectors';
 import { findNewPostsButton } from '../widgets';
-import { pageStateSpec } from './specs';
+import { pageStateDef } from './specs';
 
 const needsLayout = (kind: PageState['kind']) => kind !== 'other' && kind !== 'compose';
 
@@ -29,10 +29,10 @@ export function currentPageState(): PageState {
   return state;
 }
 
-export const pageState: ToolModule<PreloadCtx> = {
-  spec: pageStateSpec,
-  execute: async (args) => ok(await settledPageState(typeof args.timeoutMs === 'number' ? args.timeoutMs : 8000)),
-};
+export const pageState = defineTool({
+  ...pageStateDef,
+  execute: async (args, _ctx: PreloadCtx) => ok(await settledPageState(args.timeoutMs)),
+});
 
 /**
  * Page state once X has drawn what this kind of page is made of. Right after a navigation the

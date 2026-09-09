@@ -36,12 +36,9 @@ export const SettingsSchema = z.object({
   }),
   /** One-time first-run card: false until the user dismisses it. */
   ui: z.object({ onboarded: z.boolean().default(false) }),
-  threadId: z.string().nullable().default(null),
   window: z.object({
     bounds: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().default(null),
   }),
-  /** Fingerprint of the tool list the stored thread was started with; a mismatch forces a fresh thread. */
-  threadToolsHash: z.string().nullable().default(null),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 
@@ -77,9 +74,7 @@ export const SettingsPatchSchema = z.strictObject({
   navigation: patchOf(SettingsSchema.shape.navigation).optional(),
   history: patchOf(SettingsSchema.shape.history).optional(),
   ui: patchOf(SettingsSchema.shape.ui).optional(),
-  threadId: optionalField(SettingsSchema.shape.threadId),
   window: patchOf(SettingsSchema.shape.window).optional(),
-  threadToolsHash: optionalField(SettingsSchema.shape.threadToolsHash),
 }) as unknown as z.ZodType<DeepPartial<Settings>>;
 
 function isObj(v: unknown): v is Record<string, unknown> { return typeof v === 'object' && v !== null && !Array.isArray(v); }
@@ -93,7 +88,11 @@ export function deepMerge<T>(base: T, patch: DeepPartial<T> | undefined): T {
   return out as T;
 }
 
-/** Fills in missing nested objects so leaf-level defaults apply, then validates. */
+/**
+ * Fills in missing nested objects so leaf-level defaults apply, then validates. Only the keys named
+ * here survive, so a file written before the agent's thread state moved to `agent-state.json` still
+ * loads: `threadId` and `threadToolsHash` are simply dropped.
+ */
 export function normalizeSettings(raw: unknown): Settings {
   const r = isObj(raw) ? raw : {};
   const agent = isObj(r.agent) ? { ...r.agent } : {};
@@ -107,9 +106,7 @@ export function normalizeSettings(raw: unknown): Settings {
     navigation: isObj(r.navigation) ? r.navigation : {},
     history: isObj(r.history) ? r.history : {},
     ui: isObj(r.ui) ? r.ui : {},
-    threadId: r.threadId ?? null,
     window: isObj(r.window) ? r.window : {},
-    threadToolsHash: r.threadToolsHash ?? null,
   };
   return SettingsSchema.parse(shaped);
 }
@@ -117,11 +114,3 @@ export function normalizeSettings(raw: unknown): Settings {
 export const DEFAULT_SETTINGS: Settings = normalizeSettings({});
 
 export type PostingMode = Settings['posting']['mode'];
-
-export const AUTONOMOUS_WARNING = 'Autonomous mode lets the agent post without asking you. Continue?';
-
-/** Gate for switching posting mode: returns the mode to apply, or null when the user declined the warning. */
-export function confirmPostingMode(next: PostingMode, confirmFn: (message: string) => boolean): PostingMode | null {
-  if (next === 'autonomous' && !confirmFn(AUTONOMOUS_WARNING)) return null;
-  return next;
-}

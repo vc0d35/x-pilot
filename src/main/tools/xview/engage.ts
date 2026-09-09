@@ -1,4 +1,5 @@
-import { fail, ok, type ToolModule } from '../../../shared/tools';
+import { z } from 'zod';
+import { defineTool, fail, ok } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
@@ -25,17 +26,15 @@ async function likeDetail(ctx: XViewToolCtx, target: string): Promise<string> {
   } catch { return target; }
 }
 
-export const likePost: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_like_post',
-    description: 'Likes (or unlikes) a post by URL on the user\'s behalf. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "agent likes" setting (autonomous or confirm).',
-    inputSchema: { type: 'object', properties: { url: { type: 'string' }, action: { type: 'string', enum: ['like', 'unlike'] } }, required: ['url'], additionalProperties: false },
-    annotations: { destructiveHint: true },
-  },
-  execute: async (args, ctx, signal) => {
-    const target = normalizePostUrl(String(args.url ?? ''));
-    if (!target || !target.includes('/status/')) return fail(`Not a post URL: ${String(args.url ?? '')}`);
-    const action = args.action === 'unlike' ? 'unlike' : 'like';
+export const likePost = defineTool({
+  name: 'x_like_post',
+  description: 'Likes (or unlikes) a post by URL on the user\'s behalf. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "agent likes" setting (autonomous or confirm).',
+  args: z.strictObject({ url: z.string(), action: z.enum(['like', 'unlike']).optional() }),
+  annotations: { destructiveHint: true },
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const target = normalizePostUrl(args.url);
+    if (!target || !target.includes('/status/')) return fail(`Not a post URL: ${args.url}`);
+    const action = args.action ?? 'like';
     const stopped = cancelled(signal);
     if (stopped) return stopped;
     if (ctx.likesMode() === 'confirm') {
@@ -54,17 +53,19 @@ export const likePost: ToolModule<XViewToolCtx> = {
       return view.callPreload('x_like_in_page', { url: target, action }, signal);
     });
   },
-};
+});
 
-export const readTimeline: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_read_timeline',
-    description: 'Reads the Home timeline ("For you" or "Following") by scrolling through it, returning the posts seen. Runs in a hidden window by default so the user\'s screen is untouched; pass view: "visible" to scroll the user\'s own window.',
-    inputSchema: { type: 'object', properties: { tab: { type: 'string', enum: ['for_you', 'following'] }, pages: { type: 'integer', minimum: 1, maximum: 10, description: 'How many screens to scroll (default 3)' }, ...VIEW_ARG }, additionalProperties: false },
-    annotations: { readOnlyHint: true },
-  },
-  execute: async (args, ctx, signal) => withView(ctx, parseView(args), async (view) => {
-    const pages = Math.min(10, Math.max(1, typeof args.pages === 'number' ? args.pages : 3));
+export const readTimeline = defineTool({
+  name: 'x_read_timeline',
+  description: 'Reads the Home timeline ("For you" or "Following") by scrolling through it, returning the posts seen. Runs in a hidden window by default so the user\'s screen is untouched; pass view: "visible" to scroll the user\'s own window.',
+  args: z.strictObject({
+    tab: z.enum(['for_you', 'following']).optional(),
+    pages: z.int().min(1).max(10).optional().describe('How many screens to scroll (default 3)'),
+    ...VIEW_ARG,
+  }),
+  annotations: { readOnlyHint: true },
+  execute: async (args, ctx: XViewToolCtx, signal) => withView(ctx, parseView(args), async (view) => {
+    const pages = args.pages ?? 3;
     const stopped = await navigateStep(view, 'https://x.com/home', signal);
     if (stopped) return stopped;
     const tab = await view.callPreload('x_select_home_tab', { label: args.tab === 'following' ? 'Following' : 'For you' }, signal);
@@ -82,4 +83,4 @@ export const readTimeline: ToolModule<XViewToolCtx> = {
     }
     return ok({ tab: args.tab === 'following' ? 'following' : 'for_you', pages, posts: [...seen.values()] });
   }),
-};
+});

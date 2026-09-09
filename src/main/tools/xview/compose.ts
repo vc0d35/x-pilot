@@ -1,4 +1,5 @@
-import { fail, ok, type ToolModule } from '../../../shared/tools';
+import { z } from 'zod';
+import { defineTool, fail, ok } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { cancelled, navigateStep, withView } from './target';
@@ -14,17 +15,14 @@ export function buildIntentUrl(text: string, replyToUrl?: string, quoteUrl?: str
   return `https://x.com/intent/post?${params.toString().replace(/\+/g, '%20')}`;
 }
 
-export const composePost: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_compose_post',
-    description: 'Opens the composer with the given text (optionally as a reply to replyToUrl or quoting quoteUrl) and returns a draftId plus the exact preview. Does NOT post; call x_submit_post with the draftId to send.',
-    inputSchema: { type: 'object', properties: { text: { type: 'string' }, replyToUrl: { type: 'string' }, quoteUrl: { type: 'string' } }, required: ['text'], additionalProperties: false },
-  },
-  execute: async (args, ctx, signal) => {
-    const text = String(args.text ?? '').trim();
+export const composePost = defineTool({
+  name: 'x_compose_post',
+  description: 'Opens the composer with the given text (optionally as a reply to replyToUrl or quoting quoteUrl) and returns a draftId plus the exact preview. Does NOT post; call x_submit_post with the draftId to send.',
+  args: z.strictObject({ text: z.string(), replyToUrl: z.string().optional(), quoteUrl: z.string().optional() }),
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const text = args.text.trim();
     if (!text) return fail('text is required');
-    const replyToUrl = typeof args.replyToUrl === 'string' ? args.replyToUrl : undefined;
-    const quoteUrl = typeof args.quoteUrl === 'string' ? args.quoteUrl : undefined;
+    const { replyToUrl, quoteUrl } = args;
     if (replyToUrl && !normalizePostUrl(replyToUrl)?.includes('/status/')) return fail(`replyToUrl is not a post URL: ${replyToUrl}`);
     if (quoteUrl && !normalizePostUrl(quoteUrl)) return fail(`quoteUrl is not a post URL: ${quoteUrl}`);
     return withView(ctx, 'visible', async (view) => {
@@ -45,17 +43,15 @@ export const composePost: ToolModule<XViewToolCtx> = {
       return ok({ draftId: draft.id, preview: state.text, target });
     });
   },
-};
+});
 
-export const submitPost: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_submit_post',
-    description: 'Sends the draft created by x_compose_post. In confirm mode the user must click Post in the sidebar first; in autonomous mode it posts immediately. Returns posted=true with the new post URL when available; posted=false with status cancelled_by_user means the user declined (their decision is final).',
-    inputSchema: { type: 'object', properties: { draftId: { type: 'string' } }, required: ['draftId'], additionalProperties: false },
-    annotations: { destructiveHint: true },
-  },
-  execute: async (args, ctx, signal) => withView(ctx, 'visible', async (view) => {
-    const draft = ctx.drafts.get(String(args.draftId ?? ''));
+export const submitPost = defineTool({
+  name: 'x_submit_post',
+  description: 'Sends the draft created by x_compose_post. In confirm mode the user must click Post in the sidebar first; in autonomous mode it posts immediately. Returns posted=true with the new post URL when available; posted=false with status cancelled_by_user means the user declined (their decision is final).',
+  args: z.strictObject({ draftId: z.string() }),
+  annotations: { destructiveHint: true },
+  execute: async (args, ctx: XViewToolCtx, signal) => withView(ctx, 'visible', async (view) => {
+    const draft = ctx.drafts.get(args.draftId);
     if (!draft) return fail('Unknown draftId; call x_compose_post first');
     const stopped = cancelled(signal);
     if (stopped) return stopped;
@@ -98,4 +94,4 @@ export const submitPost: ToolModule<XViewToolCtx> = {
     const res = clicked.content as { url: string | null };
     return ok({ posted: true, url: res.url });
   }),
-};
+});

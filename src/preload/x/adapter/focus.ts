@@ -1,4 +1,5 @@
 import type { PageContext, VisiblePost } from '../../../shared/page';
+import { contextKey } from '../../../shared/page-context';
 import { extractArticle, extractPost, findMainArticle, pageKindFromUrl, postFromArticleUrl } from './extract';
 import { SEL } from './selectors';
 
@@ -43,12 +44,6 @@ export function computeFocus(doc: Document, url: string, isVisible: InViewport =
   return visible.length ? { url, kind, post: null, visible } : null;
 }
 
-/** Identity of a context, for change detection: the focused post, or the ordered visible posts. */
-export function contextSignature(ctx: PageContext | null): string | null {
-  if (!ctx) return null;
-  return ctx.post ? `post:${ctx.post.id}` : `visible:${(ctx.visible ?? []).map((v) => v.id).join(',')}`;
-}
-
 export function installFocusTracker(doc: Document, getUrl: () => string, send: (ctx: PageContext | null) => void, intervalMs = 1000, isVisible: InViewport = inViewport): () => void {
   let lastSig: string | null | undefined; // undefined = never sent
   let lastKey: string | null = null;
@@ -61,7 +56,7 @@ export function installFocusTracker(doc: Document, getUrl: () => string, send: (
     if (focusedPage && key === lastKey && lastSig) return;
     lastKey = key;
     const ctx = computeFocus(doc, url, isVisible);
-    const sig = contextSignature(ctx);
+    const sig = contextKey(ctx);
     if (sig === lastSig) return;
     lastSig = sig;
     send(ctx);

@@ -2,8 +2,10 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { fixture } from '../../../../../tests/fixtures';
 import { likeInPage, selectHomeTab } from './engage';
+import { runTool, type ToolModule } from '../../../../shared/tools';
 
 const ctx = {};
+const run = (tool: ToolModule<typeof ctx>, args: Record<string, unknown> = {}) => runTool(tool, args, ctx);
 
 describe('x_like_in_page', () => {
   beforeEach(() => {
@@ -14,15 +16,15 @@ describe('x_like_in_page', () => {
     }
   });
   it('likes a post rendered on the page and reports the change', async () => {
-    expect(await likeInPage.execute({ url: 'https://x.com/alice/status/111' }, ctx)).toEqual({ success: true, content: { postId: '111', liked: true, changed: true } });
+    expect(await run(likeInPage, { url: 'https://x.com/alice/status/111' })).toEqual({ success: true, content: { postId: '111', liked: true, changed: true } });
   });
   it('is idempotent when the post is already liked, and can unlike', async () => {
-    expect(await likeInPage.execute({ url: '222' }, ctx)).toEqual({ success: true, content: { postId: '222', liked: true, changed: false } });
-    expect(await likeInPage.execute({ url: '222', action: 'unlike' }, ctx)).toEqual({ success: true, content: { postId: '222', liked: false, changed: true } });
+    expect(await run(likeInPage, { url: '222' })).toEqual({ success: true, content: { postId: '222', liked: true, changed: false } });
+    expect(await run(likeInPage, { url: '222', action: 'unlike' })).toEqual({ success: true, content: { postId: '222', liked: false, changed: true } });
   });
   it('fails when the post is not on the page', async () => {
     document.body.innerHTML = '';
-    expect(await likeInPage.execute({ url: 'https://x.com/x/status/999', timeoutMs: 50 }, ctx)).toEqual({ success: false, error: 'Post 999 is not rendered on this page' });
+    expect(await run(likeInPage, { url: 'https://x.com/x/status/999', timeoutMs: 50 })).toEqual({ success: false, error: 'Post 999 is not rendered on this page' });
   });
 });
 
@@ -31,9 +33,9 @@ describe('x_select_home_tab', () => {
     document.body.innerHTML = '<div role="tablist"><a role="tab" aria-selected="true">For you</a><a role="tab" aria-selected="false">Following</a></div>';
     let clicked = 0;
     document.querySelectorAll('[role="tab"]')[1].addEventListener('click', () => clicked++);
-    expect(await selectHomeTab.execute({ label: 'for you' }, ctx)).toEqual({ success: true, content: { label: 'For you', changed: false } });
-    expect(await selectHomeTab.execute({ label: 'Following' }, ctx)).toEqual({ success: true, content: { label: 'Following', changed: true } });
+    expect(await run(selectHomeTab, { label: 'for you' })).toEqual({ success: true, content: { label: 'For you', changed: false } });
+    expect(await run(selectHomeTab, { label: 'Following' })).toEqual({ success: true, content: { label: 'Following', changed: true } });
     expect(clicked).toBe(1);
-    expect(await selectHomeTab.execute({ label: 'Nope' }, ctx)).toEqual({ success: false, error: 'No tab labelled "Nope"' });
+    expect(await run(selectHomeTab, { label: 'Nope' })).toEqual({ success: false, error: 'No tab labelled "Nope"' });
   });
 });

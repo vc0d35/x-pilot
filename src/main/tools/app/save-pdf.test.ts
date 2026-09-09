@@ -3,7 +3,7 @@ import { savePdf } from './save-pdf';
 import { listLibrary, openPdf } from './library';
 import { HistoryStore } from '../../history/store';
 import { TaskManager } from '../../tasks/manager';
-import { fail, ok } from '../../../shared/tools';
+import { fail, ok, runTool } from '../../../shared/tools';
 
 function ctx() {
   const history = new HistoryStore(':memory:');
@@ -36,7 +36,7 @@ describe('library tools', () => {
   it('lists items and opens only paths inside the library dir', async () => {
     const c = ctx();
     c.history.addLibraryItem({ postId: null, url: 'u', path: '/lib/a.pdf', title: 'A' });
-    expect((await listLibrary.execute({}, c)) as { content: unknown[] }).toMatchObject({ content: [expect.objectContaining({ path: '/lib/a.pdf' })] });
+    expect((await runTool(listLibrary, {}, c)) as { content: unknown[] }).toMatchObject({ content: [expect.objectContaining({ path: '/lib/a.pdf' })] });
     expect(await openPdf.execute({ path: '/lib/a.pdf' }, c)).toEqual(ok({ opened: true }));
     expect(await openPdf.execute({ path: '/etc/passwd' }, c)).toEqual(fail('Refusing to open a file that is not a PDF in the library'));
     c.openPath.mockResolvedValueOnce('No app');

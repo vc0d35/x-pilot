@@ -1,297 +1,62 @@
-import { statSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
 import type { Post } from '../../shared/page';
 import type { Conversation, LibraryItem, ScheduledTask, TaskSchedule } from '../../shared/sidebar-api';
 import type { AgentEvent } from '../../shared/agent';
+import { HistoryDb, migrate, type HistoryStats } from './db';
+import { LikesStore, toFtsQuery, type HistoryHit, type HistoryQuery } from './likes';
+import { LibraryStore } from './library';
+import { ConversationsStore, type RetentionPolicy, type RetentionResult } from './conversations';
+import { TasksStore } from './tasks';
 
-export interface HistoryQuery { query: string; author?: string; since?: string; until?: string; limit?: number }
-export interface RetentionPolicy {
-  keepConversations: number;
-  keepDays: number;
-  /** The live thread, which is never deleted however old it looks. */
-  keepThreadId?: string | null;
-}
-export interface RetentionResult { conversations: number; events: number }
-export interface HistoryStats { conversations: number; events: number; posts: number; library: number; tasks: number; dbBytes: number }
-export interface HistoryHit { id: string; url: string; authorHandle: string; authorName: string; kind: string; snippet: string; likedAt: string; unlikedAt: string | null }
+export { migrate, toFtsQuery };
+export type { HistoryStats, HistoryHit, HistoryQuery, RetentionPolicy, RetentionResult };
 
-/** Schema versions, applied in order and stamped into `PRAGMA user_version`. Never edit a released entry: add a new one. */
-const MIGRATIONS: string[] = [`
-CREATE TABLE IF NOT EXISTS posts(
-  id TEXT PRIMARY KEY, url TEXT NOT NULL, author_handle TEXT NOT NULL, author_name TEXT NOT NULL,
-  text TEXT NOT NULL, extra TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL, posted_at TEXT,
-  liked_at TEXT NOT NULL, unliked_at TEXT, raw_json TEXT NOT NULL
-);
-CREATE VIRTUAL TABLE IF NOT EXISTS posts_fts USING fts5(text, author_handle, author_name, extra, content='posts', content_rowid='rowid');
-CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN
-  INSERT INTO posts_fts(rowid, text, author_handle, author_name, extra) VALUES (new.rowid, new.text, new.author_handle, new.author_name, new.extra);
-END;
-CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN
-  INSERT INTO posts_fts(posts_fts, rowid, text, author_handle, author_name, extra) VALUES ('delete', old.rowid, old.text, old.author_handle, old.author_name, old.extra);
-END;
-CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN
-  INSERT INTO posts_fts(posts_fts, rowid, text, author_handle, author_name, extra) VALUES ('delete', old.rowid, old.text, old.author_handle, old.author_name, old.extra);
-  INSERT INTO posts_fts(rowid, text, author_handle, author_name, extra) VALUES (new.rowid, new.text, new.author_handle, new.author_name, new.extra);
-END;
-CREATE TABLE IF NOT EXISTS library(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, post_id TEXT, url TEXT NOT NULL, path TEXT NOT NULL, title TEXT NOT NULL, saved_at TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS conversations(
-  thread_id TEXT PRIMARY KEY, title TEXT NOT NULL DEFAULT '', kind TEXT NOT NULL DEFAULT 'chat', task_id INTEGER,
-  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, tools_hash TEXT
-);
-CREATE TABLE IF NOT EXISTS conversation_events(
-  thread_id TEXT NOT NULL, seq INTEGER NOT NULL, event_json TEXT NOT NULL, PRIMARY KEY(thread_id, seq)
-);
-CREATE TABLE IF NOT EXISTS tasks(
-  id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, prompt TEXT NOT NULL, schedule_json TEXT NOT NULL,
-  thread_mode TEXT NOT NULL DEFAULT 'resume', thread_id TEXT, enabled INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL, last_run_at TEXT, last_status TEXT, next_run_at TEXT
-);
-`, `
-ALTER TABLE tasks ADD COLUMN web_search INTEGER NOT NULL DEFAULT 0;
-`];
+/**
+ * The application's SQLite store: one connection, four domains. The flat methods below are the
+ * surface the rest of the app still calls; new code should reach for `store.likes`, `store.library`,
+ * `store.conversations` and `store.tasks` instead.
+ */
+export class AppStore {
+  private readonly database: HistoryDb;
+  readonly likes: LikesStore;
+  readonly library: LibraryStore;
+  readonly conversations: ConversationsStore;
+  readonly tasks: TasksStore;
 
-const V1_TABLES = ['posts', 'posts_fts', 'library', 'conversations', 'conversation_events', 'tasks'];
-
-function tableExists(db: DatabaseSync, name: string): boolean {
-  return db.prepare("SELECT 1 AS ok FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?").get(name) !== undefined;
-}
-
-export function migrate(db: DatabaseSync): number {
-  let version = Number((db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version);
-  // Databases created before migrations existed carry version 0 with the v1 schema already in place.
-  if (version === 0 && V1_TABLES.every((t) => tableExists(db, t))) {
-    db.exec('PRAGMA user_version = 1');
-    version = 1;
+  constructor(path: string) {
+    this.database = new HistoryDb(path);
+    this.likes = new LikesStore(this.database.db);
+    this.library = new LibraryStore(this.database.db);
+    this.conversations = new ConversationsStore(this.database.db);
+    this.tasks = new TasksStore(this.database.db);
   }
-  if (version >= MIGRATIONS.length) return version;
-  const target = MIGRATIONS.length;
-  try {
-    db.exec('BEGIN');
-    for (let v = version; v < target; v++) db.exec(MIGRATIONS[v]);
-    db.exec(`PRAGMA user_version = ${target}`);
-    db.exec('COMMIT');
-  } catch (err) {
-    try { db.exec('ROLLBACK'); } catch { /* the failed statement may have aborted the transaction already */ }
-    throw new Error(`XPilot could not upgrade its history database from version ${version} to ${target}: ${err instanceof Error ? err.message : String(err)}`);
-  }
-  return target;
+
+  recordLike(post: Post, likedAt?: string): void { this.likes.recordLike(post, likedAt); }
+  recordUnlike(id: string, at?: string): void { this.likes.recordUnlike(id, at); }
+  search(q: HistoryQuery): HistoryHit[] { return this.likes.search(q); }
+  count(): number { return this.likes.count(); }
+  clear(): void { this.likes.clear(); }
+
+  addLibraryItem(i: { postId: string | null; url: string; path: string; title: string }): LibraryItem { return this.library.add(i); }
+  hasLibraryPath(path: string): boolean { return this.library.hasPath(path); }
+  listLibrary(limit?: number): LibraryItem[] { return this.library.list(limit); }
+
+  upsertConversation(c: { threadId: string; kind: 'chat' | 'task'; taskId?: number | null; toolsHash: string | null }): void { this.conversations.upsert(c); }
+  appendEvent(threadId: string, event: AgentEvent): void { this.conversations.appendEvent(threadId, event); }
+  listEvents(threadId: string): AgentEvent[] { return this.conversations.listEvents(threadId); }
+  listConversations(limit?: number): Conversation[] { return this.conversations.list(limit); }
+  pruneEmptyConversations(exceptThreadId: string | null): void { this.conversations.pruneEmpty(exceptThreadId); }
+  getConversation(threadId: string): Conversation | null { return this.conversations.get(threadId); }
+  applyRetention(policy: RetentionPolicy): RetentionResult { return this.conversations.applyRetention(policy); }
+
+  createTask(t: { title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; webSearch?: boolean; nextRunAt: string | null }): ScheduledTask { return this.tasks.create(t); }
+  updateTask(id: number, patch: Partial<Pick<ScheduledTask, 'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'webSearch' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'>>): void { this.tasks.update(id, patch); }
+  deleteTask(id: number): void { this.tasks.delete(id); }
+  getTask(id: number): ScheduledTask | null { return this.tasks.get(id); }
+  listTasks(): ScheduledTask[] { return this.tasks.list(); }
+  dueTasks(now: string): ScheduledTask[] { return this.tasks.due(now); }
+
+  stats(): HistoryStats { return this.database.stats(); }
+  close(): void { this.database.close(); }
 }
 
-const TITLE_MAX = 60;
-/** ISO timestamps that never repeat within one process, so ordering by updated_at is deterministic. */
-let lastStamp = 0;
-function stamp(): string { const t = Math.max(Date.now(), lastStamp + 1); lastStamp = t; return new Date(t).toISOString(); }
-
-const titleFrom = (text: string) => { const t = text.replace(/\s+/g, ' ').trim(); return t.length > TITLE_MAX ? t.slice(0, TITLE_MAX) + '…' : t; };
-
-/** Matching prefix terms cost seconds each in FTS5, and the query runs on the main thread. */
-const MAX_FTS_TOKENS = 32;
-
-/** Turns free text into an FTS5 query: each token becomes a quoted prefix term, ANDed together. */
-export function toFtsQuery(text: string): string {
-  return text.split(/\s+/).map((t) => t.replace(/"/g, '').replace(/[^\p{L}\p{N}_@#]/gu, '')).filter(Boolean).slice(0, MAX_FTS_TOKENS).map((t) => `"${t}"*`).join(' ');
-}
-
-/** A conversation touched this recently is in use, so retention leaves it alone. */
-const RETENTION_GRACE_MS = 60 * 60 * 1000;
-
-export class HistoryStore {
-  private readonly db: DatabaseSync;
-
-  constructor(private readonly path: string) {
-    this.db = new DatabaseSync(path);
-    if (path !== ':memory:') this.db.exec('PRAGMA journal_mode = WAL');
-    migrate(this.db);
-  }
-
-  recordLike(post: Post, likedAt = new Date().toISOString()): void {
-    const extra = [post.articleTitle ?? '', post.articleBody ?? ''].filter(Boolean).join('\n');
-    this.db.prepare(`
-      INSERT INTO posts(id, url, author_handle, author_name, text, extra, kind, posted_at, liked_at, unliked_at, raw_json)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
-      ON CONFLICT(id) DO UPDATE SET url=excluded.url, author_handle=excluded.author_handle, author_name=excluded.author_name,
-        text=excluded.text, extra=CASE WHEN excluded.extra = '' THEN posts.extra ELSE excluded.extra END, kind=excluded.kind,
-        posted_at=excluded.posted_at, liked_at=excluded.liked_at, unliked_at=NULL, raw_json=excluded.raw_json
-    `).run(post.id, post.url, post.authorHandle, post.authorName, post.text, extra, post.kind, post.postedAt, likedAt, JSON.stringify(post));
-  }
-
-  recordUnlike(id: string, at = new Date().toISOString()): void {
-    this.db.prepare('UPDATE posts SET unliked_at = ? WHERE id = ?').run(at, id);
-  }
-
-  search(q: HistoryQuery): HistoryHit[] {
-    const match = toFtsQuery(q.query);
-    if (!match) return [];
-    const rows = this.db.prepare(`
-      SELECT p.id, p.url, p.author_handle, p.author_name, p.kind, p.liked_at, p.unliked_at,
-             snippet(posts_fts, -1, '[', ']', '…', 16) AS snippet
-      FROM posts_fts JOIN posts p ON p.rowid = posts_fts.rowid
-      WHERE posts_fts MATCH ?
-        AND (? IS NULL OR p.author_handle = ?)
-        AND (? IS NULL OR p.liked_at >= ?)
-        AND (? IS NULL OR p.liked_at <= ?)
-      ORDER BY rank, p.liked_at DESC LIMIT ?
-    `).all(match, q.author ?? null, q.author ?? null, q.since ?? null, q.since ?? null, q.until ?? null, q.until ?? null, q.limit ?? 20) as Array<Record<string, unknown>>;
-    return rows.map((r) => ({
-      id: r.id as string, url: r.url as string, authorHandle: r.author_handle as string, authorName: r.author_name as string,
-      kind: r.kind as string, snippet: (r.snippet as string) || '', likedAt: r.liked_at as string, unlikedAt: (r.unliked_at as string | null) ?? null,
-    }));
-  }
-
-  count(): number { return (this.db.prepare('SELECT COUNT(*) AS n FROM posts').get() as { n: number }).n; }
-
-  clear(): void { this.db.exec('DELETE FROM posts'); }
-
-  addLibraryItem(i: { postId: string | null; url: string; path: string; title: string }): LibraryItem {
-    const savedAt = new Date().toISOString();
-    const res = this.db.prepare('INSERT INTO library(post_id, url, path, title, saved_at) VALUES (?, ?, ?, ?, ?)').run(i.postId, i.url, i.path, i.title, savedAt);
-    return { id: Number(res.lastInsertRowid), url: i.url, path: i.path, title: i.title, savedAt };
-  }
-
-  hasLibraryPath(path: string): boolean {
-    return this.db.prepare('SELECT 1 AS ok FROM library WHERE path = ? LIMIT 1').get(path) !== undefined;
-  }
-
-  listLibrary(limit = 100): LibraryItem[] {
-    return (this.db.prepare('SELECT id, url, path, title, saved_at FROM library ORDER BY id DESC LIMIT ?').all(limit) as Array<Record<string, unknown>>)
-      .map((r) => ({ id: r.id as number, url: r.url as string, path: r.path as string, title: r.title as string, savedAt: r.saved_at as string }));
-  }
-
-  upsertConversation(c: { threadId: string; kind: 'chat' | 'task'; taskId?: number | null; toolsHash: string | null }): void {
-    const now = stamp();
-    this.db.prepare(`INSERT INTO conversations(thread_id, title, kind, task_id, created_at, updated_at, tools_hash) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(thread_id) DO UPDATE SET updated_at = excluded.updated_at, tools_hash = excluded.tools_hash`)
-      .run(c.threadId, c.kind === 'task' ? 'Task run' : '', c.kind, c.taskId ?? null, now, now, c.toolsHash);
-  }
-
-  /** Appends an event to a conversation's transcript; the first user message becomes the title. */
-  appendEvent(threadId: string, event: AgentEvent): void {
-    const now = stamp();
-    const next = (this.db.prepare('SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM conversation_events WHERE thread_id = ?').get(threadId) as { n: number }).n;
-    this.db.prepare('INSERT INTO conversation_events(thread_id, seq, event_json) VALUES (?, ?, ?)').run(threadId, next, JSON.stringify(event));
-    if (event.type === 'user.message') this.db.prepare("UPDATE conversations SET title = CASE WHEN title = '' THEN ? ELSE title END, updated_at = ? WHERE thread_id = ?").run(titleFrom(event.text), now, threadId);
-    else this.db.prepare('UPDATE conversations SET updated_at = ? WHERE thread_id = ?').run(now, threadId);
-  }
-
-  listEvents(threadId: string): AgentEvent[] {
-    return (this.db.prepare('SELECT event_json FROM conversation_events WHERE thread_id = ? ORDER BY seq').all(threadId) as Array<{ event_json: string }>).map((r) => JSON.parse(r.event_json) as AgentEvent);
-  }
-
-  /** Conversations that have at least one recorded event; empty (never used) threads are not shown. */
-  listConversations(limit = 200): Conversation[] {
-    return (this.db.prepare(`SELECT c.* FROM conversations c WHERE EXISTS (SELECT 1 FROM conversation_events e WHERE e.thread_id = c.thread_id)
-      ORDER BY c.updated_at DESC, c.rowid DESC LIMIT ?`).all(limit) as Array<Record<string, unknown>>).map(rowToConversation);
-  }
-
-  pruneEmptyConversations(exceptThreadId: string | null): void {
-    this.db.prepare(`DELETE FROM conversations WHERE (? IS NULL OR thread_id <> ?) AND NOT EXISTS (SELECT 1 FROM conversation_events e WHERE e.thread_id = conversations.thread_id)`).run(exceptThreadId, exceptThreadId);
-  }
-
-  getConversation(threadId: string): Conversation | null {
-    const r = this.db.prepare('SELECT * FROM conversations WHERE thread_id = ?').get(threadId) as Record<string, unknown> | undefined;
-    return r ? rowToConversation(r) : null;
-  }
-
-  createTask(t: { title: string; prompt: string; schedule: TaskSchedule; threadMode: 'resume' | 'new'; webSearch?: boolean; nextRunAt: string | null }): ScheduledTask {
-    const res = this.db.prepare('INSERT INTO tasks(title, prompt, schedule_json, thread_mode, web_search, created_at, next_run_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(t.title, t.prompt, JSON.stringify(t.schedule), t.threadMode, t.webSearch ? 1 : 0, new Date().toISOString(), t.nextRunAt);
-    return this.getTask(Number(res.lastInsertRowid))!;
-  }
-
-  updateTask(id: number, patch: Partial<Pick<ScheduledTask, 'title' | 'prompt' | 'schedule' | 'threadMode' | 'threadId' | 'enabled' | 'webSearch' | 'lastRunAt' | 'lastStatus' | 'nextRunAt'>>): void {
-    const cols: Record<string, unknown> = {
-      title: patch.title, prompt: patch.prompt, schedule_json: patch.schedule === undefined ? undefined : JSON.stringify(patch.schedule),
-      thread_mode: patch.threadMode, thread_id: patch.threadId, enabled: patch.enabled === undefined ? undefined : (patch.enabled ? 1 : 0),
-      web_search: patch.webSearch === undefined ? undefined : (patch.webSearch ? 1 : 0),
-      last_run_at: patch.lastRunAt, last_status: patch.lastStatus, next_run_at: patch.nextRunAt,
-    };
-    const set = Object.entries(cols).filter(([, v]) => v !== undefined);
-    if (set.length === 0) return;
-    this.db.prepare(`UPDATE tasks SET ${set.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`).run(...set.map(([, v]) => v as string | number | null), id);
-  }
-
-  deleteTask(id: number): void { this.db.prepare('DELETE FROM tasks WHERE id = ?').run(id); }
-
-  getTask(id: number): ScheduledTask | null {
-    const r = this.db.prepare('SELECT * FROM tasks WHERE id = ?').get(id) as Record<string, unknown> | undefined;
-    return r ? rowToTask(r) : null;
-  }
-
-  listTasks(): ScheduledTask[] {
-    return (this.db.prepare('SELECT * FROM tasks ORDER BY id').all() as Array<Record<string, unknown>>).map(rowToTask);
-  }
-
-  dueTasks(now: string): ScheduledTask[] {
-    return (this.db.prepare('SELECT * FROM tasks WHERE enabled = 1 AND next_run_at IS NOT NULL AND next_run_at <= ? ORDER BY next_run_at').all(now) as Array<Record<string, unknown>>).map(rowToTask);
-  }
-
-  /**
-   * Deletes conversations past either limit and their events. A conversation is kept when it is
-   * the live thread, when it was touched in the last hour, or when a scheduled task resumes it:
-   * retention must never break a thread the app is still using.
-   */
-  applyRetention(policy: RetentionPolicy): RetentionResult {
-    const cutoff = new Date(Date.now() - policy.keepDays * 24 * 60 * 60 * 1000).toISOString();
-    const recent = new Date(Date.now() - RETENTION_GRACE_MS).toISOString();
-    const victims = (this.db.prepare(`
-      WITH ranked AS (SELECT thread_id, updated_at, ROW_NUMBER() OVER (ORDER BY updated_at DESC, rowid DESC) AS rn FROM conversations)
-      SELECT thread_id FROM ranked
-      WHERE (rn > ? OR updated_at < ?)
-        AND updated_at < ?
-        AND (? IS NULL OR thread_id <> ?)
-        AND thread_id NOT IN (SELECT thread_id FROM tasks WHERE thread_id IS NOT NULL)
-    `).all(policy.keepConversations, cutoff, recent, policy.keepThreadId ?? null, policy.keepThreadId ?? null) as Array<{ thread_id: string }>).map((r) => r.thread_id);
-    if (victims.length === 0) return { conversations: 0, events: 0 };
-    const holes = victims.map(() => '?').join(', ');
-    const events = (this.db.prepare(`SELECT COUNT(*) AS n FROM conversation_events WHERE thread_id IN (${holes})`).get(...victims) as { n: number }).n;
-    this.db.exec('BEGIN');
-    try {
-      this.db.prepare(`DELETE FROM conversation_events WHERE thread_id IN (${holes})`).run(...victims);
-      this.db.prepare(`DELETE FROM conversations WHERE thread_id IN (${holes})`).run(...victims);
-      this.db.exec('COMMIT');
-    } catch (err) {
-      try { this.db.exec('ROLLBACK'); } catch { /* the failed statement may have aborted the transaction already */ }
-      throw err;
-    }
-    return { conversations: victims.length, events };
-  }
-
-  stats(): HistoryStats {
-    const n = (sql: string) => (this.db.prepare(sql).get() as { n: number }).n;
-    return {
-      conversations: n('SELECT COUNT(*) AS n FROM conversations'),
-      events: n('SELECT COUNT(*) AS n FROM conversation_events'),
-      posts: n('SELECT COUNT(*) AS n FROM posts'),
-      library: n('SELECT COUNT(*) AS n FROM library'),
-      tasks: n('SELECT COUNT(*) AS n FROM tasks'),
-      dbBytes: this.dbBytes(),
-    };
-  }
-
-  /** The file on disk, or - for an in-memory database, and if the file cannot be read - the pages SQLite holds. */
-  private dbBytes(): number {
-    if (this.path !== ':memory:') {
-      try { return statSync(this.path).size; } catch { /* fall through to the page count */ }
-    }
-    const pages = (this.db.prepare('PRAGMA page_count').get() as { page_count: number }).page_count;
-    const size = (this.db.prepare('PRAGMA page_size').get() as { page_size: number }).page_size;
-    return pages * size;
-  }
-
-  close(): void { this.db.close(); }
-}
-
-function rowToConversation(r: Record<string, unknown>): Conversation {
-  return { threadId: r.thread_id as string, title: r.title as string, kind: r.kind as 'chat' | 'task', taskId: (r.task_id as number | null) ?? null, createdAt: r.created_at as string, updatedAt: r.updated_at as string, toolsHash: (r.tools_hash as string | null) ?? null };
-}
-
-function rowToTask(r: Record<string, unknown>): ScheduledTask {
-  return {
-    id: r.id as number, title: r.title as string, prompt: r.prompt as string, schedule: JSON.parse(r.schedule_json as string) as TaskSchedule,
-    threadMode: r.thread_mode as 'resume' | 'new', threadId: (r.thread_id as string | null) ?? null, enabled: (r.enabled as number) === 1,
-    webSearch: (r.web_search as number | null) === 1,
-    createdAt: r.created_at as string, lastRunAt: (r.last_run_at as string | null) ?? null, lastStatus: (r.last_status as string | null) ?? null, nextRunAt: (r.next_run_at as string | null) ?? null,
-  };
-}
+export { AppStore as HistoryStore };

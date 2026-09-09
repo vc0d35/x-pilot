@@ -1,17 +1,18 @@
+import { z } from 'zod';
 import { fail, type ToolResult } from '../../../shared/tools';
 import type { ViewTarget, XViewLike, XViewToolCtx } from './context';
 
+/** Spread into a tool's args so every view-taking tool describes the choice the same way. */
 export const VIEW_ARG = {
-  view: {
-    type: 'string',
-    enum: ['background', 'visible'],
-    description: 'Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.',
-  },
-} as const;
+  view: z
+    .enum(['background', 'visible'])
+    .optional()
+    .describe('Where to run: "background" (default) reads in a hidden window and leaves the user\'s screen untouched; "visible" drives the window the user is looking at. Use "visible" only when the user asked to see, open, or browse something.'),
+};
 
 export const CANCELLED_BY_USER = 'Cancelled by the user';
 
-export function parseView(args: Record<string, unknown>): ViewTarget {
+export function parseView(args: { view?: ViewTarget }): ViewTarget {
   return args.view === 'visible' ? 'visible' : 'background';
 }
 

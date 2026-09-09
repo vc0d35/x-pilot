@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { searchHistory } from './search-history';
+import { fail, runTool } from '../../../shared/tools';
 import { HistoryStore, toFtsQuery, type HistoryHit, type HistoryQuery } from '../../history/store';
 import type { AppToolCtx } from './context';
 
@@ -10,29 +11,28 @@ function ctx() {
 }
 
 const args = (over: Record<string, unknown>) => ({ query: 'hello', ...over });
+const run = (c: AppToolCtx, over: Record<string, unknown> = {}) => runTool(searchHistory, args(over), c);
 
 describe('xpilot_search_history', () => {
-  it('clamps the limit to the maximum it declares', async () => {
+  it('defaults the limit and refuses one outside the range it declares', async () => {
     const { c, search } = ctx();
-    await searchHistory.execute(args({ limit: 1e9 }), c);
-    expect(search.mock.calls[0][0]).toMatchObject({ limit: 100 });
-    await searchHistory.execute(args({ limit: 0 }), c);
-    expect(search.mock.calls[1][0]).toMatchObject({ limit: 1 });
-    await searchHistory.execute(args({}), c);
-    expect(search.mock.calls[2][0]).toMatchObject({ limit: 20 });
-    await searchHistory.execute(args({ limit: 'lots' }), c);
-    expect(search.mock.calls[3][0]).toMatchObject({ limit: 20 });
+    await run(c);
+    expect(search.mock.calls[0][0]).toMatchObject({ limit: 20 });
+    expect(await run(c, { limit: 1e9 })).toEqual(fail('Invalid arguments for xpilot_search_history: limit: Too big: expected number to be <=100'));
+    expect(await run(c, { limit: 0 })).toMatchObject({ success: false });
+    expect(await run(c, { limit: 'lots' })).toMatchObject({ success: false });
+    expect(search).toHaveBeenCalledTimes(1);
   });
 
   it('truncates a long query rather than failing on it', async () => {
     const { c, search } = ctx();
-    const r = await searchHistory.execute(args({ query: 'a '.repeat(5000) }), c);
+    const r = await run(c, { query: 'a '.repeat(5000) });
     expect(r.success).toBe(true);
     expect(search.mock.calls[0][0].query).toHaveLength(200);
   });
 
   it('still requires something to search for', async () => {
-    expect(await searchHistory.execute({ query: '   ' }, ctx().c)).toMatchObject({ success: false });
+    expect(await run(ctx().c, { query: '   ' })).toMatchObject({ success: false });
   });
 });
 

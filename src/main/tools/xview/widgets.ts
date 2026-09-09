@@ -1,4 +1,5 @@
-import { ok, type ToolModule } from '../../../shared/tools';
+import { z } from 'zod';
+import { defineTool, ok } from '../../../shared/tools';
 import type { WidgetSection } from '../../../shared/widgets';
 import type { XViewToolCtx } from './context';
 import { VIEW_ARG, navigateStep, parseView, withView } from './target';
@@ -17,16 +18,17 @@ export function hasWanted(sections: WidgetSection[], want: 'news' | 'trends' | '
   return want === 'news' ? news : want === 'trends' ? trends : news && trends;
 }
 
-export const readNewsAndTrends: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_read_news_and_trends',
-    description: 'Reads the "Today\'s News" headlines and "What\'s happening" trending topics (title plus context such as category, age and post count), grouped by widget heading. Uses what is already on the user\'s screen when the widgets are there; otherwise loads Explore in a hidden window without moving the user\'s view.',
-    inputSchema: { type: 'object', properties: { section: { type: 'string', enum: ['news', 'trends', 'both'], description: 'Which widget you need (default both)' }, ...VIEW_ARG }, additionalProperties: false },
-    annotations: { readOnlyHint: true },
-  },
-  execute: async (args, ctx, signal) => {
-    const want = args.section === 'news' || args.section === 'trends' ? args.section : 'both';
-    const explicit = typeof args.view === 'string';
+export const readNewsAndTrends = defineTool({
+  name: 'x_read_news_and_trends',
+  description: 'Reads the "Today\'s News" headlines and "What\'s happening" trending topics (title plus context such as category, age and post count), grouped by widget heading. Uses what is already on the user\'s screen when the widgets are there; otherwise loads Explore in a hidden window without moving the user\'s view.',
+  args: z.strictObject({
+    section: z.enum(['news', 'trends', 'both']).optional().describe('Which widget you need (default both)'),
+    ...VIEW_ARG,
+  }),
+  annotations: { readOnlyHint: true },
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const want = args.section ?? 'both';
+    const explicit = args.view !== undefined;
     if (!explicit || args.view === 'visible') {
       const onScreen = await ctx.xview.callPreload('x_read_widgets', { timeoutMs: explicit ? 8000 : 0 }, signal);
       if (onScreen.success && hasWanted((onScreen.content as WidgetsPayload).sections, want)) return ok({ source: 'visible', ...(onScreen.content as WidgetsPayload) });
@@ -41,4 +43,4 @@ export const readNewsAndTrends: ToolModule<XViewToolCtx> = {
       return r.success ? ok({ source: 'background', ...(r.content as WidgetsPayload) }) : r;
     });
   },
-};
+});

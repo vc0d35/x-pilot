@@ -2,7 +2,7 @@ import { ipcRenderer } from 'electron';
 import { fail, type ToolModule, type ToolResult } from '../../shared/tools';
 import { IPC } from '../../shared/ipc';
 import type { PreloadCtx } from './context';
-import { adapterTools } from './adapter/tools';
+import { adapterTools, runAdapterTool } from './adapter/tools';
 import { installLikeCapture } from './adapter/capture';
 import { installFocusTracker } from './adapter/focus';
 
@@ -15,13 +15,7 @@ function register(): void {
 register();
 
 ipcRenderer.on(IPC.adapterCall, async (_event, msg: { callId: string; name: string; args?: Record<string, unknown> }) => {
-  let result: ToolResult;
-  const tool = local.get(msg.name);
-  if (!tool) result = fail(`Unknown tool in preload: ${msg.name}`);
-  else {
-    try { result = await tool.execute(msg.args ?? {}, ctx); }
-    catch (err) { result = fail(err instanceof Error ? err.message : String(err)); }
-  }
+  const result: ToolResult = local.has(msg.name) ? await runAdapterTool(msg.name, msg.args ?? {}, ctx) : fail(`Unknown tool in preload: ${msg.name}`);
   ipcRenderer.send(IPC.adapterResult, { callId: msg.callId, result });
 });
 

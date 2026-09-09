@@ -7,7 +7,7 @@ export class SettingsStore {
   private current: Settings;
   private readonly listeners = new Set<(s: Settings) => void>();
 
-  constructor(private readonly filePath: string) {
+  constructor(readonly filePath: string) {
     this.current = this.load();
   }
 

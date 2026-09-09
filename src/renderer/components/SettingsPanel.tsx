@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
-import { confirmPostingMode, type PostingMode, type Settings } from '../../shared/settings';
+import type { PostingMode, Settings } from '../../shared/settings';
+import { confirmPostingMode } from '../posting-mode';
 import type { HistoryStats, ModelInfo } from '../../shared/sidebar-api';
+import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
 
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -69,7 +71,7 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
         </div>
       </label>
       <label>Library folder
-        <div className="row"><code>{settings.library.dir ?? '~/Documents/X Pilot'}</code><button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button></div>
+        <div className="row"><code>{settings.library.dir ?? `~/Documents/${LIBRARY_FOLDER_NAME}`}</code><button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button></div>
       </label>
       <fieldset className="settings-group">
         <legend>History</legend>

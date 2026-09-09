@@ -1,4 +1,5 @@
-import { fail, type ToolModule } from '../../../shared/tools';
+import { z } from 'zod';
+import { defineTool, fail } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
 import { VIEW_ARG, navigateStep, parseView, withView } from './target';
 
@@ -14,16 +15,14 @@ export function normalizePostUrl(input: string): string | null {
   return `https://x.com${m[0]}`;
 }
 
-export const readPost: ToolModule<XViewToolCtx> = {
-  spec: {
-    name: 'x_read_post',
-    description: 'Reads a post, thread, or X Article by URL and returns the full text, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
-    inputSchema: { type: 'object', properties: { url: { type: 'string' }, ...VIEW_ARG }, required: ['url'], additionalProperties: false },
-    annotations: { readOnlyHint: true },
-  },
-  execute: async (args, ctx, signal) => {
-    const target = normalizePostUrl(String(args.url ?? ''));
-    if (!target) return fail(`Not a post or article URL: ${String(args.url ?? '')}`);
+export const readPost = defineTool({
+  name: 'x_read_post',
+  description: 'Reads a post, thread, or X Article by URL and returns the full text, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
+  args: z.strictObject({ url: z.string(), ...VIEW_ARG }),
+  annotations: { readOnlyHint: true },
+  execute: async (args, ctx: XViewToolCtx, signal) => {
+    const target = normalizePostUrl(args.url);
+    if (!target) return fail(`Not a post or article URL: ${args.url}`);
     const requested = parseView(args);
     return withView(ctx, requested, async (view) => {
       // A background read always navigates: the visible window's URL is page-controlled (history.pushState),
@@ -35,4 +34,4 @@ export const readPost: ToolModule<XViewToolCtx> = {
       return view.callPreload('x_read_current_post', {}, signal);
     });
   },
-};
+});

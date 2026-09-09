@@ -1,16 +1,21 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import type { AgentEvent, UserInputQuestion } from '../../../shared/agent';
+import type { AgentEvent } from '../../../shared/agent';
 import type { PageContext } from '../../../shared/page';
-import type { ToolResult, ToolSpec } from '../../../shared/tools';
+import { contextKey } from '../../../shared/page-context';
+import type { ToolResult } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
 import type { UserInputBroker } from '../../user-input';
 import { DEVELOPER_INSTRUCTIONS } from '../instructions';
 import type { AgentProvider, ModelInfo, StartOptions } from '../provider';
-import { JsonRpcError, JsonRpcStdio } from './jsonrpc';
+import { JsonRpcStdio } from './jsonrpc';
 import { CODEX_MISSING_MESSAGE, codexSpawnEnv, resolveCodexBinary } from './binary';
-import { fence, fenceBlock, fenceLine, pageContentBlock } from '../fence';
+import { handleNotification, handleServerRequest, newItemPhases, type ItemPhases } from './events';
+import { buildTurnText } from './turn-text';
 
 export { fence } from '../fence';
+export { contextKey } from '../../../shared/page-context';
+export { buildTurnText } from './turn-text';
+export { inputQuestions, wrapToolOutput } from './events';
 
 /** The little we need of the detached watchdog child: enough for a test double. */
 export interface DetachedProcess { pid?: number; unref(): void; kill(signal?: NodeJS.Signals): boolean }
@@ -32,60 +37,13 @@ export interface CodexProviderDeps {
   turnIdleWarnMs?: number;
 }
 
-const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
-const USER_INPUT_TIMEOUT_MS = 5 * 60 * 1000;
 const TURN_IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 const TURN_IDLE_WARN_MS = 2 * 60 * 1000;
 const WATCHDOG_SHELL = '/bin/sh';
-const QUESTION_MAX = 24;
-const OPTION_MAX = 32;
 const STDERR_KEEP = 8 * 1024;
 const STDERR_IN_MESSAGE = 400;
 const SIGKILL_AFTER_MS = 2000;
 const EXIT_WAIT_MS = 4000;
-
-/** Caps on page-controlled fields, so one hostile post cannot crowd out the turn. */
-const HANDLE_MAX = 64;
-const URL_MAX = 512;
-const TITLE_MAX = 200;
-const TEXT_MAX = 4000;
-
-export function wrapToolOutput(text: string): string {
-  return `<tool-output untrusted source="x.com">\n${fence(text)}\n</tool-output>`;
-}
-
-/** Identity of a page context for "still the same view" dedupe across turns. */
-export function contextKey(ctx: PageContext | null | undefined): string | null {
-  if (!ctx) return null;
-  return ctx.post ? `post:${ctx.post.id}` : `visible:${(ctx.visible ?? []).map((v) => v.id).join(',')}`;
-}
-
-/**
- * The page controls every field below, identity included, so all of them go inside the fence:
- * the only lines outside it are ours.
- */
-export function buildTurnText(text: string, ctx: PageContext | null | undefined, lastKey: string | null): string {
-  if (!ctx) return text;
-  const unchanged = lastKey === contextKey(ctx);
-  const p = ctx.post;
-  if (p) {
-    const author = p.authorName ? `@${fenceLine(p.authorHandle, HANDLE_MAX)} (${fenceLine(p.authorName, HANDLE_MAX)})` : `@${fenceLine(p.authorHandle, HANDLE_MAX)}`;
-    const head = `${fenceLine(p.kind, HANDLE_MAX)} by ${author} at ${fenceLine(p.url, URL_MAX)}`;
-    if (unchanged) return `Current page, unchanged since the last turn:\n${pageContentBlock([head])}\n\n${text}`;
-    const lines = [head];
-    if (p.articleTitle) lines.push(`Title: ${fenceLine(p.articleTitle, TITLE_MAX)}`);
-    if (p.text) lines.push(fenceBlock(p.text, TEXT_MAX));
-    if (p.articleBody) lines.push('', fenceBlock(p.articleBody, TEXT_MAX));
-    return `Current page:\n${pageContentBlock(lines)}\n\n${text}`;
-  }
-  const visible = ctx.visible ?? [];
-  if (visible.length === 0) return text;
-  const view = `view: ${fenceLine(ctx.kind, HANDLE_MAX)} at ${fenceLine(ctx.url, URL_MAX)}`;
-  if (unchanged) return `Current page, unchanged since the last turn:\n${pageContentBlock([view])}\n\n${text}`;
-  const blocks = [pageContentBlock([view])];
-  visible.forEach((v, i) => blocks.push(pageContentBlock([`${i + 1}. @${fenceLine(v.authorHandle, HANDLE_MAX)} — ${fenceLine(v.url, URL_MAX)}`, fenceBlock(v.text, TEXT_MAX)])));
-  return `Current page, posts on screen top to bottom:\n${blocks.join('\n')}\n\n${text}`;
-}
 
 export class CodexProvider implements AgentProvider {
   readonly id = 'codex';
@@ -100,9 +58,7 @@ export class CodexProvider implements AgentProvider {
   /** Message from `proc.on('error')`, kept so the death that follows reports the useful cause. */
   private spawnError: string | null = null;
   private lastContextKey: string | null = null;
-  private writingItemId: string | null = null;
-  /** agentMessage items with phase 'commentary' are the model's narration, shown as thinking. */
-  private readonly commentaryIds = new Set<string>();
+  private readonly phases: ItemPhases = newItemPhases();
   private lastActivity: string | null = null;
   /** Aborted when the turn is interrupted, times out, or ends; handed to every tool call of that turn. */
   private turnAbort: AbortController | null = null;
@@ -365,120 +321,28 @@ export class CodexProvider implements AgentProvider {
 
   private onNotification(method: string, params: unknown): void {
     this.touchIdle();
-    const p = params as Record<string, unknown>;
-    switch (method) {
-      case 'turn/started': {
-        const turn = p.turn as { id: string };
-        this.turnId = turn.id;
-        this.emit({ type: 'turn.started', turnId: turn.id });
-        return;
-      }
-      case 'turn/completed': {
-        const turn = p.turn as { id: string; status: 'completed' | 'interrupted' | 'failed'; error: { message: string } | null };
-        this.finishTurn(turn.status, turn.error?.message, turn.id);
-        return;
-      }
-      case 'item/agentMessage/delta':
-        if (this.commentaryIds.has(p.itemId as string)) { this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: p.delta as string }); return; }
-        if (this.writingItemId !== p.itemId) { this.writingItemId = p.itemId as string; this.emit({ type: 'activity', activity: 'writing' }); }
-        this.emit({ type: 'message.delta', itemId: p.itemId as string, delta: p.delta as string });
-        return;
-      case 'item/reasoning/summaryTextDelta':
-        this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: p.delta as string });
-        return;
-      case 'item/reasoning/summaryPartAdded':
-        if ((p.summaryIndex as number) > 0) this.emit({ type: 'thinking.delta', itemId: p.itemId as string, delta: '\n\n' });
-        return;
-      case 'item/started': {
-        const item = p.item as Record<string, unknown>;
-        if (item.type === 'reasoning') this.emit({ type: 'activity', activity: 'thinking' });
-        if (item.type === 'agentMessage' && item.phase === 'commentary') { this.commentaryIds.add(item.id as string); this.emit({ type: 'activity', activity: 'thinking' }); }
-        if (item.type === 'dynamicToolCall') this.emit({ type: 'activity', activity: 'tool', detail: item.tool as string });
-        if (item.type === 'webSearch') this.emit({ type: 'activity', activity: 'tool', detail: 'web_search' });
-        if (item.type === 'commandExecution') this.emit({ type: 'activity', activity: 'tool', detail: 'shell' });
-        if (item.type === 'mcpToolCall') this.emit({ type: 'activity', activity: 'tool', detail: `${item.server}/${item.tool}` });
-        if (item.type === 'dynamicToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: item.tool as string, args: item.arguments });
-        if (item.type === 'commandExecution') this.emit({ type: 'tool.started', itemId: item.id as string, name: 'shell', args: item.command });
-        if (item.type === 'mcpToolCall') this.emit({ type: 'tool.started', itemId: item.id as string, name: `${item.server}/${item.tool}`, args: item.arguments });
-        if (item.type === 'webSearch') this.emit({ type: 'tool.started', itemId: item.id as string, name: 'web_search', args: { queries: webSearchQueries(item) } });
-        return;
-      }
-      case 'item/completed': {
-        const item = p.item as Record<string, unknown>;
-        if (item.type === 'reasoning') {
-          const text = ((item.summary as string[] | null) ?? []).join('\n\n');
-          if (text) this.emit({ type: 'thinking.completed', itemId: item.id as string, text });
-        }
-        if (item.type === 'agentMessage' && (item.phase === 'commentary' || this.commentaryIds.has(item.id as string))) {
-          this.commentaryIds.delete(item.id as string);
-          this.emit({ type: 'thinking.completed', itemId: item.id as string, text: item.text as string });
-        } else if (item.type === 'agentMessage') this.emit({ type: 'message.completed', itemId: item.id as string, text: item.text as string });
-        if (item.type === 'dynamicToolCall') {
-          const content = (item.contentItems as Array<{ type: string; text?: string }> | null) ?? [];
-          this.emit({ type: 'tool.completed', itemId: item.id as string, name: item.tool as string, success: item.success !== false, output: content.map((c) => c.text ?? '').join('\n') });
-        }
-        if (item.type === 'commandExecution') this.emit({ type: 'tool.completed', itemId: item.id as string, name: 'shell', success: item.exitCode === 0, output: (item.aggregatedOutput as string | null) ?? '' });
-        if (item.type === 'mcpToolCall') this.emit({ type: 'tool.completed', itemId: item.id as string, name: `${item.server}/${item.tool}`, success: !item.error, output: JSON.stringify(item.result ?? item.error ?? null) });
-        if (item.type === 'webSearch') this.emit({ type: 'tool.completed', itemId: item.id as string, name: 'web_search', success: true, output: (item.query as string | null) ?? webSearchQueries(item).join(' | ') });
-        return;
-      }
-      case 'error':
-        this.emit({ type: 'status', status: 'error', message: JSON.stringify(params) });
-        return;
-      default:
-        return;
-    }
+    handleNotification(method, params, this.phases, {
+      emit: (e) => this.emit(e),
+      turnStarted: (turnId) => { this.turnId = turnId; },
+      turnCompleted: (turnId, status, error) => this.finishTurn(status, error, turnId),
+    });
   }
 
   private async onServerRequest(method: string, params: unknown): Promise<unknown> {
     this.touchIdle();
-    const p = params as Record<string, unknown>;
-    switch (method) {
-      case 'item/tool/call': {
-        try {
-          const result = await this.deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {}, this.turnAbort?.signal);
-          const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
-          return { contentItems: [{ type: 'inputText', text: wrapToolOutput(text) }], success: result.success };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          return { contentItems: [{ type: 'inputText', text: wrapToolOutput(`Error: ${message}`) }], success: false };
-        }
-      }
-      case 'item/commandExecution/requestApproval': {
-        const decision = await this.deps.approvals.request({
-          kind: 'command',
-          title: 'Codex wants to run a command',
-          detail: `${p.command ?? ''}\n(cwd: ${p.cwd ?? ''})${p.reason ? `\n${p.reason}` : ''}`,
-          options: [{ id: 'accept', label: 'Allow' }, { id: 'acceptForSession', label: 'Allow for session' }, { id: 'decline', label: 'Deny' }],
-        }, APPROVAL_TIMEOUT_MS);
-        return { decision: decision === 'timeout' ? 'decline' : decision };
-      }
-      case 'item/fileChange/requestApproval': {
-        const decision = await this.deps.approvals.request({
-          kind: 'fileChange',
-          title: 'Codex wants to change files',
-          detail: JSON.stringify(p.changes ?? p, null, 2).slice(0, 2000),
-          options: [{ id: 'accept', label: 'Allow' }, { id: 'decline', label: 'Deny' }],
-        }, APPROVAL_TIMEOUT_MS);
-        return { decision: decision === 'timeout' ? 'decline' : decision };
-      }
-      case 'item/tool/requestUserInput': {
-        const broker = this.deps.userInput;
-        // An empty answer set reads as "the user said nothing"; an error tells the model the channel is closed.
-        if (!broker) throw new JsonRpcError(-32601, 'requestUserInput is not supported by XPilot yet');
-        if (!this.loggedInputParams && process.env.NODE_ENV !== 'production') {
-          this.loggedInputParams = true;
-          console.log(`[xpilot] requestUserInput params: ${JSON.stringify(params).slice(0, 2000)}`);
-        }
-        const questions = inputQuestions(p);
-        if (questions.length === 0) throw new JsonRpcError(-32602, 'requestUserInput carried no questions');
-        const answers = await broker.request({ questions }, USER_INPUT_TIMEOUT_MS);
-        if (!answers) throw new JsonRpcError(-32001, 'The user did not answer the question');
-        return { answers: questions.map((q) => ({ id: q.id, answer: answers[q.id] ?? '' })) };
-      }
-      default:
-        throw new Error(`Unsupported server request: ${method}`);
-    }
+    return handleServerRequest(method, params, {
+      callTool: (name, args, signal) => this.deps.callTool(name, args, signal),
+      approvals: this.deps.approvals,
+      userInput: this.deps.userInput,
+      signal: this.turnAbort?.signal,
+      onUserInputParams: (p) => this.logInputParamsOnce(p),
+    });
+  }
+
+  private logInputParamsOnce(params: unknown): void {
+    if (this.loggedInputParams || process.env.NODE_ENV === 'production') return;
+    this.loggedInputParams = true;
+    console.log(`[xpilot] requestUserInput params: ${JSON.stringify(params).slice(0, 2000)}`);
   }
 }
 
@@ -490,50 +354,4 @@ export class CodexProvider implements AgentProvider {
  */
 export function watchdogArgs(parentPid: number, childPid: number): string[] {
   return ['-c', 'while kill -0 "$1" 2>/dev/null && kill -0 "$2" 2>/dev/null; do sleep 2; done; kill -TERM "$2" 2>/dev/null', 'sh', String(parentPid), String(childPid)];
-}
-
-function firstString(...values: unknown[]): string | null {
-  for (const v of values) if (typeof v === 'string' && v.trim()) return v;
-  return null;
-}
-
-function questionOptions(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  const out: string[] = [];
-  for (const o of value.slice(0, OPTION_MAX)) {
-    const label = typeof o === 'string' ? o : firstString((o as Record<string, unknown>)?.label, (o as Record<string, unknown>)?.value, (o as Record<string, unknown>)?.id);
-    if (label) out.push(label);
-  }
-  return out;
-}
-
-/**
- * The app-server protocol ships no types with the CLI, and the field names vary between codex
- * versions, so read the questions defensively: anything that carries a prompt is one question,
- * and everything else about it is optional.
- */
-export function inputQuestions(params: Record<string, unknown>): UserInputQuestion[] {
-  const raw = Array.isArray(params.questions) ? params.questions : [];
-  const out: UserInputQuestion[] = [];
-  raw.slice(0, QUESTION_MAX).forEach((entry, i) => {
-    const q = (entry !== null && typeof entry === 'object' ? entry : { prompt: entry }) as Record<string, unknown>;
-    const prompt = firstString(q.prompt, q.question, q.text, q.label, q.title);
-    if (!prompt) return;
-    const options = questionOptions(q.options ?? q.choices);
-    const secret = q.secret === true || q.sensitive === true || q.password === true;
-    out.push({
-      id: firstString(q.id, q.questionId, q.key) ?? `q${i + 1}`,
-      prompt,
-      ...(options.length > 0 ? { options } : {}),
-      ...(secret ? { secret: true } : {}),
-    });
-  });
-  return out;
-}
-
-function webSearchQueries(item: Record<string, unknown>): string[] {
-  const action = item.action as { queries?: string[] | null; query?: string | null } | undefined;
-  if (action?.queries?.length) return action.queries;
-  const q = action?.query ?? (item.query as string | null | undefined);
-  return q ? [q] : [];
 }

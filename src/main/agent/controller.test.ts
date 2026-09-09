@@ -7,6 +7,7 @@ import { AgentController, toolsFingerprint, transcriptEvent, MAX_TRANSCRIPT_OUTP
 import type { AgentProvider, StartOptions } from './provider';
 import { ToolRegistry } from '../tools/registry';
 import { SettingsStore } from '../settings';
+import { ThreadState } from './thread-state';
 import type { AgentEvent } from '../../shared/agent';
 
 function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: string }>) {
@@ -26,6 +27,7 @@ function fakeProvider(startImpl?: (o: StartOptions) => Promise<{ threadId: strin
 }
 
 const settings = () => new SettingsStore(join(mkdtempSync(join(tmpdir(), 'xp-')), 's.json'));
+const threadState = (store: SettingsStore) => ThreadState.beside(store.filePath);
 
 describe('AgentController', () => {
   it('starts with registry tools, persists the thread id, and resumes it next time', async () => {
@@ -38,8 +40,8 @@ describe('AgentController', () => {
     await ctl.start({ resume: true });
     expect(providers[0].starts[0].tools.map((t) => t.name)).toEqual(['x_a']);
     expect(providers[0].starts[0].threadId).toBeNull();
-    expect(store.get().threadId).toBe('T');
-    expect(store.get().threadToolsHash).toBe(toolsFingerprint(registry.list()));
+    // No threadState dependency: the controller falls back to a file beside settings.json.
+    expect(threadState(store).get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()) });
     await ctl.start({ resume: true });
     expect(providers[0].stop).toHaveBeenCalled();
     expect(providers[1].starts[0].threadId).toBe('T');
@@ -49,18 +51,18 @@ describe('AgentController', () => {
     const registry = new ToolRegistry();
     registry.addSource({ id: 's', list: () => [{ name: 'x_a', description: 'a', inputSchema: {} }], call: async () => ({ success: true, content: 1 }) });
     const store = settings();
-    store.update({ threadId: 'old', threadToolsHash: 'a-hash-from-a-different-tool-list' });
+    const state = threadState(store);
+    state.set({ threadId: 'old', threadToolsHash: 'a-hash-from-a-different-tool-list' });
     const provider = fakeProvider();
-    const ctl = new AgentController({ registry, settings: store, workspaceDir: '/tmp', createProvider: () => provider });
+    const ctl = new AgentController({ registry, settings: store, workspaceDir: '/tmp', createProvider: () => provider, threadState: state });
     await ctl.start({ resume: true });
     expect(provider.starts[0].threadId).toBeNull();
-    expect(store.get().threadId).toBe('T');
-    expect(store.get().threadToolsHash).toBe(toolsFingerprint(registry.list()));
+    expect(state.get()).toEqual({ threadId: 'T', threadToolsHash: toolsFingerprint(registry.list()) });
   });
 
   it('newThread clears the thread id and emits provider errors as status', async () => {
     const store = settings();
-    store.update({ threadId: 'old' });
+    threadState(store).set({ threadId: 'old' });
     const failing = fakeProvider(async () => { throw new Error('no codex'); });
     const ctl = new AgentController({ registry: new ToolRegistry(), settings: store, workspaceDir: '/tmp', createProvider: () => failing });
     const events: AgentEvent[] = [];
@@ -94,7 +96,7 @@ describe('AgentController', () => {
     await ctl.send('hi', null);
     expect(providers[1].sent).toEqual(['hi']);
     expect(providers[0].sent).toEqual([]);
-    expect(store.get().threadId).toBe('T');
+    expect(threadState(store).get().threadId).toBe('T');
     expect(events.some((e) => e.type === 'status' && e.status === 'error')).toBe(false);
   });
 
@@ -268,6 +270,6 @@ describe('conversations', () => {
     const events = await ctl.openConversation('T');
     expect(providers[2].starts[0].threadId).toBe('T');
     expect(events.map((e) => e.type)).toEqual(['user.message', 'message.completed']);
-    expect(store.get().threadId).toBe('T');
+    expect(threadState(store).get().threadId).toBe('T');
   });
 });

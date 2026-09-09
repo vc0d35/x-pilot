@@ -54,13 +54,13 @@ Still open from the first review:
 
 ## Code organisation follow-ups (not blockers)
 
-- [ ] Split `src/main/index.ts` into entry, service bootstrap and link routing.
-- [ ] Split `src/main/agent/codex/provider.ts` into process lifecycle, turn text and event mapping.
-- [ ] Split `HistoryStore` into per-domain stores over one connection, and rename it (it stores more than history).
-- [ ] Parse tool arguments with zod schemas instead of per-tool `typeof` coercions.
-- [ ] Deduplicate `contextKey` / `contextSignature` into a shared module.
-- [ ] Move renderer-only settings policy (`confirmPostingMode`, `AUTONOMOUS_WARNING`) and the `threadId` / `threadToolsHash` agent state out of `src/shared/settings.ts`.
-- [ ] Share the library folder name between main and `SettingsPanel`.
+- [x] Split `src/main/index.ts` into entry, service bootstrap and link routing. `index.ts` is now the entry alone (env switches, banned-switch check, scheme registration, single-instance lock, signal handlers, `whenReady` → `start()`, fatal handler, e2e harness); `src/main/bootstrap.ts` exports `createApp()`, which builds the object graph in creation order and returns it with `launch()` and `shutdown()`; link routing stays in `src/main/links.ts`. The two decisions hiding in the wiring, `resolveDevSwitches` (which env vars a development run honours) and `toolsForScheduledRuns` (which app tools a scheduled run gets), are pure and unit-tested in `bootstrap.test.ts`.
+- [x] Split `src/main/agent/codex/provider.ts` into process lifecycle (`provider.ts`), turn text (`turn-text.ts`) and event mapping (`events.ts`), each with its own tests.
+- [x] Split `HistoryStore` into per-domain stores over one connection, and rename it (it stores more than history). `src/main/history/db.ts` owns the connection, pragmas, migrations and `stats`; `likes.ts`, `library.ts`, `conversations.ts` and `tasks.ts` each take the shared `DatabaseSync`. `store.ts` is now the `AppStore` facade over the four, still exported as `HistoryStore` so call sites compile unchanged; renaming them is a later pass.
+- [x] Parse tool arguments with zod schemas instead of per-tool `typeof` coercions. A tool is one `defineTool({ name, description, args, annotations, execute })` object: `args` is a zod object, `spec.inputSchema` is derived from it with `z.toJSONSchema`, and `execute` receives the parsed, typed arguments. `AppToolSource.call` in main and `runAdapterTool` in the preload parse first, so a bad call comes back as `Invalid arguments for <tool>: <issues>` instead of a coercion or a throw. The schemas the model sees are unchanged; `src/main/tools/registry.test.ts` pins three of them to the literals they shipped with.
+- [x] Deduplicate `contextKey` / `contextSignature` into a shared module: one DOM-free `contextKey` in `src/shared/page-context.ts`, used by the provider and the preload focus tracker.
+- [x] Move renderer-only settings policy (`confirmPostingMode`, `AUTONOMOUS_WARNING`) and the `threadId` / `threadToolsHash` agent state out of `src/shared/settings.ts`: the policy is `src/renderer/posting-mode.ts`, the thread state is `src/main/agent/thread-state.ts` over `agent-state.json` (migrated from settings.json on first run).
+- [x] Share the library folder name between main and `SettingsPanel`. `LIBRARY_FOLDER_NAME` in `src/shared/constants.ts`, used by `bootstrap.ts` for the default library directory and by `SettingsPanel`'s placeholder. `App.tsx`'s onboarding card still carries its own literal.
 - [ ] Add ESLint (typescript-eslint flat config) and a formatter; enforce in CI.
 - [ ] Run the hermetic e2e suite in CI; keep the network tests behind `XPILOT_E2E_NETWORK=1`.
 
