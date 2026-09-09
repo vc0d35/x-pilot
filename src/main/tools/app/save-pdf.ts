@@ -12,7 +12,7 @@ export const savePdf = defineTool({
     const url = normalizePostUrl(args.url);
     if (!url) return fail(`Not a post or article URL: ${args.url}`);
     try {
-      const { path, title } = await ctx.exportPdf(url, ctx.libraryDir());
+      const { path, title } = await ctx.exportPdf(url, ctx.libraryDir(), ctx.selectors.effective());
       const idMatch = /\/(\d+)$/.exec(url);
       ctx.store.addLibraryItem({ postId: idMatch ? idMatch[1] : null, url, path, title });
       return ok({ path, title });

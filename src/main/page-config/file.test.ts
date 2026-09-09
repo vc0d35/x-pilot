@@ -1,8 +1,8 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { WatchedFile } from './file';
+import { MAX_READ_BYTES, WatchedFile } from './file';
 
 const open: WatchedFile[] = [];
 const watched = (opts: { header?: string; debounceMs?: number } = {}): WatchedFile => {
@@ -81,6 +81,28 @@ describe('WatchedFile', () => {
     await until(() => changes > 0);
     expect(changes).toBe(1);
     expect(file.read()).toBe('/* h */\n');
+  });
+
+  it('refuses to read through a symlink, so nothing else on disk is handed to the app', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'xpilot-'));
+    const secret = join(dir, 'secret.txt');
+    writeFileSync(secret, 'PRIVATE');
+    symlinkSync(secret, join(dir, 'config.css'));
+    const file = new WatchedFile(join(dir, 'config.css'), { header: '/* h */\n', debounceMs: 20 });
+    open.push(file);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(file.read()).toBe('/* h */\n');
+    // The symlink itself is left alone; only the read refuses to follow it.
+    expect(readFileSync(secret, 'utf8')).toBe('PRIVATE');
+    warn.mockRestore();
+  });
+
+  it('refuses a file past the read cap rather than reading it with a page waiting', () => {
+    const file = watched({ header: '/* h */\n' });
+    file.write('a'.repeat(MAX_READ_BYTES + 1));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    expect(file.read()).toBe('/* h */\n');
+    warn.mockRestore();
   });
 
   it('stops watching once closed', async () => {

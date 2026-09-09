@@ -4,6 +4,7 @@ import { TaskManager } from '../../tasks/manager';
 import { AppStore } from '../../history/store';
 import type { PageStyles } from '../../page-config/styles';
 import type { SelectorOverrides } from '../../page-config/selectors';
+import type { ApprovalBroker } from '../../approvals';
 import { fail } from '../../../shared/tools';
 
 function ctx() {
@@ -15,12 +16,14 @@ function ctx() {
     set: () => ({ ok: true, bytes: 0 }),
     reset: () => {},
   } as unknown as PageStyles;
-  const selectors = { path: '/profile/selectors.json', list: () => [] } as unknown as SelectorOverrides;
+  const selectors = { path: '/profile/selectors.json', list: () => [], effective: () => ({}) } as unknown as SelectorOverrides;
   return {
     store,
     tasks,
     styles,
     selectors,
+    approvals: { request: async () => 'apply' } as unknown as ApprovalBroker,
+    stylesMode: () => 'confirm' as const,
     testSelector: null,
     libraryDir: () => '/lib',
     exportPdf: async () => ({ path: '', title: '' }),

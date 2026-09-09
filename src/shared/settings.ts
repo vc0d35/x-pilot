@@ -24,6 +24,11 @@ export const SettingsSchema = z.object({
   posting: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
   /** Agent-made likes: a like is a public write on the user's account, so it is confirmed by default. */
   likes: z.object({ mode: z.enum(['auto', 'confirm']).default('confirm') }),
+  /**
+   * Agent-written page styles. CSS on the page the user is looking at can cover a control with an
+   * invisible one, so what the agent writes is shown and confirmed before it is applied.
+   */
+  styles: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
   library: z.object({ dir: z.string().nullable().default(null) }),
   agent: z.object({
     provider: z.literal('codex').default('codex'),
@@ -75,6 +80,7 @@ const codexShape = z.object(codexPatchShape);
 export const SettingsPatchSchema = z.strictObject({
   posting: patchOf(SettingsSchema.shape.posting).optional(),
   likes: patchOf(SettingsSchema.shape.likes).optional(),
+  styles: patchOf(SettingsSchema.shape.styles).optional(),
   library: patchOf(SettingsSchema.shape.library).optional(),
   agent: z
     .strictObject({
@@ -114,6 +120,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const shaped = {
     posting: isObj(r.posting) ? r.posting : {},
     likes: isObj(r.likes) ? r.likes : {},
+    styles: isObj(r.styles) ? r.styles : {},
     library: isObj(r.library) ? r.library : {},
     agent: { ...agent, codex },
     navigation: isObj(r.navigation) ? r.navigation : {},
@@ -127,3 +134,4 @@ export function normalizeSettings(raw: unknown): Settings {
 export const DEFAULT_SETTINGS: Settings = normalizeSettings({});
 
 export type PostingMode = Settings['posting']['mode'];
+export type StylesMode = Settings['styles']['mode'];

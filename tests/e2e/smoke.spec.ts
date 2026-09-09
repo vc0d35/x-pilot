@@ -48,6 +48,11 @@ type Harness = {
   xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
   styles: { set(css: string): { ok: boolean }; reset(): void };
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
+  settings: { update(patch: object): unknown };
+  approvals: {
+    onEvent(cb: (e: { type: string; request?: { id: string; title: string; detail: string } }) => void): () => void;
+    resolve(id: string, decision: string): boolean;
+  };
 };
 const inMain = <T>(fn: (t: Harness) => T | Promise<T>) =>
   app.evaluate(async (_electron, fnSrc: string) => {
@@ -76,8 +81,18 @@ test('a selector override reaches the X view and changes what the adapter reads'
       const r = await t.registry.call('x_get_page_state', { timeoutMs: 0 });
       return r.success ? ((r.content as { newPostsAvailable?: number }).newPostsAvailable ?? null) : r.error;
     });
-  // The internal tool xpilot_set_selector checks a selector with, run in the view the user is looking at.
+  // x_test_selector is the internal probe xpilot_set_selector runs before it writes anything; it
+  // executes in the view the user is looking at.
   expect(await inMain((t) => t.registry.call('x_test_selector', { selector: '#pill' }, { allowInternal: true }))).toMatchObject({
+    success: true,
+    content: { valid: true, count: 1 },
+  });
+  // The model-facing pair the repair story runs on: look at the markup, then measure a candidate.
+  expect(await inMain((t) => t.registry.call('x_inspect_page', { selector: '#pill', limit: 1 }))).toMatchObject({
+    success: true,
+    content: { matches: 1, elements: [{ tag: 'button' }] },
+  });
+  expect(await inMain((t) => t.registry.call('xpilot_test_selector', { selector: '#pill' }))).toMatchObject({
     success: true,
     content: { valid: true, count: 1 },
   });
@@ -86,6 +101,43 @@ test('a selector override reaches the X view and changes what the adapter reads'
   await expect.poll(pillCount, { timeout: 15_000 }).toBe(3);
   await inMain((t) => t.selectors.resetAll());
   await expect.poll(pillCount, { timeout: 15_000 }).toBeNull();
+});
+
+test('a selector that drives an action cannot be moved by a tool', async () => {
+  // The composer read and the Post click both go through these, so a tool that could redirect one
+  // would turn an approved post into a different one. Only the user's own file may.
+  const before = await inMain((t) => t.registry.call('x_test_selector', { selector: '#danger' }, { allowInternal: true }));
+  expect(before).toMatchObject({ success: true });
+  expect(await inMain((t) => t.registry.call('xpilot_set_selector', { key: 'postButton', selector: '#danger' }))).toMatchObject({
+    success: false,
+    error: expect.stringContaining('cannot be changed from a tool'),
+  });
+  const listed = (await inMain((t) => t.registry.call('xpilot_list_selectors', {}))) as {
+    content: { selectors: { key: string; effective: string; locked: boolean }[] };
+  };
+  const postButton = listed.content.selectors.find((i) => i.key === 'postButton')!;
+  expect(postButton).toMatchObject({ locked: true, effective: '[data-testid="tweetButton"], [data-testid="tweetButtonInline"]' });
+});
+
+test('a stylesheet the tool writes is confirmed, and the file is untouched when it is declined', async () => {
+  const styles = () => inMain((t) => t.registry.call('xpilot_read_page_styles', {}));
+  const before = (await styles()) as { content: { css: string } };
+  const declined = await inMain(async (t) => {
+    t.settings.update({ styles: { mode: 'confirm' } });
+    // The card is raised synchronously inside the tool call, so the listener goes on first.
+    const asked: { id: string; title: string; detail: string }[] = [];
+    const off = t.approvals.onEvent((e: { type: string; request?: { id: string; title: string; detail: string } }) => {
+      if (e.type === 'approval.requested' && e.request) asked.push(e.request);
+    });
+    const pending = t.registry.call('xpilot_write_page_styles', { css: '#ext { color: rgb(9, 9, 9) }' });
+    off();
+    for (const request of asked) t.approvals.resolve(request.id, 'cancel');
+    return { asked, result: await pending };
+  });
+  expect(declined.asked).toEqual([expect.objectContaining({ title: 'Apply these page styles?', detail: '#ext { color: rgb(9, 9, 9) }' })]);
+  expect(declined.result).toMatchObject({ success: true, content: { applied: false, status: 'cancelled_by_user' } });
+  expect(((await styles()) as { content: { css: string } }).content.css).toBe(before.content.css);
+  await inMain((t) => t.settings.update({ styles: { mode: 'autonomous' } }));
 });
 
 test('external links are routed to the system browser', async () => {

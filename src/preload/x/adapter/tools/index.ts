@@ -7,6 +7,7 @@ import { scroll } from './scroll';
 import { likeInPage, selectHomeTab } from './engage';
 import { readComposer, typeInComposer, clickPostButton } from './composer';
 import { readWidgets, showNewPosts } from './widgets';
+import { inspectPage } from './inspect-page';
 import { testSelector } from './test-selector';
 
 export const adapterTools: ToolModule<PreloadCtx>[] = [
@@ -21,6 +22,7 @@ export const adapterTools: ToolModule<PreloadCtx>[] = [
   selectHomeTab,
   readWidgets,
   showNewPosts,
+  inspectPage,
   testSelector,
 ];
 

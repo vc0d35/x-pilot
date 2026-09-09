@@ -13,6 +13,13 @@ const store = (opts: { defaults?: Record<SelectorKey, string>; dir?: string } = 
   return { store: s, dir };
 };
 
+const settle = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Watch latency varies with machine load, so a change is waited for rather than slept past. */
+const until = async (done: () => boolean, timeoutMs = 5_000): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (!done() && Date.now() < deadline) await settle(10);
+};
+
 afterEach(() => {
   for (const s of open.splice(0)) s.close();
 });
@@ -51,6 +58,7 @@ describe('SelectorOverrides', () => {
       default: SELECTOR_DEFAULTS.tweetText,
       effective: '.legacy-text',
       status: 'overridden',
+      locked: false,
     });
     expect(list.find((i) => i.key === 'article')).toMatchObject({ effective: SELECTOR_DEFAULTS.article, status: 'default' });
     expect(s.counts()).toEqual({ overridden: 1, stale: 0 });
@@ -120,16 +128,65 @@ describe('SelectorOverrides', () => {
     expect(seen).toEqual([{ article: '.b' }, {}]);
   });
 
-  it('keeps a corrupt file for the user and carries on with the shipped selectors', () => {
+  it('answers from memory, so a file half-written under it is never read', () => {
+    const { store: s } = store();
+    s.set('article', '.b');
+    // A truncate-then-write editor leaves this on disk for an instant; nothing here re-reads it.
+    writeFileSync(s.path, '{ not js');
+    expect(s.overrides()).toEqual({ article: '.b' });
+  });
+
+  it('keeps the overrides already in effect when the file cannot be parsed, and leaves the file where it is', async () => {
     const { store: s, dir } = store();
-    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    s.set('article', '.b');
+    const errors: unknown[] = [];
+    const spy = vi.spyOn(console, 'error').mockImplementation((...a) => void errors.push(a));
+    await settle(200);
     writeFileSync(s.path, '{ not json');
-    expect(s.effective()).toEqual(SELECTOR_DEFAULTS);
-    expect(readdirSync(dir).some((f) => f.startsWith('selectors.json.corrupt-'))).toBe(true);
-    warn.mockRestore();
-    // The file comes back, so the next write has somewhere to go.
-    expect(s.set('article', '.b')).toMatchObject({ ok: true });
+    await until(() => s.lastError !== null);
+    expect(s.effective()).toEqual({ ...SELECTOR_DEFAULTS, article: '.b' });
+    expect(readdirSync(dir).filter((f) => f.startsWith('selectors.json.corrupt-'))).toEqual([]);
     expect(existsSync(s.path)).toBe(true);
+    // Reported, once, not on every read.
+    s.effective();
+    s.effective();
+    expect(errors).toHaveLength(1);
+    spy.mockRestore();
+  });
+
+  it('starts from the shipped selectors when the very first read fails', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'xpilot-'));
+    writeFileSync(join(dir, 'selectors.json'), '{ not json');
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { store: s } = store({ dir });
+    expect(s.effective()).toEqual(SELECTOR_DEFAULTS);
+    expect(s.lastError).toMatch(/JSON|Unexpected/i);
+    spy.mockRestore();
+  });
+
+  it('takes a hand-written override of an action key, and says out loud that it changes what XPilot clicks', () => {
+    const { store: s } = store();
+    const warnings: string[] = [];
+    const spy = vi.spyOn(console, 'warn').mockImplementation((m: string) => void warnings.push(m));
+    writeFileSync(
+      s.path,
+      JSON.stringify({ overrides: { postButton: { selector: '#danger', replacedDefault: SELECTOR_DEFAULTS.postButton } } }),
+    );
+    // The file is the user's: a locked key set by hand is applied.
+    expect(s.overrides()).toEqual({ postButton: '#danger' });
+    expect(warnings.join(' ')).toContain('postButton');
+    expect(warnings.join(' ')).toContain('#danger');
+    spy.mockRestore();
+  });
+
+  it('marks the keys that drive actions as locked and everything else as not', () => {
+    const { store: s } = store();
+    const locked = s
+      .list()
+      .filter((i) => i.locked)
+      .map((i) => i.key)
+      .sort();
+    expect(locked).toEqual(['composerTextarea', 'dialog', 'homeTab', 'likeButton', 'postButton', 'showMore', 'toast', 'unlikeButton']);
   });
 
   it('ignores a key it does not know, so a file from a newer version still works', () => {

@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import prepareSource from './prepare-page.js?raw';
+import { SELECTOR_DEFAULTS, type SelectorKey } from '../../shared/selectors';
 import { normalizePostUrl } from '../tools/xview/read-post';
 import { pdfFileName } from './naming';
 import { isInsideDir } from './paths';
@@ -26,7 +27,9 @@ function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
 }
 
 export async function exportPdf(
-  opts: { url: string; outDir: string; timeoutMs?: number },
+  /** `selectors` is the effective map: the export window has no preload, so it is handed the
+   *  selectors rather than being pushed them, and a repaired selector reaches the exporter too. */
+  opts: { url: string; outDir: string; timeoutMs?: number; selectors?: Record<SelectorKey, string> },
   deps: PdfDeps,
 ): Promise<{ path: string; title: string }> {
   const timeoutMs = opts.timeoutMs ?? 30_000;
@@ -43,7 +46,9 @@ export async function exportPdf(
     );
     const innerTimeoutMs = Math.max(1000, remaining() - 2000);
     const meta = (await withTimeout(
-      win.executeJavaScript(`(${prepareSource})({ timeoutMs: ${innerTimeoutMs} })`),
+      win.executeJavaScript(
+        `(${prepareSource})({ timeoutMs: ${innerTimeoutMs}, sel: ${JSON.stringify(opts.selectors ?? SELECTOR_DEFAULTS)} })`,
+      ),
       remaining(),
       'Page preparation',
     )) as { title: string; author: string; id: string };

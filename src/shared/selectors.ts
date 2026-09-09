@@ -34,6 +34,25 @@ export const SELECTOR_KEYS = Object.keys(SELECTOR_DEFAULTS) as SelectorKey[];
 
 export const isSelectorKey = (key: string): key is SelectorKey => key in SELECTOR_DEFAULTS;
 
+/**
+ * The selectors a tool clicks, types into, or reads to decide that an action happened. Redirecting
+ * one of these does not change what the agent sees, it changes what the agent *does*: the composer
+ * text the approval card shows and re-checks, which button Post presses, which control a like lands
+ * on. They are therefore not settable from a tool at all — only by the user editing selectors.json.
+ */
+export const ACTION_SELECTOR_KEYS = new Set<SelectorKey>([
+  'composerTextarea',
+  'postButton',
+  'likeButton',
+  'unlikeButton',
+  'homeTab',
+  'showMore',
+  'dialog',
+  'toast',
+]);
+
+export const isActionSelectorKey = (key: string): boolean => ACTION_SELECTOR_KEYS.has(key as SelectorKey);
+
 /** One line per key: what the selector has to match for the tools that use it to work. */
 export const SELECTOR_DESCRIPTIONS: Record<SelectorKey, string> = {
   primaryColumn: "X's main content column; its absence means the layout was not recognised",

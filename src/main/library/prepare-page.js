@@ -1,13 +1,11 @@
 // Prepares an x.com post/article page for printing. Evaluated in the page; must stay dependency-free.
 // The whole file is one bare expression: a statement semicolon would break the `new Function('return (' + source + ')')` that loads it.
+// `sel` is the app's effective selector map (defaults plus the user's overrides), passed in so a
+// selector repaired for the rest of the adapter also fixes the exporter. The print CSS below hides
+// X's chrome and is deliberately hardcoded: it is cosmetic, and a wrong rule there loses nothing.
 // prettier-ignore
-async ({ timeoutMs }) => {
-  const SEL = {
-    article: 'article[data-testid="tweet"]',
-    articleView: '[data-testid="twitterArticleReadView"], [data-testid="twitterArticleRichTextView"]',
-    showMore: '[data-testid="tweet-text-show-more-link"]',
-    permalink: 'a[href*="/status/"] time',
-  };
+async ({ timeoutMs, sel }) => {
+  const SEL = sel;
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const deadline = Date.now() + timeoutMs;
   while (!document.querySelector(SEL.article) && !document.querySelector(SEL.articleView)) {
@@ -31,7 +29,7 @@ async ({ timeoutMs }) => {
   let id = m ? m[m.length - 1] : '';
   if (!author) {
     const first = document.querySelector(SEL.article);
-    const link = first && first.querySelector(SEL.permalink);
+    const link = first && first.querySelector(SEL.permalinkTime);
     const href = link && link.closest('a') && link.closest('a').getAttribute('href');
     const pm = href && /^\/([^/]+)\/status\/(\d+)/.exec(href);
     if (pm) { author = pm[1]; id = id || pm[2]; }

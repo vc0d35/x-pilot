@@ -5,6 +5,7 @@ import { AppStore } from '../../history/store';
 import { TaskManager } from '../../tasks/manager';
 import type { PageStyles } from '../../page-config/styles';
 import type { SelectorOverrides } from '../../page-config/selectors';
+import type { ApprovalBroker } from '../../approvals';
 import { fail, ok, runTool } from '../../../shared/tools';
 
 function ctx() {
@@ -13,7 +14,10 @@ function ctx() {
     store,
     tasks: new TaskManager({ store }),
     libraryDir: () => '/lib',
-    exportPdf: vi.fn(async (url: string, outDir: string) => ({ path: `${outDir}/2026-09-07-alice-title-111.pdf`, title: 'Alice: title' })),
+    exportPdf: vi.fn(async (_url: string, outDir: string, _sel: Record<string, string>) => ({
+      path: `${outDir}/2026-09-07-alice-title-111.pdf`,
+      title: 'Alice: title',
+    })),
     openPath: vi.fn(async () => ''),
     styles: {
       path: '/profile/page-styles.css',
@@ -21,7 +25,13 @@ function ctx() {
       set: () => ({ ok: true, bytes: 0 }),
       reset: () => {},
     } as unknown as PageStyles,
-    selectors: { path: '/profile/selectors.json', list: () => [] } as unknown as SelectorOverrides,
+    selectors: {
+      path: '/profile/selectors.json',
+      list: () => [],
+      effective: () => ({ article: '.repaired' }),
+    } as unknown as SelectorOverrides,
+    approvals: { request: async () => 'apply' } as unknown as ApprovalBroker,
+    stylesMode: () => 'confirm' as const,
     testSelector: null,
   };
 }
@@ -30,7 +40,8 @@ describe('xpilot_save_article_pdf', () => {
   it('exports, records the library item and returns the path', async () => {
     const c = ctx();
     const r = await savePdf.execute({ url: 'https://twitter.com/alice/status/111?s=20' }, c);
-    expect(c.exportPdf).toHaveBeenCalledWith('https://x.com/alice/status/111', '/lib');
+    // The exporter has no preload, so the effective selectors travel with the call.
+    expect(c.exportPdf).toHaveBeenCalledWith('https://x.com/alice/status/111', '/lib', { article: '.repaired' });
     expect(r).toEqual(ok({ path: '/lib/2026-09-07-alice-title-111.pdf', title: 'Alice: title' }));
     expect(c.store.listLibrary()[0]).toMatchObject({ url: 'https://x.com/alice/status/111', title: 'Alice: title' });
   });

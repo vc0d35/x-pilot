@@ -52,11 +52,19 @@ Run `npm run dev`, logged into x.com in the X view.
 
 ## Page styles
 
-- [ ] "Make the timeline text bigger" → the visible X page restyles at once; Settings → Page styles → Open file shows the CSS and editing it in an editor re-applies on save; Reset puts the page back, and a hidden-window read ("read <post url>") is unaffected either way.
+- [ ] "Make the timeline text bigger" → a confirmation card appears showing the whole stylesheet; Cancel leaves the page as it was and the agent reports the decision rather than retrying; Apply restyles the visible page at once.
+- [ ] Settings → Page config → Page styles → Open file shows the CSS and editing it in an editor re-applies on save; Reset puts the page back with no card, and a hidden-window read ("read <post url>") is unaffected either way.
+- [ ] Paste `body { background: url(https://example.com/x.png) }` into the file by hand and save → the page does not change and the Page styles row says "Not applied: …". Delete the line and it applies again.
+- [ ] Settings → Page styles → Autonomous warns first; after switching, "make the links green" applies with no card.
 
 ## Selectors
 
-- [ ] Settings → Selectors shows the file path and "0 overridden, 0 stale"; "Ask the agent to point the tweetText selector at .nonsense" → xpilot_set_selector reports a match count of 0, the count in Settings goes to 1 overridden, and a timeline read comes back with empty post text; "Reset all" (or xpilot_reset_selector with all) puts the reads back without a restart.
+- [ ] Settings → Page config → Selectors shows the file path and "0 overridden, 0 stale"; "Ask the agent to point the tweetText selector at .nonsense" → xpilot_set_selector reports a match count of 0 with a warning, the count in Settings goes to 1 overridden after the panel is reopened, and a timeline read comes back with empty post text; "Reset all" (or xpilot_reset_selector with all) puts the reads back without a restart.
+- [ ] "Ask the agent to point the postButton selector somewhere else" → refused, with the reason that it decides what XPilot clicks; xpilot_list_selectors shows that key as locked.
+- [ ] "Show me the markup of the first post" → x_inspect_page returns tags and data-testids, fenced as page content; "how many things match article[data-testid=tweet] right now" → xpilot_test_selector answers with a count and writes nothing.
+- [ ] Put `"article": { "selector": "div:has(((", "replacedDefault": "x" }` into selectors.json by hand → reads keep working (the value falls back to the shipped default) rather than every read failing.
+- [ ] Truncate selectors.json to half a line and save → the overrides in effect stay in effect, the file is not renamed aside, and the Selectors row says why.
+- [ ] Override the `article` selector, then "save <post url> as a PDF" → the export still works, i.e. it used the override.
 
 ## Passkeys (needs XPILOT_TEAM_ID + `npm run sign-dev`, see docs/passkeys.md)
 

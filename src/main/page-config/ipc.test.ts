@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { IPC } from '../../shared/ipc';
 import { registerPageConfigIpc, type PageConfigIpcEvent } from './ipc';
 
-function harness(opts: { css?: string; overrides?: Record<string, string> } = {}) {
+function harness(opts: { css?: string; overrides?: Record<string, string>; throws?: boolean } = {}) {
   const handlers = new Map<string, (event: PageConfigIpcEvent, payload: unknown) => void>();
   const styleListeners = new Set<(css: string) => void>();
   const selectorListeners = new Set<() => void>();
@@ -14,7 +14,10 @@ function harness(opts: { css?: string; overrides?: Record<string, string> } = {}
     isXContents: (id) => id === 1 || id === 2,
     isVisibleContents: (id) => id === 1,
     styles: {
-      get: () => css,
+      get: () => {
+        if (opts.throws) throw new Error('the profile is unreadable');
+        return css;
+      },
       onChange: (cb) => {
         styleListeners.add(cb);
         return () => styleListeners.delete(cb);
@@ -67,6 +70,13 @@ describe('registerPageConfigIpc', () => {
     h.changeStyles('b { color: blue }');
     expect(h.send).toHaveBeenCalledWith(1, IPC.pageConfigUpdate, { styles: 'b { color: blue }', selectors: {} });
     expect(h.send).toHaveBeenCalledWith(2, IPC.pageConfigUpdate, { styles: null, selectors: {} });
+  });
+
+  it('answers with no config rather than throwing when a store cannot read its file', () => {
+    // A sendSync the handler failed to answer would block the page before it renders, for good.
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(harness({ throws: true }).ask(1)).toEqual({ styles: null, selectors: {} });
+    error.mockRestore();
   });
 
   it('pushes a selector change to every X view', () => {

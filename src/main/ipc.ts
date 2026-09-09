@@ -2,6 +2,7 @@ import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'elec
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema } from '../shared/page';
+import type { PageConfigStatus } from '../shared/sidebar-api';
 import { isOpenablePdf } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
@@ -16,6 +17,7 @@ import { SettingsPatchSchema } from '../shared/settings';
 import { isSafeExecutable } from './agent/codex/binary';
 
 const CodexBinaryActionSchema = z.object({ action: z.enum(['choose', 'clear']) });
+const PageConfigKindSchema = z.object({ kind: z.enum(['styles', 'selectors']) });
 import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
@@ -210,42 +212,35 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
       return path;
     }),
   );
+  // The two page-config files differ only in which store they touch, so they share one trio of
+  // channels rather than one each: a row added to Settings cannot then be half-wired.
+  const pageConfigStatus = (): PageConfigStatus => ({
+    styles: { path: styles.path, lastError: styles.lastError },
+    selectors: { path: selectors.path, ...selectors.counts(), lastError: selectors.lastError },
+  });
   ipcMain.handle(
-    IPC.pageStylesPath,
-    guarded(() => styles.path),
+    IPC.pageConfigStatus,
+    guarded(() => pageConfigStatus()),
   );
   ipcMain.handle(
-    IPC.pageStylesOpen,
-    guarded(async () => {
+    IPC.pageConfigOpen,
+    guarded(async (_e, raw) => {
+      const { kind } = PageConfigKindSchema.parse(raw);
       // Reading creates the file if it is not there yet, so the editor never opens on nothing.
-      styles.get();
-      const err = await openPath(styles.path);
+      if (kind === 'styles') styles.get();
+      else selectors.list();
+      const err = await openPath(kind === 'styles' ? styles.path : selectors.path);
       if (err) throw new Error(err);
     }),
   );
+  // The user resetting their own file is the user acting: nothing here is confirmed.
   ipcMain.handle(
-    IPC.pageStylesReset,
-    guarded(() => styles.reset()),
-  );
-  const selectorsInfo = () => ({ path: selectors.path, ...selectors.counts() });
-  ipcMain.handle(
-    IPC.selectorsInfo,
-    guarded(() => selectorsInfo()),
-  );
-  ipcMain.handle(
-    IPC.selectorsOpen,
-    guarded(async () => {
-      // Reading creates the file if it is not there yet, so the editor never opens on nothing.
-      selectors.list();
-      const err = await openPath(selectors.path);
-      if (err) throw new Error(err);
-    }),
-  );
-  ipcMain.handle(
-    IPC.selectorsReset,
-    guarded(() => {
-      selectors.resetAll();
-      return selectorsInfo();
+    IPC.pageConfigReset,
+    guarded((_e, raw) => {
+      const { kind } = PageConfigKindSchema.parse(raw);
+      if (kind === 'styles') styles.reset();
+      else selectors.resetAll();
+      return pageConfigStatus();
     }),
   );
   ipcMain.handle(

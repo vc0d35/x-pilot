@@ -38,13 +38,31 @@ import { AppStore } from './history/store';
 import { registerHistoryIpc } from './history/ipc';
 import { appTools } from './tools/app';
 import type { SelectorTest } from './tools/app/context';
+import type { SelectorKey } from '../shared/selectors';
 import { exportPdf } from './library/pdf';
 
 /** Tools that create or change scheduled tasks: a scheduled run may not reschedule itself or its peers. */
-const TASK_MANAGEMENT_TOOLS = new Set(['xpilot_schedule_task', 'xpilot_update_task', 'xpilot_delete_task']);
+const TASK_MANAGEMENT_TOOLS = ['xpilot_schedule_task', 'xpilot_update_task', 'xpilot_delete_task'];
+
+/**
+ * Tools that rewrite the page config. Both files govern every X window and survive restarts, and the
+ * styles land on the page the user looks at, so changing either is a decision that needs the user
+ * there to see it. `xpilot_test_selector` goes too: it can only answer from the visible window,
+ * which a scheduled run does not have. The read tools stay, so a run can report that the adapter
+ * looks broken.
+ */
+const CONFIG_WRITE_TOOLS = [
+  'xpilot_write_page_styles',
+  'xpilot_reset_page_styles',
+  'xpilot_set_selector',
+  'xpilot_reset_selector',
+  'xpilot_test_selector',
+];
+
+const NOT_FOR_SCHEDULED_RUNS = new Set([...TASK_MANAGEMENT_TOOLS, ...CONFIG_WRITE_TOOLS]);
 
 export function toolsForScheduledRuns<T extends { spec: { name: string } }>(tools: readonly T[]): T[] {
-  return tools.filter((t) => !TASK_MANAGEMENT_TOOLS.has(t.spec.name));
+  return tools.filter((t) => !NOT_FOR_SCHEDULED_RUNS.has(t.spec.name));
 }
 
 export interface DevSwitches {
@@ -92,6 +110,7 @@ export interface XPilotApp {
   bridge: AdapterBridge;
   links: LinkRouter;
   settings: SettingsStore;
+  approvals: ApprovalBroker;
   styles: PageStyles;
   selectors: SelectorOverrides;
   /** In an e2e run, the links that would have gone to the system browser; null otherwise. */
@@ -302,10 +321,12 @@ export function createApp(opts: AppOptions): XPilotApp {
     tasks,
     styles,
     selectors,
+    approvals,
+    stylesMode: () => settings.get().styles.mode,
     libraryDir,
-    exportPdf: (url: string, outDir: string) =>
+    exportPdf: (url: string, outDir: string, sel: Record<SelectorKey, string>) =>
       exportPdf(
-        { url, outDir },
+        { url, outDir, selectors: sel },
         {
           createWindow: () => {
             const w = new BrowserWindow({
@@ -452,6 +473,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     bridge,
     links,
     settings,
+    approvals,
     styles,
     selectors,
     openExternalCalls,

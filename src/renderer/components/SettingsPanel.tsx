@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { PostingMode, Settings } from '../../shared/settings';
-import { confirmPostingMode } from '../posting-mode';
-import type { HistoryStats, ModelInfo, SelectorsInfo } from '../../shared/sidebar-api';
+import type { PostingMode, Settings, StylesMode } from '../../shared/settings';
+import { confirmPostingMode, confirmStylesMode } from '../posting-mode';
+import type { HistoryStats, ModelInfo, PageConfigKind, PageConfigStatus } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
 
 export function formatBytes(bytes: number): string {
@@ -19,8 +19,7 @@ export function formatBytes(bytes: number): string {
 export function SettingsPanel({ settings }: { settings: Settings }) {
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [stats, setStats] = useState<HistoryStats | null>(null);
-  const [stylesPath, setStylesPath] = useState<string | null>(null);
-  const [selectors, setSelectors] = useState<SelectorsInfo | null>(null);
+  const [pageConfig, setPageConfig] = useState<PageConfigStatus | null>(null);
   useEffect(() => {
     void window.xpilot
       .listModels()
@@ -33,18 +32,16 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
       .then(setStats)
       .catch(() => setStats(null));
   }, []);
+  // Refetched whenever settings change too, so a count the agent moved is not left stale on screen.
   useEffect(() => {
     void window.xpilot
-      .pageStylesPath()
-      .then(setStylesPath)
-      .catch(() => setStylesPath(null));
-  }, []);
-  useEffect(() => {
-    void window.xpilot
-      .selectorsInfo()
-      .then(setSelectors)
-      .catch(() => setSelectors(null));
-  }, []);
+      .pageConfigStatus()
+      .then(setPageConfig)
+      .catch(() => setPageConfig(null));
+  }, [settings]);
+  const reset = (kind: PageConfigKind, question: string) => {
+    if (confirm(question)) void window.xpilot.resetPageConfig(kind).then(setPageConfig);
+  };
   const codex = settings.agent.codex;
   const current = models.find((m) => m.id === (codex.model ?? models.find((x) => x.isDefault)?.id));
   const set = (patch: Parameters<typeof window.xpilot.setSettings>[0]) => void window.xpilot.setSettings(patch);
@@ -102,6 +99,19 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
         </select>
       </label>
       <label>
+        Page styles
+        <select
+          value={settings.styles.mode}
+          onChange={(e) => {
+            const mode = confirmStylesMode(e.target.value as StylesMode, confirm);
+            if (mode) set({ styles: { mode } });
+          }}
+        >
+          <option value="confirm">Confirm each stylesheet in the sidebar</option>
+          <option value="autonomous">Autonomous (agent restyles the page)</option>
+        </select>
+      </label>
+      <label>
         Web search
         <select
           value={codex.webSearch}
@@ -137,44 +147,39 @@ export function SettingsPanel({ settings }: { settings: Settings }) {
           <button onClick={() => void window.xpilot.chooseLibraryDir()}>Change…</button>
         </div>
       </label>
-      <label>
-        Page styles
-        <div className="row">
-          <code>{stylesPath ?? 'page-styles.css'}</code>
-          <button onClick={() => void window.xpilot.openPageStyles()}>Open file</button>
-          <button
-            onClick={() => {
-              if (confirm('Remove every rule from the page stylesheet?')) void window.xpilot.resetPageStyles();
-            }}
-          >
-            Reset
-          </button>
-        </div>
-      </label>
-      <p className="hint">
-        Plain CSS applied to the X page in this window, and to nothing else. Edit the file or ask the agent to restyle the page; it is
-        re-applied as soon as it is saved.
-      </p>
-      <label>
-        Selectors
-        <div className="row">
-          <code>{selectors?.path ?? 'selectors.json'}</code>
-          <button onClick={() => void window.xpilot.openSelectors()}>Open file</button>
-          <button
-            onClick={() => {
-              if (confirm('Remove every selector override and go back to the ones XPilot ships?'))
-                void window.xpilot.resetSelectors().then(setSelectors);
-            }}
-          >
-            Reset all
-          </button>
-        </div>
-      </label>
-      <p className="hint">
-        {selectors ? `${selectors.overridden} overridden, ${selectors.stale} stale · ` : ''}
-        The CSS selectors XPilot uses to read x.com. Overrides survive app updates and are flagged stale when the selector XPilot ships
-        changes; ask the agent to repair one if a page read stops working.
-      </p>
+      <fieldset className="settings-group">
+        <legend>Page config</legend>
+        <label>
+          Page styles
+          <div className="row">
+            <code>{pageConfig?.styles.path ?? 'page-styles.css'}</code>
+            <button onClick={() => void window.xpilot.openPageConfig('styles')}>Open file</button>
+            <button onClick={() => reset('styles', 'Remove every rule from the page stylesheet?')}>Reset</button>
+          </div>
+        </label>
+        <p className="hint">
+          {pageConfig?.styles.lastError ? `Not applied: ${pageConfig.styles.lastError} · ` : ''}
+          Plain CSS applied to the X page in this window, and to nothing else. Edit the file or ask the agent to restyle the page; it is
+          re-applied as soon as it is saved.
+        </p>
+        <label>
+          Selectors
+          <div className="row">
+            <code>{pageConfig?.selectors.path ?? 'selectors.json'}</code>
+            <button onClick={() => void window.xpilot.openPageConfig('selectors')}>Open file</button>
+            <button onClick={() => reset('selectors', 'Remove every selector override and go back to the ones XPilot ships?')}>
+              Reset all
+            </button>
+          </div>
+        </label>
+        <p className="hint">
+          {pageConfig ? `${pageConfig.selectors.overridden} overridden, ${pageConfig.selectors.stale} stale · ` : ''}
+          {pageConfig?.selectors.lastError ? `Not in effect: ${pageConfig.selectors.lastError} · ` : ''}
+          The CSS selectors XPilot uses to read x.com. Overrides survive app updates and are flagged stale when the selector XPilot ships
+          changes; ask the agent to repair one if a page read stops working. The keys that decide what XPilot clicks can only be changed
+          here, in the file.
+        </p>
+      </fieldset>
       <fieldset className="settings-group">
         <legend>History</legend>
         <p className="hint">

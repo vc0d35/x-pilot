@@ -39,12 +39,9 @@ export const IPC = {
   tasksUpdate: 'tasks:update',
   tasksDelete: 'tasks:delete',
   tasksRunNow: 'tasks:runNow',
-  pageStylesPath: 'page-styles:path',
-  pageStylesOpen: 'page-styles:open',
-  pageStylesReset: 'page-styles:reset',
-  selectorsInfo: 'selectors:info',
-  selectorsOpen: 'selectors:open',
-  selectorsReset: 'selectors:reset',
+  pageConfigStatus: 'page-config:status',
+  pageConfigOpen: 'page-config:open',
+  pageConfigReset: 'page-config:reset',
 } as const;
 
 /**

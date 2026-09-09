@@ -1,9 +1,27 @@
-import { chmodSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, watch, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  watch,
+  writeFileSync,
+} from 'node:fs';
 import type { FSWatcher } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { basename, dirname } from 'node:path';
 
 const DEBOUNCE_MS = 150;
+
+/**
+ * Both files are small by design (a stylesheet is capped at 64 KB, the override file holds at most a
+ * couple of dozen short strings), and this read happens on the main process while a page waits.
+ */
+export const MAX_READ_BYTES = 256 * 1024;
 
 /**
  * One small text file in the profile that both the user and the agent edit: created on first read
@@ -26,10 +44,26 @@ export class WatchedFile {
     this.debounceMs = opts.debounceMs ?? DEBOUNCE_MS;
   }
 
+  /**
+   * The file as the app will use it, or the header when there is nothing usable there. Only a
+   * regular file of a sane size is read: a symlink would hand whatever it points at to the agent,
+   * and an oversized one would be read synchronously with a page waiting on the answer.
+   */
   read(): string {
-    if (existsSync(this.path)) return readFileSync(this.path, 'utf8');
-    this.write(this.header);
-    return this.header;
+    if (!existsSync(this.path)) {
+      this.write(this.header);
+      return this.header;
+    }
+    const stat = lstatSync(this.path);
+    if (!stat.isFile()) {
+      console.warn(`[xpilot] ${this.path} is not a regular file; ignoring it`);
+      return this.header;
+    }
+    if (stat.size > MAX_READ_BYTES) {
+      console.warn(`[xpilot] ${this.path} is larger than ${MAX_READ_BYTES / 1024} KB; ignoring it`);
+      return this.header;
+    }
+    return readFileSync(this.path, 'utf8');
   }
 
   /** Write-then-rename with an unpredictable, exclusively opened temp file, as settings.json is written. */

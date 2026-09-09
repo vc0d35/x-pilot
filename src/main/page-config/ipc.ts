@@ -42,13 +42,29 @@ export interface PageConfigIpcDeps {
  * wherever it runs.
  */
 export function registerPageConfigIpc(deps: PageConfigIpcDeps): void {
-  const configFor = (id: number): PageConfig => ({
-    styles: deps.isVisibleContents(id) ? deps.styles.get() : null,
-    selectors: deps.selectors.overrides(),
-  });
+  /**
+   * Never throws. The stores answer from memory, but a reply this handler failed to assign would
+   * leave the page blocked in `sendSync` for good, so an unstyled, unmodified page is the fallback.
+   */
+  const configFor = (id: number): PageConfig => {
+    try {
+      return {
+        styles: deps.isVisibleContents(id) ? deps.styles.get() : null,
+        selectors: deps.selectors.overrides(),
+      };
+    } catch (err) {
+      console.error('[xpilot] page config could not be read; the page gets none', err);
+      return { styles: null, selectors: {} };
+    }
+  };
   deps.ipc.on(IPC.pageConfigGet, (event) => {
     // Always answered: a sendSync left without a reply would hang the page before it renders.
-    event.returnValue = deps.isXContents(event.sender.id) ? configFor(event.sender.id) : null;
+    try {
+      event.returnValue = deps.isXContents(event.sender.id) ? configFor(event.sender.id) : null;
+    } catch (err) {
+      console.error('[xpilot] page config request could not be answered', err);
+      event.returnValue = null;
+    }
   });
   const push = (): void => {
     for (const id of deps.xContentsIds()) deps.send(id, IPC.pageConfigUpdate, configFor(id));

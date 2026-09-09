@@ -7,11 +7,32 @@ import { SELECTOR_DEFAULTS, SELECTOR_KEYS, type SelectorKey } from '../../../sha
  */
 export const SEL: Record<SelectorKey, string> = { ...SELECTOR_DEFAULTS };
 
+/**
+ * A selector the browser cannot parse is not merely useless: several call sites interpolate two of
+ * them into one list (`${SEL.trend}, ${SEL.newsArticle}`) and run it on every click or every second,
+ * so one bad value would throw across the whole adapter. The browser is asked, and a value it
+ * refuses falls back to the shipped default.
+ */
+function usable(selector: string): boolean {
+  try {
+    document.querySelectorAll(selector);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Puts every key back to its shipped default, then applies the overrides that are still valid. */
 export function applySelectorOverrides(overrides: Partial<Record<string, string>>): void {
   for (const key of SELECTOR_KEYS) {
     const override = overrides[key];
-    SEL[key] = typeof override === 'string' && override.trim().length > 0 ? override : SELECTOR_DEFAULTS[key];
+    const wanted = typeof override === 'string' && override.trim().length > 0 ? override : null;
+    if (wanted !== null && !usable(wanted)) {
+      console.warn(`[xpilot] the selector override for ${key} is not one the browser accepts; using the shipped default`);
+      SEL[key] = SELECTOR_DEFAULTS[key];
+      continue;
+    }
+    SEL[key] = wanted ?? SELECTOR_DEFAULTS[key];
   }
 }
 

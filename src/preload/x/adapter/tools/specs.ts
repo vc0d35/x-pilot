@@ -89,6 +89,17 @@ export const showNewPostsDef = {
   args: z.strictObject({}),
 } satisfies ToolDef;
 
+export const inspectPageDef = {
+  name: 'x_inspect_page',
+  description:
+    'Returns the markup of the elements matching a CSS selector on the page in this window: for each match its tag, the attributes that identify it (data-testid, role, aria-label, href, class) and its outer HTML, truncated. Use it when a read comes back empty or adapterHealthy is false, to see what X actually renders and work out what a selector should be; then try candidates with xpilot_test_selector. Defaults to the page body, so start there and narrow down.',
+  args: z.strictObject({
+    selector: z.string().optional().describe('The CSS selector to look at; the page body when omitted'),
+    limit: z.int().min(1).max(20).default(5).describe('How many matches to return'),
+  }),
+  annotations: { readOnlyHint: true },
+} satisfies ToolDef;
+
 export const testSelectorDef = {
   name: 'x_test_selector',
   description:
@@ -110,5 +121,6 @@ export const adapterToolSpecs: ToolSpec[] = [
   selectHomeTabDef,
   readWidgetsDef,
   showNewPostsDef,
+  inspectPageDef,
   testSelectorDef,
 ].map(toolSpec);

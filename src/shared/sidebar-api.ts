@@ -33,11 +33,17 @@ export interface ScheduledTask {
   /** Whether this task's unattended runs may use Codex's web search; off unless the task needs it. */
   webSearch: boolean;
 }
-/** The selector-override file as Settings shows it. */
-export interface SelectorsInfo {
-  path: string;
-  overridden: number;
-  stale: number;
+/** Which of the two page-config files a Settings row is about. */
+export type PageConfigKind = 'styles' | 'selectors';
+
+/**
+ * The two user-editable page-config files as Settings shows them. `lastError` is why what is on
+ * disk is not what is in effect — a stylesheet that failed the check, a selectors.json that would
+ * not parse — and is null when the file and the app agree.
+ */
+export interface PageConfigStatus {
+  styles: { path: string; lastError: string | null };
+  selectors: { path: string; overridden: number; stale: number; lastError: string | null };
 }
 export interface HistoryStats {
   conversations: number;
@@ -75,14 +81,11 @@ export interface XPilotApi {
   openConversation(threadId: string): Promise<AgentEvent[]>;
   openPdf(path: string): Promise<void>;
   chooseLibraryDir(): Promise<string | null>;
-  /** The path of the user-editable stylesheet applied to the X page. */
-  pageStylesPath(): Promise<string>;
-  openPageStyles(): Promise<void>;
-  resetPageStyles(): Promise<void>;
-  /** Where the selector overrides live, and how many there are. */
-  selectorsInfo(): Promise<SelectorsInfo>;
-  openSelectors(): Promise<void>;
-  resetSelectors(): Promise<SelectorsInfo>;
+  /** Where the page stylesheet and the selector overrides live, and what state they are in. */
+  pageConfigStatus(): Promise<PageConfigStatus>;
+  openPageConfig(kind: PageConfigKind): Promise<void>;
+  /** Empties one of the two files, as the user, so nothing is confirmed; returns the new status. */
+  resetPageConfig(kind: PageConfigKind): Promise<PageConfigStatus>;
   /** Picks the Codex binary with a file dialog, or clears it; returns the new path. */
   setCodexBinary(action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;

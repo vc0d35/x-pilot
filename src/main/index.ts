@@ -44,6 +44,7 @@ async function start(): Promise<void> {
         bridge: xpilot.bridge,
         openExternalCalls: xpilot.openExternalCalls,
         settings: xpilot.settings,
+        approvals: xpilot.approvals,
         styles: xpilot.styles,
         selectors: xpilot.selectors,
         xView: xpilot.xView,

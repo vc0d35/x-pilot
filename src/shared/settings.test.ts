@@ -40,6 +40,13 @@ describe('SettingsSchema', () => {
     expect(DEFAULT_SETTINGS.likes.mode).toBe('confirm');
   });
 
+  it('confirms agent-written page styles by default, since CSS can cover what the user clicks', () => {
+    expect(DEFAULT_SETTINGS.styles.mode).toBe('confirm');
+    expect(normalizeSettings({ styles: { mode: 'autonomous' } }).styles.mode).toBe('autonomous');
+    expect(parse({ styles: { mode: 'autonomous' } })).toEqual({ styles: { mode: 'autonomous' } });
+    expect(() => parse({ styles: { mode: 'auto' } })).toThrow();
+  });
+
   it('holds a stored settings file to the same rules as a patch', () => {
     expect(() => SettingsSchema.parse({ ...DEFAULT_SETTINGS, navigation: { allowHosts: ['*.com'] } })).toThrow();
     expect(() => normalizeSettings({ agent: { codex: { binPath: 'codex' } } })).toThrow(/absolute path/);

@@ -30,6 +30,13 @@ describe('exportPdf', () => {
     expect(win.destroy).toHaveBeenCalledTimes(1);
   });
 
+  it('hands the effective selectors to the injected script, so an override reaches the exporter', async () => {
+    const win = fakeWindow();
+    await exportPdf({ url: POST, outDir: outDir(), selectors: { article: 'section[data-post]' } as never }, { createWindow: () => win });
+    const code = (win.executeJavaScript as unknown as { mock: { calls: string[][] } }).mock.calls[0][0];
+    expect(code).toContain('"article":"section[data-post]"');
+  });
+
   it('rejects quickly when loadURL never resolves, still destroys the window', async () => {
     const win = fakeWindow({ loadURL: vi.fn(() => new Promise<void>(() => {})) });
     const dir = outDir();
