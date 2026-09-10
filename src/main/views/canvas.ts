@@ -116,6 +116,7 @@ export class ViewCanvas {
   private activeView: string | null = null;
   private previewingView = false;
   private reloadTimer: NodeJS.Timeout | null = null;
+  private loading = false;
   /** Running while a wedged renderer is being given its ten seconds to come back. */
   private unresponsiveTimer: NodeJS.Timeout | null = null;
   readonly logs = new ViewLogs();
@@ -166,12 +167,18 @@ export class ViewCanvas {
     // are the old document's and have to go before the new one makes its own, and anything the page
     // says on its way up — an error thrown out of a module — has to arrive after the view it is about.
     this.deps.onActive(name);
+    this.loading = true;
     try {
       await view.webContents.loadURL(viewUrl(name));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // ERR_ABORTED is a load replaced by a newer navigation of ours, such as a reload for a file
+      // written moments earlier; the newer load carries on.
+      if (/ERR_ABORTED/.test(message)) return null;
       this.failed(name, 'load', message);
       return message;
+    } finally {
+      this.loading = false;
     }
     return null;
   }
@@ -195,7 +202,7 @@ export class ViewCanvas {
 
   /** A view changed on disk: reload it, debounced, so a file-at-a-time write is one reload. */
   scheduleReload(name: string): void {
-    if (this.activeView !== name) return;
+    if (this.activeView !== name || this.loading) return;
     // A view that has failed to load twice running is not reloaded a third time at the speed a
     // watcher can fire; the refusal clears the count, so the next file change tries again.
     if (!this.errors.shouldReload(name)) {
