@@ -23,6 +23,29 @@ describe('the banner over a scheduled run that has the window', () => {
   });
 });
 
+describe('the banner over a custom view', () => {
+  it('names the view that is on screen and drops it when the user goes back to X', () => {
+    const shown = run([{ type: 'view.active', view: 'feed' }]);
+    expect(shown.view).toBe('feed');
+    expect(shown.viewError).toBeNull();
+    expect(reduce(shown, { type: 'view.active', view: null }).view).toBeNull();
+  });
+
+  it('keeps it through a reset, because the window is not part of any conversation', () => {
+    const s = run([{ type: 'view.active', view: 'feed' }]);
+    expect(reduce(s, { type: 'reset' }).view).toBe('feed');
+  });
+
+  it('carries the reason a view took itself off, and clears it when another one comes up', () => {
+    const broken = run([
+      { type: 'view.active', view: 'feed' },
+      { type: 'view.active', view: null, error: 'feed: ERR_FAILED' },
+    ]);
+    expect(broken).toMatchObject({ view: null, viewError: 'feed: ERR_FAILED' });
+    expect(reduce(broken, { type: 'view.active', view: 'other' })).toMatchObject({ view: 'other', viewError: null });
+  });
+});
+
 describe('sidebar reducer', () => {
   it('streams an agent message from deltas and finalises it', () => {
     const s = run([

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import type { AppToolCtx } from './context';
 import { savePdf } from './save-pdf';
 import { listLibrary, openPdf } from './library';
 import { AppStore } from '../../history/store';
@@ -32,6 +33,7 @@ function ctx() {
     } as unknown as SelectorOverrides,
     approvals: { request: async () => 'apply' } as unknown as ApprovalBroker,
     stylesMode: () => 'confirm' as const,
+    views: {} as AppToolCtx['views'],
     testSelector: null,
   };
 }

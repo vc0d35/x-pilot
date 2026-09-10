@@ -24,6 +24,32 @@ const DEBOUNCE_MS = 150;
 export const MAX_READ_BYTES = 256 * 1024;
 
 /**
+ * Write-then-rename with an unpredictable, exclusively opened temp file, as settings.json is
+ * written: nothing ever sees a half-written file, and no other user can read one of ours.
+ */
+export function writeFilePrivately(path: string, text: string): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const tmp = `${path}.${randomUUID()}.tmp`;
+  try {
+    const fd = openSync(tmp, 'wx', 0o600);
+    try {
+      writeFileSync(fd, text);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(tmp, path);
+    chmodSync(path, 0o600);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+      /* nothing to clean up */
+    }
+    throw err;
+  }
+}
+
+/**
  * One small text file in the profile that both the user and the agent edit: created on first read
  * with a header explaining what it is, replaced atomically and privately, and watched so an edit
  * made in the user's own editor reaches the app.
@@ -68,25 +94,7 @@ export class WatchedFile {
 
   /** Write-then-rename with an unpredictable, exclusively opened temp file, as settings.json is written. */
   write(text: string): void {
-    mkdirSync(dirname(this.path), { recursive: true });
-    const tmp = `${this.path}.${randomUUID()}.tmp`;
-    try {
-      const fd = openSync(tmp, 'wx', 0o600);
-      try {
-        writeFileSync(fd, text);
-      } finally {
-        closeSync(fd);
-      }
-      renameSync(tmp, this.path);
-      chmodSync(this.path, 0o600);
-    } catch (err) {
-      try {
-        unlinkSync(tmp);
-      } catch {
-        /* nothing to clean up */
-      }
-      throw err;
-    }
+    writeFilePrivately(this.path, text);
     this.lastWritten = text;
   }
 

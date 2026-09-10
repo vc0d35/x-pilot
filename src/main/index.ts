@@ -20,7 +20,13 @@ app.enableSandbox();
 
 // Has to happen before the app is ready. A standard, secure scheme gives the sidebar a real origin,
 // so the production CSP's 'self' covers its bundle and fonts and the file: fuse can stay off.
-protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+// corsEnabled is what lets a custom view (xpilot://views/<name>) import a module from the library
+// shelf (xpilot://lib): a module import is a CORS request, and without it Chromium refuses every
+// cross-origin request on a non-http scheme outright. Only the shelf answers with an allow-origin
+// header, so a view's own files stay unreadable from anywhere else.
+protocol.registerSchemesAsPrivileged([
+  { scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
+]);
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else void start();
@@ -54,6 +60,8 @@ async function start(): Promise<void> {
         xView: xpilot.xView,
         sidebar: xpilot.sidebar,
         agent: xpilot.agent,
+        views: xpilot.views,
+        viewCanvas: xpilot.viewCanvas,
       };
     await xpilot.launch();
   } catch (err) {

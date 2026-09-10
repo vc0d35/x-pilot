@@ -18,6 +18,12 @@ export interface MainWindow {
   sidebar: WebContentsView;
   setSidebarCollapsed: (collapsed: boolean) => void;
   isSidebarCollapsed: () => boolean;
+  /**
+   * Puts a view over the X page, or takes it back off. It goes between the X view and the sidebar,
+   * so the collapsed sidebar's handle stays clickable over it, and it is laid out with the X view's
+   * own bounds so the page underneath keeps rendering at the size it was.
+   */
+  setOverlayView: (view: WebContentsView | null) => void;
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
@@ -54,10 +60,12 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
   win.contentView.addChildView(sidebar);
 
   let collapsed = false;
+  let overlay: WebContentsView | null = null;
   const layout = () => {
     const { width, height } = win.getContentBounds();
     const l = computeLayout(width, height, collapsed);
     xView.setBounds(l.xView);
+    overlay?.setBounds(l.xView);
     sidebar.setBounds(l.sidebar);
   };
   layout();
@@ -78,5 +86,13 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
       if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.sidebarCollapsed, c);
     },
     isSidebarCollapsed: () => collapsed,
+    setOverlayView: (view) => {
+      if (overlay === view) return;
+      if (overlay) win.contentView.removeChildView(overlay);
+      overlay = view;
+      // Index 1: above the X page, below the sidebar and its floating handle.
+      if (view) win.contentView.addChildView(view, 1);
+      layout();
+    },
   };
 }

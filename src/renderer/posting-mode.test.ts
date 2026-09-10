@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { AUTONOMOUS_STYLES_WARNING, AUTONOMOUS_WARNING, confirmPostingMode, confirmStylesMode } from './posting-mode';
+import {
+  AUTONOMOUS_STYLES_WARNING,
+  AUTONOMOUS_VIEWS_WARNING,
+  AUTONOMOUS_WARNING,
+  confirmPostingMode,
+  confirmStylesMode,
+  confirmViewsMode,
+} from './posting-mode';
 
 describe('confirmPostingMode', () => {
   it('warns once before switching to autonomous and honours the answer', () => {
@@ -46,6 +53,33 @@ describe('confirmStylesMode', () => {
   it('never warns when switching back to confirm', () => {
     expect(
       confirmStylesMode('confirm', () => {
+        throw new Error('should not be asked');
+      }),
+    ).toBe('confirm');
+  });
+});
+
+describe('confirmViewsMode', () => {
+  it('warns before letting the agent replace the page unasked, and honours the answer', () => {
+    const seen: string[] = [];
+    expect(
+      confirmViewsMode('autonomous', (m) => {
+        seen.push(m);
+        return true;
+      }),
+    ).toBe('autonomous');
+    expect(
+      confirmViewsMode('autonomous', (m) => {
+        seen.push(m);
+        return false;
+      }),
+    ).toBeNull();
+    expect(seen).toEqual([AUTONOMOUS_VIEWS_WARNING, AUTONOMOUS_VIEWS_WARNING]);
+  });
+
+  it('never warns when switching back to confirm', () => {
+    expect(
+      confirmViewsMode('confirm', () => {
         throw new Error('should not be asked');
       }),
     ).toBe('confirm');

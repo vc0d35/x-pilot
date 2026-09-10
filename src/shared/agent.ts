@@ -53,4 +53,9 @@ export type AgentEvent =
   | { type: 'input.requested'; request: UserInputRequest }
   | { type: 'input.resolved'; id: string; answers: UserInputAnswers }
   /** A scheduled run started or ended; `visibleWindow` runs drive the window the user is looking at. */
-  | { type: 'task.run'; taskId: number; title: string; visibleWindow: boolean; running: boolean };
+  | { type: 'task.run'; taskId: number; title: string; visibleWindow: boolean; running: boolean }
+  /**
+   * Which custom view is on screen in place of x.com, or null for X itself. `error` is set when a
+   * view was taken off because it would not load or its renderer died, so the sidebar can say so.
+   */
+  | { type: 'view.active'; view: string | null; error?: string };

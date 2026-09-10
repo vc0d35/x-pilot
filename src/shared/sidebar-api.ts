@@ -1,6 +1,8 @@
 import type { AgentEvent, ProviderKind, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
+import type { ViewsStatus } from './views';
+export type { ViewsStatus, ViewSummary } from './views';
 
 export interface ModelInfo {
   id: string;
@@ -138,6 +140,12 @@ export interface XPilotApi {
   openPageConfig(kind: PageConfigKind): Promise<void>;
   /** Empties one of the two files, as the user, so nothing is confirmed; returns the new status. */
   resetPageConfig(kind: PageConfigKind): Promise<PageConfigStatus>;
+  /** The custom views in the profile and which one is on screen. */
+  viewsStatus(): Promise<ViewsStatus>;
+  /** Back to X: takes the custom view off the screen and forgets it for the next start. */
+  deactivateView(): Promise<void>;
+  /** Opens the views folder in the file manager; only that folder. */
+  openViewsFolder(): Promise<void>;
   /** Picks that provider's binary with a file dialog, or clears it; returns the new path. */
   setProviderBinary(provider: ProviderKind, action: 'choose' | 'clear'): Promise<string | null>;
   clearHistory(): Promise<void>;

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { AppToolCtx } from './context';
 import { scheduleTask, listTasks, updateTask, deleteTask } from './tasks';
 import { TaskManager } from '../../tasks/manager';
 import { AppStore } from '../../history/store';
@@ -24,6 +25,7 @@ function ctx() {
     selectors,
     approvals: { request: async () => 'apply' } as unknown as ApprovalBroker,
     stylesMode: () => 'confirm' as const,
+    views: {} as AppToolCtx['views'],
     testSelector: null,
     libraryDir: () => '/lib',
     exportPdf: async () => ({ path: '', title: '' }),

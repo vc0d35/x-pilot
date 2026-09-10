@@ -35,6 +35,15 @@ export const SettingsSchema = z.object({
    * invisible one, so what the agent writes is shown and confirmed before it is applied.
    */
   styles: z.object({ mode: z.enum(['confirm', 'autonomous']).default('confirm') }),
+  /**
+   * Custom views: whole replacement UIs the agent writes and XPilot renders over the X page. Showing
+   * one takes over what the user is looking at, so it is previewed and confirmed like a stylesheet.
+   * `active` is the view to bring back at the next start, and is cleared when it no longer loads.
+   */
+  views: z.object({
+    active: z.string().max(40).nullable().default(null),
+    mode: z.enum(['confirm', 'autonomous']).default('confirm'),
+  }),
   library: z.object({ dir: z.string().nullable().default(null) }),
   agent: z.object({
     /** Which backend drives the agent; null until the user picks one in the first-run card. */
@@ -99,6 +108,7 @@ export const SettingsPatchSchema = z.strictObject({
   likes: patchOf(SettingsSchema.shape.likes).optional(),
   bookmarks: patchOf(SettingsSchema.shape.bookmarks).optional(),
   styles: patchOf(SettingsSchema.shape.styles).optional(),
+  views: patchOf(SettingsSchema.shape.views).optional(),
   library: patchOf(SettingsSchema.shape.library).optional(),
   agent: z
     .strictObject({
@@ -146,6 +156,7 @@ export function normalizeSettings(raw: unknown): Settings {
     likes: isObj(r.likes) ? r.likes : {},
     bookmarks: isObj(r.bookmarks) ? r.bookmarks : {},
     styles: isObj(r.styles) ? r.styles : {},
+    views: isObj(r.views) ? r.views : {},
     library: isObj(r.library) ? r.library : {},
     agent: { ...agent, codex, claude },
     navigation: isObj(r.navigation) ? r.navigation : {},
@@ -160,3 +171,4 @@ export const DEFAULT_SETTINGS: Settings = normalizeSettings({});
 
 export type PostingMode = Settings['posting']['mode'];
 export type StylesMode = Settings['styles']['mode'];
+export type ViewsMode = Settings['views']['mode'];

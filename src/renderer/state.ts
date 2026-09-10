@@ -76,6 +76,10 @@ export interface State {
   foreign: ForeignConversation | null;
   /** The scheduled run executing right now, whichever conversation the sidebar is showing. */
   taskRun: TaskRun | null;
+  /** The custom view on screen in place of x.com, or null when the user is looking at X. */
+  view: string | null;
+  /** Why the last view was taken off the screen by itself, until another one is shown. */
+  viewError: string | null;
 }
 
 export const initialState: State = {
@@ -90,6 +94,8 @@ export const initialState: State = {
   viewing: null,
   foreign: null,
   taskRun: null,
+  view: null,
+  viewError: null,
 };
 
 let seq = 0;
@@ -105,6 +111,10 @@ export function reduce(state: State, e: AgentEvent | LocalAction): State {
       return { ...state, foreign: { threadId: e.threadId, provider: e.provider }, viewing: null };
     case 'view.live':
       return { ...state, viewing: null, foreign: null };
+    // Which view is on screen belongs to the window, not to a conversation: like a run, it outlives
+    // a reset. An error is only ever the reason the view that was up is gone.
+    case 'view.active':
+      return { ...state, view: e.view, viewError: e.view ? null : (e.error ?? null) };
     // A run of the user's own is not part of any conversation, so it outlives a reset or a new thread.
     case 'task.run':
       return { ...state, taskRun: e.running ? { taskId: e.taskId, title: e.title, visibleWindow: e.visibleWindow } : null };

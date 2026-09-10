@@ -140,8 +140,13 @@ describe('applyPermissionPolicy', () => {
 });
 
 describe('installPermissionHandlers', () => {
-  const install = (x: PermissionSessionLike, def: PermissionSessionLike) =>
-    installPermissionHandlers({ x: x as never, default: def as never, allowHosts: () => [...DEFAULT_ALLOW_HOSTS] });
+  const install = (x: PermissionSessionLike, def: PermissionSessionLike, views: PermissionSessionLike = fakeSession().session) =>
+    installPermissionHandlers({
+      x: x as never,
+      default: def as never,
+      views: views as never,
+      allowHosts: () => [...DEFAULT_ALLOW_HOSTS],
+    });
 
   it('gives the X session the small allow-set on X origins only, and the default session nothing', () => {
     const x = fakeSession();

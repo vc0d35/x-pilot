@@ -12,6 +12,12 @@ export const IPC = {
   pageConfigPreview: 'page-config:preview',
   // X preload -> main, synchronously, before the page renders
   pageConfigGet: 'page-config:get',
+  // canvas (a custom view) <-> main
+  viewCall: 'view:call',
+  viewSubscribe: 'view:subscribe',
+  viewUnsubscribe: 'view:unsubscribe',
+  viewFeed: 'view:feed',
+  viewBack: 'view:back',
   // sidebar <-> main
   agentSend: 'agent:send',
   agentInterrupt: 'agent:interrupt',
@@ -48,6 +54,9 @@ export const IPC = {
   pageConfigStatus: 'page-config:status',
   pageConfigOpen: 'page-config:open',
   pageConfigReset: 'page-config:reset',
+  viewsStatus: 'views:status',
+  viewsDeactivate: 'views:deactivate',
+  viewsOpenFolder: 'views:openFolder',
 } as const;
 
 /**

@@ -49,6 +49,12 @@ type Harness = {
   styles: { set(css: string): { ok: boolean }; reset(): void };
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
   settings: { update(patch: object): unknown };
+  views: { dir: string; write(view: string, path: string, content: string): { bytes: number }; delete(view: string): boolean };
+  viewCanvas: {
+    active(): string | null;
+    contents(): { executeJavaScript(c: string): Promise<unknown>; getURL(): string } | null;
+    logs: { get(view?: string, limit?: number): { text: string }[] };
+  };
   approvals: {
     onEvent(
       cb: (e: { type: string; request?: { id: string; title: string; detail: string; options: { id: string; label: string }[] } }) => void,
@@ -162,6 +168,98 @@ test('a stylesheet the tool writes is previewed on the page, and reverting leave
   await inMain((t) => t.settings.update({ styles: { mode: 'autonomous' } }));
 });
 
+/**
+ * A custom view end to end: written to the profile, shown over X on its own session, talking to the
+ * app through the bridge and nothing else. The X view stays loaded underneath, which is what makes
+ * the reads a view asks for work at all.
+ */
+
+/** Runs JavaScript inside the canvas. The source travels as an argument: `inMain` sends a function's
+ * text, so nothing it closes over exists on the other side. */
+const inCanvas = (js: string) =>
+  app.evaluate(async (_electron, src: string) => {
+    const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+    return t.viewCanvas.contents()!.executeJavaScript(src);
+  }, js);
+
+const VIEW_INDEX = [
+  '<!doctype html><meta charset="utf-8" /><title>e2e view</title>',
+  '<div id="out">waiting</div>',
+  // No inline script: the view CSP has no 'unsafe-inline', which is what the starters are shaped for.
+  '<script type="module" src="app.js"></script>',
+].join('\n');
+
+const VIEW_APP = [
+  'window.__seen = [];',
+  "window.xpilotView.subscribe('page', (ctx) => window.__seen.push(ctx === null ? 'null' : 'context'));",
+  "document.getElementById('out').textContent = 'rendered';",
+  'window.__probe = async () => ({',
+  "  read: await window.xpilotView.call('x_get_page_state', { timeoutMs: 0 }),",
+  "  refused: await window.xpilotView.call('xpilot_write_page_styles', { css: 'body{}' }),",
+  "  network: await fetch('https://example.com/').then(() => 'allowed', (e) => 'blocked: ' + e.name),",
+  '  sidebarApi: typeof window.xpilot,',
+  '});',
+].join('\n');
+
+test('a custom view renders over X, reaches the bridge, and goes away again', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      t.settings.update({ views: { mode: 'autonomous' } });
+      t.views.write('e2e', 'index.html', files.index);
+      t.views.write('e2e', 'app.js', files.app);
+    },
+    { index: VIEW_INDEX, app: VIEW_APP },
+  );
+  const activated = await inMain((t) => t.registry.call('xpilot_activate_view', { view: 'e2e' }));
+  expect(activated.error ?? null).toBeNull();
+  expect(activated).toMatchObject({ success: true, content: { status: 'kept', view: 'e2e' } });
+  expect(await inMain((t) => t.viewCanvas.active())).toBe('e2e');
+  expect(await inMain((t) => t.viewCanvas.contents()!.getURL())).toBe('xpilot://views/e2e/index.html');
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  expect(await inCanvas('typeof window.xpilotView')).toBe('object');
+  // The page feed reaches the view; the fixture has no posts, so the context itself is null.
+  await expect.poll(() => inCanvas('window.__seen.length'), { timeout: 15_000 }).toBeGreaterThan(0);
+  const probe = (await inCanvas('window.__probe()')) as {
+    read: { success: boolean; content: { title: string } };
+    refused: { success: boolean; error: string };
+    network: string;
+    sidebarApi: string;
+  };
+  // An allowlisted read runs against the X page underneath, which is still loaded.
+  expect(probe.read).toMatchObject({ success: true, content: { title: 'fixture ready' } });
+  expect(probe.refused).toMatchObject({ success: false, error: expect.stringContaining('may not call xpilot_write_page_styles') });
+  expect(probe.network).toMatch(/^blocked/);
+  expect(probe.sidebarApi).toBe('undefined');
+  expect(await inMain((t) => t.registry.call('xpilot_view_inspect', { selector: '#out', limit: 1 }))).toMatchObject({
+    success: true,
+    content: { matches: 1, elements: [{ tag: 'div' }] },
+  });
+  expect(await inMain((t) => t.registry.call('xpilot_deactivate_view', {}))).toMatchObject({
+    success: true,
+    content: { status: 'deactivated', wasShowing: 'e2e' },
+  });
+  expect(await inMain((t) => t.viewCanvas.active())).toBeNull();
+  await inMain((t) => t.views.delete('e2e'));
+});
+
+test('the library shelf serves three.js to a view, and nothing else', async () => {
+  await inMain(async (t) => {
+    t.settings.update({ views: { mode: 'autonomous' } });
+    t.views.write('lib-check', 'index.html', '<!doctype html><meta charset="utf-8" /><title>lib</title><div id="out"></div>');
+    return t.registry.call('xpilot_activate_view', { view: 'lib-check' });
+  });
+  expect(await inCanvas("import('xpilot://lib/three.module.js').then((m) => typeof m.Scene, (e) => 'failed: ' + e.message)")).toBe(
+    'function',
+  );
+  expect(await inCanvas("import('xpilot://lib/OrbitControls.js').then((m) => typeof m.OrbitControls, (e) => 'failed: ' + e.message)")).toBe(
+    'function',
+  );
+  expect(await inCanvas("import('xpilot://lib/../package.json').then(() => 'loaded', () => 'blocked')")).toBe('blocked');
+  await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
+  await inMain((t) => t.views.delete('lib-check'));
+});
+
 test('external links are routed to the system browser', async () => {
   await inMain((t) => t.xView.webContents.executeJavaScript("document.getElementById('ext').click()"));
   await expect.poll(() => inMain((t) => t.openExternalCalls)).toContain('https://example.com/outside');
@@ -176,8 +274,8 @@ test('page styles reach the visible view and are taken back off', async () => {
   await expect.poll(colour, { timeout: 15_000 }).toBe(before);
 });
 
-test('both preloads are self-contained bundles and the React header renders', async () => {
-  for (const name of ['sidebar', 'x']) {
+test('every preload is a self-contained bundle and the React header renders', async () => {
+  for (const name of ['sidebar', 'x', 'view']) {
     const built = readFileSync(resolve(`out/preload/${name}.js`), 'utf8');
     // A sandboxed preload can require() only electron and node builtins.
     expect(built, name).not.toMatch(/require\("\.\//);

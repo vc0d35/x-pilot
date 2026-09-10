@@ -4,6 +4,26 @@ import type { PageStyles } from '../../page-config/styles';
 import type { SelectorOverrides } from '../../page-config/selectors';
 import type { TaskManager } from '../../tasks/manager';
 import type { SelectorKey } from '../../../shared/selectors';
+import type { ViewsStore } from '../../views/store';
+import type { ViewLogEntry } from '../../../shared/views';
+import type { ViewInspection } from '../../views/inspect';
+
+/** The custom views the agent writes, and the one window they are shown in. */
+export interface ViewsCtx {
+  store: ViewsStore;
+  /** The view on screen now, or null when the user is looking at X. */
+  active(): string | null;
+  /** Puts a view on screen; resolves with why it could not be shown, or null when it is up. */
+  show(view: string): Promise<string | null>;
+  hide(): void;
+  /** Records the view to bring back at the next start, or clears it. */
+  persist(view: string | null): void;
+  /** Whether activating a view is previewed and confirmed, or just done. */
+  mode(): 'confirm' | 'autonomous';
+  logs(view?: string, limit?: number): ViewLogEntry[];
+  /** Looks at the DOM the view rendered; null when no view is on screen. */
+  inspect(selector?: string, limit?: number): Promise<ViewInspection | { error: string } | null>;
+}
 
 /** What a selector does on the page the user is looking at, as the preload reports it. */
 export interface SelectorTest {
@@ -17,6 +37,7 @@ export interface AppToolCtx {
   styles: PageStyles;
   selectors: SelectorOverrides;
   approvals: ApprovalBroker;
+  views: ViewsCtx;
   /** Whether an agent-written stylesheet is confirmed by the user before it is applied. */
   stylesMode: () => 'confirm' | 'autonomous';
   /** Tries a selector on the visible page; null in a scheduled run, which has no visible view. */

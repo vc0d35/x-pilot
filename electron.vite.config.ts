@@ -28,7 +28,7 @@ export default defineConfig({
   preload: {
     define: { __XPILOT_IPC__: JSON.stringify(IPC) },
     build: {
-      // Both preloads run sandboxed, where require() reaches only electron and node builtins,
+      // Every preload runs sandboxed, where require() reaches only electron and node builtins,
       // so dependencies (zod) are bundled in rather than externalized.
       externalizeDeps: false,
       rollupOptions: {
@@ -36,6 +36,7 @@ export default defineConfig({
         input: {
           x: resolve(__dirname, 'src/preload/x/index.ts'),
           sidebar: resolve(__dirname, 'src/preload/sidebar.ts'),
+          view: resolve(__dirname, 'src/preload/view.ts'),
         },
         output: { format: 'cjs', entryFileNames: '[name].js' },
       },

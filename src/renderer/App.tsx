@@ -137,6 +137,15 @@ export function App() {
           </button>
         </div>
       )}
+      {state.view && (
+        <div className="banner run-banner">
+          <span className="run-banner-text">Custom view: {state.view}</span>
+          <button className="link" onClick={() => void window.xpilot.deactivateView()}>
+            Back to X
+          </button>
+        </div>
+      )}
+      {state.viewError && <div className="banner">The custom view was closed: {state.viewError}</div>}
       {settings?.posting.mode === 'autonomous' && (
         <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
       )}

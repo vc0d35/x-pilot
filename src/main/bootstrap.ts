@@ -13,6 +13,14 @@ import { configureTouchIdPasskeys, resolveKeychainGroup } from './webauthn';
 import { attachNavigationPolicy, POPUP_ONLY_HOSTS } from './navigation/policy';
 import { installPermissionHandlers } from './permissions';
 import { APP_SCHEME, SIDEBAR_URL, hardenWebContents, resolveSidebarAsset, reviveOnCrash } from './hardening';
+import { ViewsStore } from './views/store';
+import { ViewCanvas } from './views/canvas';
+import { registerViewBridgeIpc, type ViewBridge } from './views/bridge';
+import { LIB_FILES, VIEW_CSP, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports } from './views/serve';
+import { inspectScript, type ViewInspection } from './views/inspect';
+import { isViewName, type ViewsStatus } from '../shared/views';
+import type { AgentEvent } from '../shared/agent';
+import type { PageContext } from '../shared/page';
 import { createLinkRouter, rateLimit, type LinkRouter } from './links';
 import { SettingsStore } from './settings';
 import { AppToolSource, ToolRegistry, type ToolSource } from './tools/registry';
@@ -41,6 +49,10 @@ import type { AppToolCtx, SelectorTest } from './tools/app/context';
 import type { SelectorKey } from '../shared/selectors';
 import { exportPdf } from './library/pdf';
 
+/** The profile folder holding the custom views, and the session the one that is showing runs in. */
+export const VIEWS_DIR_NAME = 'views';
+export const VIEWS_PARTITION = 'views';
+
 /** Tools that create or change scheduled tasks: a scheduled run may not reschedule itself or its peers. */
 const TASK_MANAGEMENT_TOOLS = ['xpilot_schedule_task', 'xpilot_update_task', 'xpilot_delete_task'];
 
@@ -59,7 +71,20 @@ const CONFIG_WRITE_TOOLS = [
   'xpilot_test_selector',
 ];
 
-const NOT_FOR_SCHEDULED_RUNS = new Set([...TASK_MANAGEMENT_TOOLS, ...CONFIG_WRITE_TOOLS]);
+/**
+ * Tools that write a custom view, or put one on the user's screen. A view is a whole UI over x.com
+ * that survives restarts; an unattended run may read the ones that exist and their consoles, and may
+ * not write one, show one, or look at the window the user is in front of.
+ */
+const VIEW_WRITE_TOOLS = [
+  'xpilot_write_view_file',
+  'xpilot_delete_view',
+  'xpilot_activate_view',
+  'xpilot_deactivate_view',
+  'xpilot_view_inspect',
+];
+
+const NOT_FOR_SCHEDULED_RUNS = new Set([...TASK_MANAGEMENT_TOOLS, ...CONFIG_WRITE_TOOLS, ...VIEW_WRITE_TOOLS]);
 
 export function toolsForScheduledRuns<T extends { spec: { name: string } }>(tools: readonly T[]): T[] {
   return tools.filter((t) => !NOT_FOR_SCHEDULED_RUNS.has(t.spec.name));
@@ -172,6 +197,9 @@ export interface XPilotApp {
   approvals: ApprovalBroker;
   styles: PageStyles;
   selectors: SelectorOverrides;
+  /** The custom views in the profile, and the window the active one is drawn in. */
+  views: ViewsStore;
+  viewCanvas: ViewCanvas;
   /** In an e2e run, the links that would have gone to the system browser; null otherwise. */
   openExternalCalls: string[] | null;
   /** Loads the first page and, outside e2e, starts the agent and the task ticker. */
@@ -190,13 +218,51 @@ export function createApp(opts: AppOptions): XPilotApp {
   restrictDir(workspaceDir);
 
   const rendererDir = join(opts.outDir, 'renderer');
+  const viewsDir = join(opts.userData, VIEWS_DIR_NAME);
+  // The library shelf, beside `out/` in the app root: in a packaged build that is inside the asar,
+  // which electron-builder is told to keep those files in (see electron-builder.js) and which reads
+  // like any other directory. Derived from outDir rather than from app.getAppPath(), which is the
+  // entry point's own folder when the app is started by path.
+  const nodeModulesDir = join(opts.outDir, '..', 'node_modules');
+  const notFound = () => new Response('Not found', { status: 404 });
+  /** A custom view's own files, under its CSP; null when the URL is not one of a view's. */
+  const serveView = async (url: string): Promise<Response | null> => {
+    const view = resolveViewRequest(viewsDir, url);
+    if (!view) return null;
+    try {
+      return new Response(await readFile(view.file), {
+        headers: { 'content-type': view.contentType, 'content-security-policy': VIEW_CSP },
+      });
+    } catch {
+      return notFound();
+    }
+  };
+  /** The library shelf a view may import from; null when the URL is not one of the shelf's. */
+  const serveLib = async (url: string): Promise<Response | null> => {
+    const lib = resolveLibRequest(nodeModulesDir, url);
+    if (!lib) return null;
+    try {
+      const source = await readFile(lib.file, 'utf8');
+      return new Response(lib.name === 'OrbitControls.js' ? rewriteBareThreeImports(source) : source, {
+        // The shelf is read cross-origin by every view; it holds third-party libraries and nothing
+        // of the user's, and a module import is refused without this.
+        headers: { 'content-type': lib.contentType, 'access-control-allow-origin': '*' },
+      });
+    } catch (err) {
+      console.warn(`[xpilot] the library shelf is missing ${LIB_FILES[lib.name]}`, err);
+      return notFound();
+    }
+  };
+  // The default session, which the sidebar and the X views run in: all three hosts of the scheme.
   protocol.handle(APP_SCHEME, async (request) => {
+    const served = (await serveView(request.url)) ?? (await serveLib(request.url));
+    if (served) return served;
     const asset = resolveSidebarAsset(rendererDir, request.url);
-    if (!asset) return new Response('Not found', { status: 404 });
+    if (!asset) return notFound();
     try {
       return new Response(await readFile(asset.path), { headers: { 'content-type': asset.contentType } });
     } catch {
-      return new Response('Not found', { status: 404 });
+      return notFound();
     }
   });
 
@@ -214,15 +280,32 @@ export function createApp(opts: AppOptions): XPilotApp {
     { max: 5, windowMs: 10_000 },
   );
 
-  installPermissionHandlers({ x: session.fromPartition('persist:x'), default: session.defaultSession, allowHosts });
+  const viewsSession = session.fromPartition(VIEWS_PARTITION);
+  // A scheme handled through the `protocol` module is the default session's; the canvas has a
+  // session of its own, and gets the two hosts a view may reach and not the sidebar's bundle.
+  viewsSession.protocol.handle(
+    APP_SCHEME,
+    async (request) => (await serveView(request.url)) ?? (await serveLib(request.url)) ?? notFound(),
+  );
+  installPermissionHandlers({
+    x: session.fromPartition('persist:x'),
+    default: session.defaultSession,
+    views: viewsSession,
+    allowHosts,
+  });
   // Every WebContents, however it came to exist, gets the navigation policy: grandchild popups and
   // the PDF export window are covered here rather than by per-site wiring nobody remembers to add.
+  // The canvas is the exception: it is not a browser onto x.com, and the policy's "send it to the
+  // system browser instead" would turn a URL an agent-written page asked for into a browser window.
+  // It gets its own policy in ViewCanvas, which cancels everything outside the view it is showing.
   app.on('web-contents-created', (_e, contents) =>
-    hardenWebContents(contents, (c) => attachNavigationPolicy(c, { allowHosts, openExternal })),
+    hardenWebContents(contents, (c) => {
+      if (c.session !== viewsSession) attachNavigationPolicy(c, { allowHosts, openExternal });
+    }),
   );
 
   const preloadX = join(opts.outDir, 'preload/x.js');
-  const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed } = createMainWindow({
+  const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed, setOverlayView } = createMainWindow({
     bounds: pickInitialBounds(
       settings.get().window.bounds,
       screen.getAllDisplays().map((d) => d.workArea),
@@ -284,6 +367,43 @@ export function createApp(opts: AppOptions): XPilotApp {
     selectors.close();
   });
 
+  // Custom views: whole UIs the agent writes into the profile and XPilot renders over the X page,
+  // in their own session with no network and no X cookies. The X view stays loaded underneath, so
+  // its DOM keeps rendering and every read a view asks for still works.
+  const views = new ViewsStore(viewsDir);
+  const sendToSidebar = (event: AgentEvent): void => {
+    if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.agentEvent, event);
+  };
+  let viewBridge: ViewBridge | null = null;
+  const canvas = new ViewCanvas({
+    preload: join(opts.outDir, 'preload/view.js'),
+    partition: VIEWS_PARTITION,
+    mount: (view) => setOverlayView(view),
+    unmount: () => setOverlayView(null),
+    bounds: () => xView.getBounds(),
+    // A view that will not load, or whose renderer died, is not something to retry into: the app
+    // falls back to the X page underneath and tells the user in the sidebar why it went.
+    onFailure: (view, message) => {
+      console.warn(`[xpilot] custom view ${view} was taken off the screen: ${message}`);
+      sendToSidebar({ type: 'view.active', view: null, error: `${view}: ${message}` });
+    },
+    onActive: (view) => {
+      // A canvas that navigated has a new document, and its subscriptions went with the old one.
+      viewBridge?.reset();
+      sendToSidebar({ type: 'view.active', view });
+    },
+  });
+  const deactivateView = (): void => {
+    canvas.hide();
+    if (settings.get().views.active !== null) settings.update({ views: { active: null } });
+  };
+  // A view the user edited in their own editor, or the agent rewrote, reloads on screen.
+  views.onChange((view) => canvas.scheduleReload(view));
+  app.on('will-quit', () => {
+    views.close();
+    canvas.destroy();
+  });
+
   // When the user last touched the app: pointer and keyboard in the X view, and their own messages
   // in the sidebar. A run that would take over their window waits until they have stopped.
   let lastUserActivityAt = 0;
@@ -298,6 +418,16 @@ export function createApp(opts: AppOptions): XPilotApp {
   const bridge = new AdapterBridge(ipcMain, xView.webContents, { staticSpecs: adapterToolSpecs });
   registry.addSource(bridge);
   const xview = new XViewController(xView.webContents, bridge);
+  // The one channel a custom view has back to the app: the feeds, the allowlisted tools, and back().
+  let lastPageContext: PageContext | null = null;
+  viewBridge = registerViewBridgeIpc({
+    ipc: ipcMain,
+    canvasId: () => canvas.contents()?.id ?? null,
+    send: (message) => canvas.contents()?.send(IPC.viewFeed, message),
+    callTool: (name, args) => registry.call(name, args),
+    pageContext: () => lastPageContext,
+    deactivate: deactivateView,
+  });
   const trackXContents = (contents: WebContents): void => {
     xContents.set(contents.id, contents);
     contents.once('destroyed', () => xContents.delete(contents.id));
@@ -402,6 +532,22 @@ export function createApp(opts: AppOptions): XPilotApp {
     styles,
     selectors,
     approvals,
+    views: {
+      store: views,
+      active: () => canvas.active(),
+      show: (view: string) => canvas.show(view),
+      hide: () => canvas.hide(),
+      persist: (view: string | null) => {
+        settings.update({ views: { active: view } });
+      },
+      mode: () => settings.get().views.mode,
+      logs: (view?: string, limit?: number) => canvas.logs.get(view, limit),
+      inspect: async (selector?: string, limit?: number) => {
+        const contents = canvas.active() ? canvas.contents() : null;
+        if (!contents) return null;
+        return (await contents.executeJavaScript(inspectScript(selector, limit))) as ViewInspection | { error: string };
+      },
+    },
     stylesMode: () => settings.get().styles.mode,
     libraryDir,
     exportPdf: (url: string, outDir: string, sel: Record<SelectorKey, string>) =>
@@ -499,8 +645,24 @@ export function createApp(opts: AppOptions): XPilotApp {
     selectors,
     libraryDir,
     openPath: appCtx.openPath,
+    views: {
+      status: (): ViewsStatus => ({ active: canvas.active(), dir: views.dir, views: views.list() }),
+      deactivate: deactivateView,
+      dir: () => views.dir,
+      active: () => canvas.active(),
+    },
   });
-  registerFocusRelay({ ipc: ipcMain, xContentsId: xView.webContents.id, sidebar: sidebar.webContents });
+  // The page context goes to the sidebar as a hint and to the canvas as the `page` feed: a custom
+  // view is looking at the same thing the user is.
+  registerFocusRelay({
+    ipc: ipcMain,
+    xContentsId: xView.webContents.id,
+    sidebar: sidebar.webContents,
+    onContext: (context) => {
+      lastPageContext = context;
+      viewBridge?.pushPage(context);
+    },
+  });
   registerUserActivity({ ipc: ipcMain, xContentsId: xView.webContents.id, onActivity: noteUserActivity });
 
   let ticker: NodeJS.Timeout | null = null;
@@ -521,6 +683,16 @@ export function createApp(opts: AppOptions): XPilotApp {
   const launch = async (): Promise<void> => {
     // A first load that fails leaves Chromium's error page up; the app is still usable.
     await xView.webContents.loadURL(opts.startUrl).catch((err) => console.warn('[xpilot] first page load failed', err));
+    // The view the user last kept comes back once X is up, so it renders over a loaded page rather
+    // than over a blank one. A view that is no longer there is forgotten rather than retried.
+    const activeView = settings.get().views.active;
+    if (activeView) {
+      if (isViewName(activeView) && views.exists(activeView) && views.hasIndex(activeView)) await canvas.show(activeView);
+      else {
+        console.warn(`[xpilot] the remembered custom view ${activeView} is gone; starting on x.com`);
+        settings.update({ views: { active: null } });
+      }
+    }
     if (opts.e2e) return;
     await bridge.waitForReady(20_000).catch(() => console.warn('[xpilot] X view tools not ready; starting agent without them'));
     await agent.start({ resume: true });
@@ -554,6 +726,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     approvals,
     styles,
     selectors,
+    views,
+    viewCanvas: canvas,
     openExternalCalls,
     launch,
     shutdown,

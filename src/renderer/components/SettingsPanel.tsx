@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import type { DeepPartial, PostingMode, Settings, StylesMode } from '../../shared/settings';
-import { confirmPostingMode, confirmStylesMode } from '../posting-mode';
-import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus } from '../../shared/sidebar-api';
+import type { DeepPartial, PostingMode, Settings, StylesMode, ViewsMode } from '../../shared/settings';
+import { confirmPostingMode, confirmStylesMode, confirmViewsMode } from '../posting-mode';
+import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus, ViewsStatus } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
 import { formatBytes } from '../../shared/bytes';
 import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
@@ -201,6 +201,7 @@ export function SettingsPanel({
 }) {
   const [stats, setStats] = useState<HistoryStats | null>(null);
   const [pageConfig, setPageConfig] = useState<PageConfigStatus | null>(null);
+  const [views, setViews] = useState<ViewsStatus | null>(null);
   useEffect(() => {
     void window.xpilot
       .historyStats()
@@ -214,6 +215,12 @@ export function SettingsPanel({
       .then(setPageConfig)
       .catch(() => setPageConfig(null));
   }, [settings]);
+  const refreshViews = () =>
+    void window.xpilot
+      .viewsStatus()
+      .then(setViews)
+      .catch(() => setViews(null));
+  useEffect(refreshViews, [settings]);
   const reset = (kind: PageConfigKind, question: string) => {
     if (confirm(question)) void window.xpilot.resetPageConfig(kind).then(setPageConfig);
   };
@@ -262,6 +269,19 @@ export function SettingsPanel({
         </select>
       </label>
       <label>
+        Custom views
+        <select
+          value={settings.views.mode}
+          onChange={(e) => {
+            const mode = confirmViewsMode(e.target.value as ViewsMode, confirm);
+            if (mode) set({ views: { mode } });
+          }}
+        >
+          <option value="confirm">Confirm each view in the sidebar</option>
+          <option value="autonomous">Autonomous (agent replaces the page)</option>
+        </select>
+      </label>
+      <label>
         Library folder
         <div className="row">
           <code>{settings.library.dir ?? `~/Documents/${LIBRARY_FOLDER_NAME}`}</code>
@@ -293,6 +313,19 @@ export function SettingsPanel({
             </button>
           </div>
         </label>
+        <label>
+          Views
+          <div className="row">
+            <code>{views?.active ?? 'none active'}</code>
+            {views?.active && <button onClick={() => void window.xpilot.deactivateView().then(refreshViews)}>Back to X</button>}
+            <button onClick={() => void window.xpilot.openViewsFolder()}>Open folder</button>
+          </div>
+        </label>
+        <p className="hint">
+          {views ? `${views.views.length} in ${views.dir} · ` : ''}
+          Custom views are whole UIs the agent writes and XPilot shows in place of the X page. A view has no network and reads the page
+          underneath through XPilot; edit the files here and the view reloads.
+        </p>
         <p className="hint">
           {pageConfig ? `${pageConfig.selectors.overridden} overridden, ${pageConfig.selectors.stale} stale · ` : ''}
           {pageConfig?.selectors.lastError ? `Not in effect: ${pageConfig.selectors.lastError} · ` : ''}

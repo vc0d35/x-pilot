@@ -59,6 +59,22 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Paste `body { background: url(https://example.com/x.png) }` into the file by hand and save → the page does not change and the Page styles row says "Not applied: …". Delete the line and it applies again.
 - [ ] Settings → Page styles → Autonomous warns first; after switching, "make the links green" applies with no card.
 
+## Custom views
+
+- [ ] "Build me a view that shows the posts on my timeline as cards" → the agent calls xpilot_view_api first, writes index.html and app.js, and the view appears in place of the X page with a "Keep this view?" card (Keep / Adjust… / Revert). Revert puts x.com back and the agent reports the decision rather than retrying; Adjust… ("bigger cards") takes it off and comes back with a rewrite; Keep leaves it up and the sidebar carries a "Custom view: <name>" banner with "Back to X".
+- [ ] While the view is up: scrolling the timeline is impossible with the mouse (the X page is underneath), but the view's own "load more" button (x_scroll) brings new posts in and the list updates within about three seconds without the agent doing anything.
+- [ ] Click a post in the view → the X page underneath navigates (openInX), and "Back to X" shows it already on that post.
+- [ ] Ask the agent to change a colour → the file is rewritten and the view on screen reloads by itself, with no card (only activation is confirmed).
+- [ ] Edit `<profile>/views/<name>/app.js` in your own editor and save → the same reload. Settings → Page config → Views → "Open folder" opens the views folder.
+- [ ] Put `console.log('hello')` and a deliberate `throw` in the view → "what is the view logging?" (xpilot_view_console) shows both lines; "what did the view render?" (xpilot_view_inspect) shows the markup.
+- [ ] Break index.html so it cannot load (delete it while the view is up, or point the agent at a view with no index.html) → the app falls back to the X page and the sidebar says the view was closed and why.
+- [ ] Ask for a view that fetches something from the internet → the network call fails in the view's console (no network at all), and the agent is expected to use the bridge instead.
+- [ ] Ask the agent, from inside a view's code, to call something like xpilot_write_page_styles → refused by the bridge with the allowlist in the error.
+- [ ] Quit with the view up and start again → it comes back after x.com has loaded. Delete the view folder by hand and start again → the app starts on x.com and forgets it.
+- [ ] "Delete the cards view" → a "Delete this view?" card listing the files; Keep it leaves the folder alone.
+- [ ] Settings → Custom views → Autonomous warns first; after switching, "show me the cards view" activates with no card.
+- [ ] A view drawn with three.js (the second starter from xpilot_view_api) renders: `xpilot://lib/three.module.js` and OrbitControls load, and dragging orbits the scene.
+
 ## Selectors
 
 - [ ] Settings → Page config → Selectors shows the file path and "0 overridden, 0 stale"; "Ask the agent to point the tweetText selector at .nonsense" → xpilot_set_selector reports a match count of 0 with a warning, the count in Settings goes to 1 overridden after the panel is reopened, and a timeline read comes back with empty post text; "Reset all" (or xpilot_reset_selector with all) puts the reads back without a restart.

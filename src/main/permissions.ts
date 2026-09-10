@@ -48,7 +48,14 @@ export function applyPermissionPolicy(
   session.setDisplayMediaRequestHandler((_request, callback) => callback({}));
 }
 
-export function installPermissionHandlers(sessions: { x: Session; default: Session; allowHosts: () => string[] }): void {
+export function installPermissionHandlers(sessions: {
+  x: Session;
+  default: Session;
+  /** The session the custom-view canvas runs in: agent-written code, so nothing at all is granted. */
+  views: Session;
+  allowHosts: () => string[];
+}): void {
   applyPermissionPolicy(sessions.x, X_SESSION_PERMISSIONS, (url) => isAllowedPermissionOrigin(url, sessions.allowHosts()));
   applyPermissionPolicy(sessions.default, []);
+  applyPermissionPolicy(sessions.views, []);
 }

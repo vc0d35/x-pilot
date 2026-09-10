@@ -1,8 +1,9 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
 import { IPC } from '../shared/ipc';
-import { PageContextSchema } from '../shared/page';
+import { PageContextSchema, type PageContext } from '../shared/page';
 import type { PageConfigStatus } from '../shared/sidebar-api';
+import type { ViewsStatus } from '../shared/views';
 import { isOpenablePdf } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
@@ -40,6 +41,13 @@ export interface SidebarIpcDeps {
   selectors: SelectorOverrides;
   libraryDir: () => string;
   openPath: (p: string) => Promise<string>;
+  /** The custom views: what there is, what is on screen, and where the folder lives. */
+  views: {
+    status: () => ViewsStatus;
+    deactivate: () => void;
+    dir: () => string;
+    active: () => string | null;
+  };
 }
 
 const SendSchema = z.object({ text: z.string().min(1), pageContext: PageContextSchema.nullable() });
@@ -68,6 +76,7 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     openPath,
     stopTaskRun,
     onUserActivity,
+    views,
   } = deps;
   const push = (e: AgentEvent) => {
     if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e);
@@ -84,6 +93,8 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   sidebar.on('did-finish-load', () => {
     if (lastThread) push(lastThread);
     if (lastStatus) push(lastStatus);
+    // A reloaded sidebar has no idea a view is up; the banner comes back with this.
+    push({ type: 'view.active', view: views.active() });
   });
 
   /** Only the sidebar renderer may drive these channels; the X view shares the same ipcMain. */
@@ -274,6 +285,23 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     }),
   );
   ipcMain.handle(
+    IPC.viewsStatus,
+    guarded(() => views.status()),
+  );
+  // Back to X from the banner or the Settings row: the user's own decision, so nothing is confirmed.
+  ipcMain.handle(
+    IPC.viewsDeactivate,
+    guarded(() => views.deactivate()),
+  );
+  // The views folder and nothing else: the path is ours, never one a renderer sent.
+  ipcMain.handle(
+    IPC.viewsOpenFolder,
+    guarded(async () => {
+      const err = await openPath(views.dir());
+      if (err) throw new Error(err);
+    }),
+  );
+  ipcMain.handle(
     IPC.libraryChooseDir,
     guarded(async () => {
       const r = await dialog.showOpenDialog({ properties: ['openDirectory', 'createDirectory'] });
@@ -295,14 +323,21 @@ export function registerUserActivity(deps: { ipc: BridgeIpc; xContentsId: number
   });
 }
 
-export function registerFocusRelay(deps: { ipc: BridgeIpc; xContentsId: number; sidebar: WebContents }): void {
-  let last: unknown = null;
+export function registerFocusRelay(deps: {
+  ipc: BridgeIpc;
+  xContentsId: number;
+  sidebar: WebContents;
+  /** A second consumer of the same context: the custom view on screen, through its `page` feed. */
+  onContext?: (context: PageContext | null) => void;
+}): void {
+  let last: PageContext | null = null;
   deps.ipc.on(IPC.focusChanged, (event, payload) => {
     if (event.sender.id !== deps.xContentsId) return;
     const parsed = PageContextSchema.nullable().safeParse(payload);
     if (!parsed.success) return;
     last = parsed.data;
     if (!deps.sidebar.isDestroyed()) deps.sidebar.send(IPC.focusUpdate, parsed.data);
+    deps.onContext?.(parsed.data);
   });
   deps.sidebar.on('did-finish-load', () => deps.sidebar.send(IPC.focusUpdate, last));
 }

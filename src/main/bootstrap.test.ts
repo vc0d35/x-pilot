@@ -89,6 +89,20 @@ describe('toolsForScheduledRuns', () => {
     expect(names).toContain('xpilot_list_selectors');
   });
 
+  it('drops the tools that write or show a custom view, and keeps the ones that only read them', () => {
+    const names = toolsForScheduledRuns(appTools).map((t) => t.spec.name);
+    for (const name of [
+      'xpilot_write_view_file',
+      'xpilot_delete_view',
+      'xpilot_activate_view',
+      'xpilot_deactivate_view',
+      'xpilot_view_inspect',
+    ])
+      expect(names, name).not.toContain(name);
+    for (const name of ['xpilot_list_views', 'xpilot_read_view_file', 'xpilot_view_console', 'xpilot_view_api'])
+      expect(names, name).toContain(name);
+  });
+
   it('leaves a list without them untouched', () => {
     const tools = [tool('xpilot_search_history')];
     expect(toolsForScheduledRuns(tools)).toEqual(tools);

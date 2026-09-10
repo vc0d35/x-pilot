@@ -86,6 +86,14 @@ describe('the agent provider', () => {
     expect(parse({ agent: { provider: 'claude' } })).toEqual({ agent: { provider: 'claude' } });
   });
 
+  it('starts with no custom view and confirms the first one the agent shows', () => {
+    expect(DEFAULT_SETTINGS.views).toEqual({ active: null, mode: 'confirm' });
+    expect(parse({ views: { active: 'feed' } })).toEqual({ views: { active: 'feed' } });
+    expect(parse({ views: { mode: 'autonomous' } })).toEqual({ views: { mode: 'autonomous' } });
+    expect(() => parse({ views: { mode: 'always' } })).toThrow();
+    expect(() => parse({ views: { active: 'x'.repeat(41) } })).toThrow();
+  });
+
   it('defaults Claude to Sonnet on low effort with web search on', () => {
     expect(DEFAULT_SETTINGS.agent.claude).toEqual({ model: 'claude-sonnet-5', effort: 'low', webSearch: 'on', binPath: null });
   });

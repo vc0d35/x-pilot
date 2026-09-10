@@ -6,6 +6,7 @@ import { listLibrary, openPdf } from './library';
 import { scheduleTask, listTasks, updateTask, deleteTask } from './tasks';
 import { readPageStyles, writePageStyles, resetPageStyles } from './styles';
 import { listSelectors, testSelectorTool, setSelector, resetSelector } from './selectors';
+import { viewTools } from './views';
 export const appTools: ToolModule<AppToolCtx>[] = [
   searchHistory,
   savePdf,
@@ -22,4 +23,5 @@ export const appTools: ToolModule<AppToolCtx>[] = [
   testSelectorTool,
   setSelector,
   resetSelector,
+  ...viewTools,
 ];

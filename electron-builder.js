@@ -38,7 +38,21 @@ module.exports = {
   directories: { buildResources: 'build', output: 'dist' },
   // The Claude Agent SDK ships a bundled Claude Code binary per platform as optional dependencies.
   // XPilot drives the user's own `claude`, so those ~50 MB of binaries are left out of the app.
-  files: ['out/**', 'package.json', '!node_modules/@anthropic-ai/claude-agent-sdk-*/**'],
+  // three.js is the custom views' library shelf (xpilot://lib/...). Only the three files the shelf
+  // serves are shipped: the package is ~22 MB and the rest of it is never read.
+  files: [
+    'out/**',
+    'package.json',
+    '!node_modules/@anthropic-ai/claude-agent-sdk-*/**',
+    '!node_modules/three/**',
+    'node_modules/three/package.json',
+    'node_modules/three/LICENSE',
+    'node_modules/three/build/three.module.js',
+    'node_modules/three/build/three.core.js',
+    // electron-builder's node_modules walker prunes an `examples` directory before any include
+    // pattern is applied, so the one addon the shelf serves is copied in as its own file set.
+    { from: 'node_modules/three/examples/jsm/controls', to: 'node_modules/three/examples/jsm/controls', filter: ['OrbitControls.js'] },
+  ],
   artifactName: '${productName}-${version}-${arch}.${ext}',
   mac: {
     category: 'public.app-category.social-networking',
