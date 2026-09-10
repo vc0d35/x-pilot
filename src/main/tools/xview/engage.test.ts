@@ -67,6 +67,43 @@ function ctx(
   };
 }
 
+/** The same context, as a call a custom view made rather than one the model made. */
+const fromView = <C>(c: C, name = 'timeline'): C & { origin: { kind: 'view'; name: string } } => ({
+  ...c,
+  origin: { kind: 'view' as const, name },
+});
+
+describe('a custom view asking for a write', () => {
+  it('raises a card for a like even when likes are autonomous, and says which view asked', async () => {
+    const { c, approvals, events } = ctx('auto', ['111'], []);
+    const p = likePost.execute({ url: 'https://x.com/alice/status/111' }, fromView(c));
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string; origin: unknown } }).request;
+    expect(req.title).toBe('Like this post?');
+    expect(req.origin).toEqual({ kind: 'view', name: 'timeline' });
+    approvals.resolve(req.id, 'cancel');
+    expect(await p).toMatchObject({ success: true, content: { done: false, status: 'cancelled_by_user' } });
+    expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_like_in_page', expect.anything());
+  });
+
+  it('raises a card for a bookmark even when bookmarks are autonomous', async () => {
+    const { c, approvals, events } = ctx('auto', ['111'], []);
+    const p = bookmarkPost.execute({ url: 'https://x.com/alice/status/111' }, fromView(c));
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string; origin: unknown } }).request;
+    expect(req.title).toBe('Bookmark this post?');
+    expect(req.origin).toEqual({ kind: 'view', name: 'timeline' });
+    approvals.resolve(req.id, 'yes');
+    expect(await p).toMatchObject({ success: true });
+  });
+
+  it('leaves an autonomous like the agent asked for as it was: no card', async () => {
+    const { c, events } = ctx('auto', ['111'], []);
+    expect(await likePost.execute({ url: 'https://x.com/alice/status/111' }, c)).toMatchObject({ success: true });
+    expect(events).toEqual([]);
+  });
+});
+
 describe('x_like_post', () => {
   it('likes in the visible window when the post is on screen', async () => {
     const { c } = ctx('auto', ['111'], []);

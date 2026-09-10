@@ -26,6 +26,7 @@ import type { BridgeIpc } from './adapter/bridge';
 export interface SidebarIpcDeps {
   sidebar: WebContents;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  isSidebarCollapsed: () => boolean;
   openLink: (url: string) => void;
   agent: AgentController;
   approvals: ApprovalBroker;
@@ -59,10 +60,20 @@ const ResolveInputSchema = z.object({
   answers: z.record(z.string().max(200), z.string().max(4000)).nullable(),
 });
 
+/**
+ * Whether a card the user has to answer should bring the sidebar back out. Collapsed, the sidebar
+ * renders no approval cards at all and the window is entirely the X page — or a custom view's
+ * canvas, which owns the whole of it. A question nobody can see is a question nobody answers.
+ */
+export function shouldExpandSidebar(event: AgentEvent, collapsed: boolean): boolean {
+  return event.type === 'approval.requested' && collapsed;
+}
+
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   const {
     sidebar,
     setSidebarCollapsed,
+    isSidebarCollapsed,
     openLink,
     tasks,
     agent,
@@ -88,7 +99,10 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     if (e.type === 'thread') lastThread = e;
     push(e);
   });
-  approvals.onEvent(push);
+  approvals.onEvent((e) => {
+    if (shouldExpandSidebar(e, isSidebarCollapsed())) setSidebarCollapsed(false);
+    push(e);
+  });
   userInput.onEvent(push);
   sidebar.on('did-finish-load', () => {
     if (lastThread) push(lastThread);

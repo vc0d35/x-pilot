@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { IPC } from '../../shared/ipc';
-import { fail, ToolResultSchema, ToolSpecSchema, type ToolResult, type ToolSpec } from '../../shared/tools';
+import { fail, ToolResultSchema, ToolSpecSchema, type ToolCallOptions, type ToolResult, type ToolSpec } from '../../shared/tools';
 import type { ToolSource } from '../tools/registry';
 
 export interface BridgeIpc {
@@ -83,7 +83,9 @@ export class AdapterBridge implements ToolSource {
     return this.specs;
   }
 
-  async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  /** The preload's tools take no call context: a page adapter reads and clicks, it never asks the user. */
+  async call(name: string, args: Record<string, unknown>, opts?: ToolCallOptions): Promise<ToolResult> {
+    const signal = opts?.signal;
     if (!this.specs.some((t) => t.name === name)) return fail(`Unknown tool: ${name}`);
     if (signal?.aborted) return fail(CANCELLED);
     if (!this.ready) {

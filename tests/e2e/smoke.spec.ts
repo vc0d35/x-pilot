@@ -50,6 +50,7 @@ type Harness = {
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
   settings: { update(patch: object): unknown };
   views: { dir: string; write(view: string, path: string, content: string): { bytes: number }; delete(view: string): boolean };
+  agent: { onEvent(cb: (e: { type: string; name?: string }) => void): () => void };
   viewCanvas: {
     active(): string | null;
     contents(): { executeJavaScript(c: string): Promise<unknown>; getURL(): string } | null;
@@ -57,7 +58,16 @@ type Harness = {
   };
   approvals: {
     onEvent(
-      cb: (e: { type: string; request?: { id: string; title: string; detail: string; options: { id: string; label: string }[] } }) => void,
+      cb: (e: {
+        type: string;
+        request?: {
+          id: string;
+          title: string;
+          detail: string;
+          origin: { kind: string; name?: string };
+          options: { id: string; label: string }[];
+        };
+      }) => void,
     ): () => void;
     resolve(id: string, decision: string): boolean;
   };
@@ -193,11 +203,25 @@ const VIEW_APP = [
   'window.__seen = [];',
   "window.xpilotView.subscribe('page', (ctx) => window.__seen.push(ctx === null ? 'null' : 'context'));",
   "document.getElementById('out').textContent = 'rendered';",
+  // A blob worker is the one place a view could still hold a global the preload never reached, so
+  // it is asked as well: WebRTC is what CSP does not cover, and it is the whole no-network claim.
+  'window.__inWorker = (expression) =>',
+  '  new Promise((resolve) => {',
+  "    const source = 'self.postMessage(' + expression + ')';",
+  "    const worker = new Worker(URL.createObjectURL(new Blob([source], { type: 'text/javascript' })));",
+  '    worker.onmessage = (e) => resolve(e.data);',
+  "    worker.onerror = () => resolve('worker error');",
+  "    setTimeout(() => resolve('worker timeout'), 5000);",
+  '  });',
   'window.__probe = async () => ({',
   "  read: await window.xpilotView.call('x_get_page_state', { timeoutMs: 0 }),",
   "  refused: await window.xpilotView.call('xpilot_write_page_styles', { css: 'body{}' }),",
   "  network: await fetch('https://example.com/').then(() => 'allowed', (e) => 'blocked: ' + e.name),",
   '  sidebarApi: typeof window.xpilot,',
+  '  webrtc: typeof RTCPeerConnection,',
+  '  webrtcData: typeof RTCDataChannel,',
+  '  media: typeof navigator.mediaDevices,',
+  "  webrtcInWorker: await window.__inWorker('typeof RTCPeerConnection'),",
   '});',
 ].join('\n');
 
@@ -225,12 +249,25 @@ test('a custom view renders over X, reaches the bridge, and goes away again', as
     refused: { success: boolean; error: string };
     network: string;
     sidebarApi: string;
+    webrtc: string;
+    webrtcData: string;
+    media: string;
+    webrtcInWorker: string;
   };
   // An allowlisted read runs against the X page underneath, which is still loaded.
   expect(probe.read).toMatchObject({ success: true, content: { title: 'fixture ready' } });
   expect(probe.refused).toMatchObject({ success: false, error: expect.stringContaining('may not call xpilot_write_page_styles') });
   expect(probe.network).toMatch(/^blocked/);
   expect(probe.sidebarApi).toBe('undefined');
+  // WebRTC reaches an arbitrary host:port and no content policy governs it: the preload takes the
+  // constructors away before any view script runs, and a worker never had them.
+  expect(probe.webrtc).toBe('undefined');
+  expect(probe.webrtcData).toBe('undefined');
+  expect(probe.media).toBe('undefined');
+  expect(probe.webrtcInWorker).toBe('undefined');
+  expect(await inCanvas("(() => { try { new RTCPeerConnection(); return 'constructed'; } catch (e) { return e.name; } })()")).toBe(
+    'TypeError',
+  );
   expect(await inMain((t) => t.registry.call('xpilot_view_inspect', { selector: '#out', limit: 1 }))).toMatchObject({
     success: true,
     content: { matches: 1, elements: [{ tag: 'div' }] },
@@ -241,6 +278,103 @@ test('a custom view renders over X, reaches the bridge, and goes away again', as
   });
   expect(await inMain((t) => t.viewCanvas.active())).toBeNull();
   await inMain((t) => t.views.delete('e2e'));
+});
+
+/**
+ * What a kept view may do to the account, and what the user is shown while it does it. A view is
+ * agent-written code with no turn around it, so its calls are rows in the transcript and its cards
+ * say whose they are — and the autonomous settings, which the user gave the agent, do not apply.
+ */
+const WRITER_APP = [
+  "window.__like = () => window.xpilotView.call('x_like_post', { url: 'https://x.com/alice/status/1' });",
+  "window.__navigate = (url) => window.xpilotView.call('x_navigate', { url });",
+  "window.__read = () => window.xpilotView.call('x_get_page_state', { timeoutMs: 0 });",
+  "document.getElementById('out').textContent = 'rendered';",
+].join('\n');
+
+/** The cards main raised, and the events a view's calls put on the agent's stream. */
+type Card = { id: string; title: string; origin: { kind: string; name?: string } };
+type Traced = { type: string; name?: string; args?: unknown; success?: boolean; output?: string };
+const cards = () => inMain((_t) => (globalThis as { __cards?: Card[] }).__cards ?? []);
+const traced = () => inMain((_t) => (globalThis as { __traced?: Traced[] }).__traced ?? []);
+
+test('a view-originated like asks the user even in autonomous mode, and leaves a transcript row', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      const collected: Card[] = [];
+      (globalThis as { __cards?: Card[] }).__cards = collected;
+      t.approvals.onEvent((e) => {
+        if (e.type === 'approval.requested' && e.request) collected.push(e.request);
+      });
+      const events: Traced[] = [];
+      (globalThis as { __traced?: Traced[] }).__traced = events;
+      t.agent.onEvent((e: Traced) => {
+        if (e.name?.startsWith('view:')) events.push(e);
+      });
+      // Both autonomous: what the user granted the agent, which a view does not inherit.
+      t.settings.update({ views: { mode: 'autonomous' }, likes: { mode: 'auto' } });
+      t.views.write('writer', 'index.html', files.index);
+      t.views.write('writer', 'app.js', files.app);
+      return t.registry.call('xpilot_activate_view', { view: 'writer' });
+    },
+    { index: VIEW_INDEX, app: WRITER_APP },
+  );
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  // Started, not awaited: the call stays on the card until it is answered, and an evaluate that
+  // waits for it would block every later one.
+  expect(await inCanvas("(window.__like(), 'started')")).toBe('started');
+  await expect.poll(cards, { timeout: 15_000 }).toHaveLength(1);
+  const card = (await cards())[0];
+  expect(card.title).toBe('Like this post?');
+  expect(card.origin).toEqual({ kind: 'view', name: 'writer' });
+  expect(await inMain((t) => t.approvals.resolve((globalThis as { __cards?: Card[] }).__cards![0].id, 'cancel'))).toBe(true);
+  // The call is on the agent's own event stream, as the pair the model's calls produce, under a
+  // name that cannot be mistaken for one of the agent's.
+  await expect.poll(traced, { timeout: 15_000 }).toHaveLength(2);
+  expect(await traced()).toMatchObject([
+    { type: 'tool.started', name: 'view:x_like_post', args: { url: 'https://x.com/alice/status/1' } },
+    { type: 'tool.completed', name: 'view:x_like_post', success: true, output: expect.stringContaining('cancelled_by_user') },
+  ]);
+  // And it is a row in the sidebar, where the user can scroll back through it.
+  await expect
+    .poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('document.body.innerText')), { timeout: 15_000 })
+    .toContain('view:x_like_post');
+  await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
+  await inMain((t) => t.views.delete('writer'));
+});
+
+test('a view that is only previewed may read and draw, and nothing else', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      // The collector installed by the test above, emptied in place: replacing the array would
+      // leave the listener pushing into one nobody reads.
+      (globalThis as { __cards?: Card[] }).__cards!.length = 0;
+      t.settings.update({ views: { mode: 'confirm' } });
+      t.views.write('preview-check', 'index.html', files.index);
+      t.views.write('preview-check', 'app.js', files.app);
+      // Not awaited: in confirm mode the tool stays on the card until the user answers it.
+      (globalThis as { __activating?: Promise<unknown> }).__activating = t.registry.call('xpilot_activate_view', {
+        view: 'preview-check',
+      });
+    },
+    { index: VIEW_INDEX, app: WRITER_APP },
+  );
+  await expect.poll(() => inMain((t) => t.viewCanvas.active()), { timeout: 15_000 }).toBe('preview-check');
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  expect(await inCanvas('window.__read()')).toMatchObject({ success: true });
+  expect(await inCanvas('window.__like()')).toEqual({ success: false, error: 'This view is a preview; keep it first' });
+  expect(await inCanvas("window.__navigate('https://x.com/home')")).toEqual({
+    success: false,
+    error: 'This view is a preview; keep it first',
+  });
+  // Nothing reached a write tool, so no card was raised by the preview itself.
+  expect((await cards()).filter((c: Card) => c.title !== 'Keep this view?')).toEqual([]);
+  await inMain((t) => t.approvals.resolve((globalThis as { __cards?: Card[] }).__cards![0].id, 'revert'));
+  await expect.poll(() => inMain((t) => t.viewCanvas.active()), { timeout: 15_000 }).toBeNull();
+  await inMain((t) => t.settings.update({ views: { mode: 'autonomous' } }));
+  await inMain((t) => t.views.delete('preview-check'));
 });
 
 test('the library shelf serves three.js to a view, and nothing else', async () => {

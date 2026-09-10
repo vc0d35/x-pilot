@@ -1,5 +1,5 @@
 import type { Post } from '../../../shared/page';
-import type { ToolResult } from '../../../shared/tools';
+import type { CallOrigin, ToolResult } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
 import type { DraftStore } from './drafts';
 
@@ -17,6 +17,12 @@ export interface XViewLike {
 export type ViewTarget = 'background' | 'visible';
 
 export interface XViewToolCtx {
+  /**
+   * Who asked for this call. Absent means the agent's own turn; a custom view's call carries its
+   * name, which is what makes a confirmation card say whose request it is and what keeps a view's
+   * writes on the card whatever the user set the mode to.
+   */
+  origin?: CallOrigin;
   /** The window the user is looking at. Only move it when the user asked to. */
   xview: XViewLike;
   /** A hidden window on the same x.com session, for reads that must not disturb the user. Created lazily. */

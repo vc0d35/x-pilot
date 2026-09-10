@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { AgentEvent, ApprovalRequest } from '../shared/agent';
+import type { AgentEvent, ApprovalOrigin, ApprovalRequest } from '../shared/agent';
 
 /** What the user chose, and what they typed if the option they picked asked for a note. */
 export interface ApprovalDecision {
@@ -18,9 +18,10 @@ export class ApprovalBroker {
     return () => this.listeners.delete(cb);
   }
 
-  request(req: Omit<ApprovalRequest, 'id'>, timeoutMs: number): Promise<ApprovalDecision> {
+  /** `origin` defaults to the agent: only a caller that knows it is acting for something else sets it. */
+  request(req: Omit<ApprovalRequest, 'id' | 'origin'> & { origin?: ApprovalOrigin }, timeoutMs: number): Promise<ApprovalDecision> {
     const id = randomUUID();
-    const request: ApprovalRequest = { id, ...req };
+    const request: ApprovalRequest = { ...req, id, origin: req.origin ?? { kind: 'agent' } };
     return new Promise<ApprovalDecision>((resolve) => {
       const timer = setTimeout(() => this.finish(id, 'timeout'), timeoutMs);
       this.waiting.set(id, { resolve, timer });

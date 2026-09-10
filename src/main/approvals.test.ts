@@ -71,3 +71,28 @@ describe('ApprovalBroker', () => {
     expect(() => broker.cancelAll()).not.toThrow();
   });
 });
+
+describe('who a card says asked', () => {
+  it('is the agent unless the caller says otherwise', async () => {
+    const broker = new ApprovalBroker();
+    const events: { request?: { id: string; origin: unknown } }[] = [];
+    broker.onEvent((e) => events.push(e as { request?: { id: string; origin: unknown } }));
+    const p = broker.request({ kind: 'post', title: 'Post?', detail: 'x', options: [{ id: 'post', label: 'Post' }] }, 1000);
+    expect(events[0].request!.origin).toEqual({ kind: 'agent' });
+    broker.resolve(events[0].request!.id, 'post');
+    await p;
+  });
+
+  it('carries the view a request came from', async () => {
+    const broker = new ApprovalBroker();
+    const events: { request?: { id: string; origin: unknown } }[] = [];
+    broker.onEvent((e) => events.push(e as { request?: { id: string; origin: unknown } }));
+    const p = broker.request(
+      { origin: { kind: 'view', name: 'timeline' }, kind: 'post', title: 'Post?', detail: 'x', options: [{ id: 'post', label: 'Post' }] },
+      1000,
+    );
+    expect(events[0].request!.origin).toEqual({ kind: 'view', name: 'timeline' });
+    broker.resolve(events[0].request!.id, 'post');
+    await p;
+  });
+});

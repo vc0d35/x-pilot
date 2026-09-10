@@ -86,6 +86,7 @@ export interface ViewCanvasDeps {
 export class ViewCanvas {
   private view: WebContentsView | null = null;
   private activeView: string | null = null;
+  private previewingView = false;
   private reloadTimer: NodeJS.Timeout | null = null;
   readonly logs = new ViewLogs();
 
@@ -93,6 +94,18 @@ export class ViewCanvas {
 
   active(): string | null {
     return this.activeView;
+  }
+
+  /**
+   * True while the view on screen is only being shown for the user to look at, with the "Keep this
+   * view?" card unanswered. The bridge reads it: a preview may render, and nothing more.
+   */
+  previewing(): boolean {
+    return this.previewingView;
+  }
+
+  setPreviewing(previewing: boolean): void {
+    this.previewingView = previewing;
   }
 
   contents(): WebContents | null {
@@ -109,6 +122,7 @@ export class ViewCanvas {
     const view = this.ensure();
     const was = this.activeView;
     this.activeView = name;
+    this.previewingView = false;
     if (!was) this.deps.mount(view);
     view.setBounds(this.deps.bounds());
     try {
@@ -131,6 +145,7 @@ export class ViewCanvas {
     }
     const wasActive = this.activeView !== null;
     this.activeView = null;
+    this.previewingView = false;
     if (this.view) {
       this.deps.unmount(this.view);
       // Nothing of the view keeps running behind the X page: the canvas is left on a blank page.
@@ -161,6 +176,7 @@ export class ViewCanvas {
     this.view?.webContents.close();
     this.view = null;
     this.activeView = null;
+    this.previewingView = false;
   }
 
   private ensure(): WebContentsView {

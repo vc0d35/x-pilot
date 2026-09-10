@@ -316,6 +316,17 @@ export class AgentController {
     }
   }
 
+  /**
+   * An event something other than the provider produced — a custom view's tool call — put on the
+   * same stream and into the same conversation. The sidebar renders it like any other row, and it
+   * survives a restart, which is the whole point: a surface that acts on the user's account without
+   * a transcript is a surface they cannot audit.
+   */
+  record(event: AgentEvent): void {
+    this.emit(event);
+    if (this.threadId && RECORDED.has(event.type)) this.deps.store?.appendEvent(this.threadId, transcriptEvent(event));
+  }
+
   async stop(): Promise<void> {
     this.unsubscribe?.();
     this.unsubscribe = null;

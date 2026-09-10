@@ -1,3 +1,5 @@
+import type { CallOrigin } from './tools';
+
 /** The agent backends XPilot can drive; `null` in settings means the user has not chosen yet. */
 export const PROVIDER_KINDS = ['codex', 'claude'] as const;
 export type ProviderKind = (typeof PROVIDER_KINDS)[number];
@@ -11,8 +13,16 @@ export interface ApprovalOption {
   /** Reveals a note field on the card; the decision comes back with what the user typed. */
   note?: boolean;
 }
+/**
+ * Whose request a card is: the same thing a tool call carries as its origin. A custom view is
+ * agent-written code the user kept, running with no turn around it, so a card it raised is
+ * labelled as its own — the user cannot judge a request they cannot attribute.
+ */
+export type ApprovalOrigin = CallOrigin;
+
 export interface ApprovalRequest {
   id: string;
+  origin: ApprovalOrigin;
   kind: 'command' | 'fileChange' | 'post';
   title: string;
   /** One line above the detail, for what the detail alone does not show - a size, a count, a scope. */

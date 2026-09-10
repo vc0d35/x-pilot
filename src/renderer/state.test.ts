@@ -69,7 +69,14 @@ describe('sidebar reducer', () => {
       { type: 'tool.completed', itemId: 'c1', name: 'x_get_page_state', success: true, output: '{"url":"u"}' },
       {
         type: 'approval.requested',
-        request: { id: 'a1', kind: 'post', title: 'Post?', detail: 'hello', options: [{ id: 'post', label: 'Post' }] },
+        request: {
+          id: 'a1',
+          origin: { kind: 'agent' },
+          kind: 'post',
+          title: 'Post?',
+          detail: 'hello',
+          options: [{ id: 'post', label: 'Post' }],
+        },
       },
       { type: 'approval.resolved', id: 'a1', decision: 'post' },
     ]);
@@ -86,6 +93,7 @@ describe('sidebar reducer', () => {
         type: 'approval.requested',
         request: {
           id: 'a2',
+          origin: { kind: 'agent' },
           kind: 'post',
           title: 'Keep these page styles?',
           detail: 'a { color: red }',

@@ -278,6 +278,44 @@ describe('transcript recording', () => {
   });
 });
 
+describe('record()', () => {
+  it("puts a view's tool call on the stream and keeps it in the conversation", async () => {
+    const registry = new ToolRegistry();
+    const appStore = new AppStore(':memory:');
+    const provider = fakeProvider();
+    const ctl = new AgentController({
+      registry,
+      settings: settings(),
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => provider,
+    });
+    const events: AgentEvent[] = [];
+    ctl.onEvent((e) => events.push(e));
+    await ctl.start({ resume: false });
+    ctl.record({ type: 'tool.started', itemId: 'v1', name: 'view:x_like_post', args: { url: 'u' } });
+    ctl.record({ type: 'tool.completed', itemId: 'v1', name: 'view:x_like_post', success: true, output: '{}' });
+    expect(events.filter((e) => e.type.startsWith('tool.'))).toHaveLength(2);
+    expect(appStore.listEvents('T').map((e) => e.type)).toEqual(['tool.started', 'tool.completed']);
+  });
+
+  it("truncates what it stores the same way the provider's own output is truncated", async () => {
+    const appStore = new AppStore(':memory:');
+    const provider = fakeProvider();
+    const ctl = new AgentController({
+      registry: new ToolRegistry(),
+      settings: settings(),
+      store: appStore,
+      workspaceDir: '/tmp',
+      createProvider: () => provider,
+    });
+    await ctl.start({ resume: false });
+    ctl.record({ type: 'tool.completed', itemId: 'v1', name: 'view:x_search', success: true, output: 'z'.repeat(20_000) });
+    const stored = appStore.listEvents('T')[0] as { output: string };
+    expect(stored.output.length).toBeLessThan(MAX_TRANSCRIPT_OUTPUT + 100);
+  });
+});
+
 describe('reopening a conversation', () => {
   const registryWith = (name: string) => {
     const r = new ToolRegistry();

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, fail, ok } from '../../../shared/tools';
+import { callingView, defineTool, fail, ok } from '../../../shared/tools';
 import type { ViewTarget, XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { cancelled, navigateStep, withView } from './target';
@@ -13,6 +13,32 @@ const POST_CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
  * setting and the re-read before Post are the same wherever the draft is.
  */
 const composeIn = (ctx: XViewToolCtx): ViewTarget => (ctx.xview.isAvailable?.() === false ? 'background' : 'visible');
+
+/**
+ * Opening the composer is not a post, so for the agent it raises nothing: `x_submit_post` is where
+ * the user decides. A custom view is different — it can open a composer full of its own text and
+ * then simply stop, leaving the user one click from posting it — so a view asks before it composes
+ * as well as before it sends.
+ */
+async function viewMayCompose(ctx: XViewToolCtx, text: string): Promise<string | null> {
+  if (!callingView(ctx)) return null;
+  const { decision } = await ctx.approvals.request(
+    {
+      origin: ctx.origin,
+      kind: 'post',
+      title: 'Open the composer with this text?',
+      summary: 'Nothing is posted yet; you will be asked again before it is sent.',
+      detail: text,
+      options: [
+        { id: 'open', label: 'Open the composer' },
+        { id: 'cancel', label: 'Cancel' },
+      ],
+    },
+    POST_CONFIRM_TIMEOUT_MS,
+  );
+  if (decision === 'open') return null;
+  return decision === 'timeout' ? 'confirmation_timed_out' : 'cancelled_by_user';
+}
 
 export function buildIntentUrl(text: string, replyToUrl?: string, quoteUrl?: string): string {
   let body = text;
@@ -34,6 +60,16 @@ export const composePost = defineTool({
     const { replyToUrl, quoteUrl } = args;
     if (replyToUrl && !normalizePostUrl(replyToUrl)?.includes('/status/')) return fail(`replyToUrl is not a post URL: ${replyToUrl}`);
     if (quoteUrl && !normalizePostUrl(quoteUrl)) return fail(`quoteUrl is not a post URL: ${quoteUrl}`);
+    const refused = await viewMayCompose(ctx, text);
+    if (refused)
+      return ok({
+        status: refused,
+        composed: false,
+        reason:
+          refused === 'confirmation_timed_out'
+            ? 'The user did not answer within 5 minutes; the composer was not opened.'
+            : 'The user chose not to open the composer; their decision is final.',
+      });
     const where = composeIn(ctx);
     return withView(ctx, where, async (view) => {
       const stopped = await navigateStep(view, buildIntentUrl(text, replyToUrl, quoteUrl), signal);
@@ -80,10 +116,13 @@ export const submitPost = defineTool({
       if (!composer.success) return composer;
       const state = composer.content as { present: boolean; text: string; canSubmit: boolean };
       if (!state.canSubmit) return fail('Post button is disabled (empty draft or over the length limit)');
-      if (ctx.postingMode() === 'confirm') {
+      // Autonomous posting is consent the user gave the agent, whose calls are all in the
+      // transcript; a view's call is not, so from a view the card is always raised.
+      if (ctx.postingMode() === 'confirm' || callingView(ctx)) {
         const approvedText = state.text;
         const { decision } = await ctx.approvals.request(
           {
+            origin: ctx.origin,
             kind: 'post',
             title: `Post this ${draft.target}?`,
             detail: approvedText,

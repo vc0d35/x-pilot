@@ -1,7 +1,17 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { LIB_FILES, VIEW_CSP, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports, viewOrigin, viewUrl } from './serve';
+import { mkdtempSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import {
+  LIB_FILES,
+  VIEW_CSP,
+  isServableFile,
+  resolveLibRequest,
+  resolveViewRequest,
+  rewriteBareThreeImports,
+  viewOrigin,
+  viewUrl,
+} from './serve';
 
 const ROOT = '/profile/views';
 
@@ -81,5 +91,27 @@ describe('VIEW_CSP', () => {
     expect(VIEW_CSP).toBe(
       "default-src 'none'; script-src 'self' xpilot://lib; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.twimg.com; media-src blob: https://*.twimg.com https://video.twimg.com; font-src 'self' xpilot://lib data:; connect-src 'none'; worker-src 'self' blob:; frame-src 'none'; form-action 'none'; base-uri 'none'",
     );
+  });
+});
+
+describe('isServableFile', () => {
+  it('serves a real file and refuses a symlink, a directory and what is not there', () => {
+    const root = mkdtempSync(join(tmpdir(), 'xpilot-serve-'));
+    const view = join(root, 'demo');
+    mkdirSync(view);
+    writeFileSync(join(root, 'outside.js'), 'secret');
+    writeFileSync(join(view, 'app.js'), 'ok');
+    symlinkSync(join(root, 'outside.js'), join(view, 'leak.js'));
+    expect(isServableFile(join(view, 'app.js'))).toBe(true);
+    // The store refuses to read or list one; a file served here becomes script inside the canvas.
+    expect(isServableFile(join(view, 'leak.js'))).toBe(false);
+    expect(isServableFile(view)).toBe(false);
+    expect(isServableFile(join(view, 'nope.js'))).toBe(false);
+  });
+});
+
+describe('the content type of a view file', () => {
+  it('serves markdown as markdown rather than as bytes to download', () => {
+    expect(resolveViewRequest(ROOT, 'xpilot://views/feed/notes.md')?.contentType).toBe('text/markdown; charset=utf-8');
   });
 });

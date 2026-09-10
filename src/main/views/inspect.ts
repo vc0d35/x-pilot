@@ -1,6 +1,7 @@
 /** The attributes a hand-written UI identifies its own elements by. */
 const ATTRIBUTES = ['id', 'class', 'data-testid', 'role', 'aria-label'];
-const CLASS_MAX = 120;
+/** Every attribute value is cut to this: a view can put a megabyte in an `aria-label`. */
+const ATTR_MAX = 120;
 const HTML_MAX = 2000;
 const TOTAL_MAX = 20 * 1024;
 
@@ -38,12 +39,16 @@ export function inspectScript(selector = 'body', limit = 5): string {
   let budget = ${TOTAL_MAX};
   for (const el of found.slice(0, limit)) {
     const attrs = {};
+    let attrBytes = 0;
     for (const name of attributes) {
       const value = el.getAttribute(name);
-      if (value !== null) attrs[name] = name === 'class' ? cut(value, ${CLASS_MAX}) : value;
+      if (value === null) continue;
+      attrs[name] = cut(value, ${ATTR_MAX});
+      attrBytes += attrs[name].length + name.length;
     }
     const outerHTML = cut(el.outerHTML, ${HTML_MAX});
-    budget -= outerHTML.length;
+    // Everything that leaves here is charged to one budget, so the result cannot exceed it.
+    budget -= outerHTML.length + attrBytes;
     if (budget < 0) break;
     elements.push({ tag: el.tagName.toLowerCase(), attributes: attrs, outerHTML });
   }

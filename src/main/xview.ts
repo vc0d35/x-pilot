@@ -27,6 +27,6 @@ export class XViewController {
   }
 
   callPreload(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
-    return this.bridge.call(name, args, signal);
+    return this.bridge.call(name, args, { signal });
   }
 }

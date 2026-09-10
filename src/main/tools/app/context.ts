@@ -1,3 +1,4 @@
+import type { CallOrigin } from '../../../shared/tools';
 import type { AppStore } from '../../history/store';
 import type { ApprovalBroker } from '../../approvals';
 import type { PageStyles } from '../../page-config/styles';
@@ -16,6 +17,11 @@ export interface ViewsCtx {
   /** Puts a view on screen; resolves with why it could not be shown, or null when it is up. */
   show(view: string): Promise<string | null>;
   hide(): void;
+  /**
+   * Marks the view on screen as one the user has not decided on yet. A preview renders and reads;
+   * the bridge refuses the drivers and the writes until it is kept.
+   */
+  preview(previewing: boolean): void;
   /** Records the view to bring back at the next start, or clears it. */
   persist(view: string | null): void;
   /** Whether activating a view is previewed and confirmed, or just done. */
@@ -32,6 +38,8 @@ export interface SelectorTest {
 }
 
 export interface AppToolCtx {
+  /** Who asked; absent for the agent's own calls. See `XViewToolCtx.origin`. */
+  origin?: CallOrigin;
   store: AppStore;
   tasks: TaskManager;
   styles: PageStyles;

@@ -16,9 +16,10 @@ import { APP_SCHEME, SIDEBAR_URL, hardenWebContents, resolveSidebarAsset, revive
 import { ViewsStore } from './views/store';
 import { ViewCanvas } from './views/canvas';
 import { registerViewBridgeIpc, type ViewBridge } from './views/bridge';
-import { LIB_FILES, VIEW_CSP, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports } from './views/serve';
+import { LIB_FILES, VIEW_CSP, isServableFile, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports } from './views/serve';
 import { inspectScript, type ViewInspection } from './views/inspect';
 import { isViewName, type ViewsStatus } from '../shared/views';
+import { isComposeUrl } from './tools/xview/navigate';
 import type { AgentEvent } from '../shared/agent';
 import type { PageContext } from '../shared/page';
 import { createLinkRouter, rateLimit, type LinkRouter } from './links';
@@ -52,6 +53,9 @@ import { exportPdf } from './library/pdf';
 /** The profile folder holding the custom views, and the session the one that is showing runs in. */
 export const VIEWS_DIR_NAME = 'views';
 export const VIEWS_PARTITION = 'views';
+
+/** Where the X window is put back when a view is taken off it and it is not on a page of its own. */
+const X_HOME_URL = 'https://x.com/home';
 
 /** Tools that create or change scheduled tasks: a scheduled run may not reschedule itself or its peers. */
 const TASK_MANAGEMENT_TOOLS = ['xpilot_schedule_task', 'xpilot_update_task', 'xpilot_delete_task'];
@@ -225,16 +229,20 @@ export function createApp(opts: AppOptions): XPilotApp {
   // entry point's own folder when the app is started by path.
   const nodeModulesDir = join(opts.outDir, '..', 'node_modules');
   const notFound = () => new Response('Not found', { status: 404 });
+  // Every response on the views session carries the policy, including the ones that carry no
+  // content: "every response on this scheme" is a property worth being able to state plainly.
+  const notFoundInView = () => new Response('Not found', { status: 404, headers: { 'content-security-policy': VIEW_CSP } });
   /** A custom view's own files, under its CSP; null when the URL is not one of a view's. */
   const serveView = async (url: string): Promise<Response | null> => {
     const view = resolveViewRequest(viewsDir, url);
     if (!view) return null;
+    if (!isServableFile(view.file)) return notFoundInView();
     try {
       return new Response(await readFile(view.file), {
         headers: { 'content-type': view.contentType, 'content-security-policy': VIEW_CSP },
       });
     } catch {
-      return notFound();
+      return notFoundInView();
     }
   };
   /** The library shelf a view may import from; null when the URL is not one of the shelf's. */
@@ -246,17 +254,16 @@ export function createApp(opts: AppOptions): XPilotApp {
       return new Response(lib.name === 'OrbitControls.js' ? rewriteBareThreeImports(source) : source, {
         // The shelf is read cross-origin by every view; it holds third-party libraries and nothing
         // of the user's, and a module import is refused without this.
-        headers: { 'content-type': lib.contentType, 'access-control-allow-origin': '*' },
+        headers: { 'content-type': lib.contentType, 'access-control-allow-origin': '*', 'content-security-policy': VIEW_CSP },
       });
     } catch (err) {
       console.warn(`[xpilot] the library shelf is missing ${LIB_FILES[lib.name]}`, err);
-      return notFound();
+      return notFoundInView();
     }
   };
-  // The default session, which the sidebar and the X views run in: all three hosts of the scheme.
+  // The default session is the sidebar's and the X views': it serves the sidebar bundle and nothing
+  // else. Agent-written HTML and JavaScript are reachable only from the session the canvas runs in.
   protocol.handle(APP_SCHEME, async (request) => {
-    const served = (await serveView(request.url)) ?? (await serveLib(request.url));
-    if (served) return served;
     const asset = resolveSidebarAsset(rendererDir, request.url);
     if (!asset) return notFound();
     try {
@@ -285,8 +292,11 @@ export function createApp(opts: AppOptions): XPilotApp {
   // session of its own, and gets the two hosts a view may reach and not the sidebar's bundle.
   viewsSession.protocol.handle(
     APP_SCHEME,
-    async (request) => (await serveView(request.url)) ?? (await serveLib(request.url)) ?? notFound(),
+    async (request) => (await serveView(request.url)) ?? (await serveLib(request.url)) ?? notFoundInView(),
   );
+  // A view has no legitimate download: everything it can show, it got from a tool. Left unhandled,
+  // Electron opens a Save dialog with a filename and bytes the view chose.
+  viewsSession.on('will-download', (event) => event.preventDefault());
   installPermissionHandlers({
     x: session.fromPartition('persist:x'),
     default: session.defaultSession,
@@ -393,8 +403,21 @@ export function createApp(opts: AppOptions): XPilotApp {
       sendToSidebar({ type: 'view.active', view });
     },
   });
-  const deactivateView = (): void => {
+  /**
+   * The X page the user is put back on. A view can leave the window on an intent URL — the composer
+   * with the view's own text in it — and then invite the user back to X, where one click posts it.
+   * Whatever the view did underneath, "Back to X" means home rather than somebody's draft.
+   */
+  const leaveComposer = (): void => {
+    if (!isComposeUrl(xView.webContents.getURL())) return;
+    void xView.webContents.loadURL(X_HOME_URL).catch((err) => console.warn('[xpilot] could not leave the composer', err));
+  };
+  const hideView = (): void => {
     canvas.hide();
+    leaveComposer();
+  };
+  const deactivateView = (): void => {
+    hideView();
     if (settings.get().views.active !== null) settings.update({ views: { active: null } });
   };
   // A view the user edited in their own editor, or the agent rewrote, reloads on screen.
@@ -424,7 +447,12 @@ export function createApp(opts: AppOptions): XPilotApp {
     ipc: ipcMain,
     canvasId: () => canvas.contents()?.id ?? null,
     send: (message) => canvas.contents()?.send(IPC.viewFeed, message),
-    callTool: (name, args) => registry.call(name, args),
+    callTool: (name, args, opts) => registry.call(name, args, opts),
+    activeView: () => canvas.active(),
+    previewing: () => canvas.previewing(),
+    // The interactive agent's stream: a view's calls render as tool rows and are kept in the
+    // conversation, exactly as the model's own are.
+    trace: (event) => agent.record(event),
     pageContext: () => lastPageContext,
     deactivate: deactivateView,
   });
@@ -536,7 +564,8 @@ export function createApp(opts: AppOptions): XPilotApp {
       store: views,
       active: () => canvas.active(),
       show: (view: string) => canvas.show(view),
-      hide: () => canvas.hide(),
+      hide: () => hideView(),
+      preview: (previewing: boolean) => canvas.setPreviewing(previewing),
       persist: (view: string | null) => {
         settings.update({ views: { active: view } });
       },
@@ -632,6 +661,7 @@ export function createApp(opts: AppOptions): XPilotApp {
   registerSidebarIpc({
     sidebar: sidebar.webContents,
     setSidebarCollapsed,
+    isSidebarCollapsed,
     openLink: links.openLink,
     tasks,
     stopTaskRun: () => taskRunner.stop(),

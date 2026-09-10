@@ -40,7 +40,7 @@ export type ViewFeed = (typeof VIEW_FEEDS)[number];
  * sidebar. Everything else — internal tools, and every xpilot_* config, task and view tool — is
  * refused, so a view can neither rewrite the app's configuration nor build another view.
  */
-export const VIEW_TOOL_ALLOWLIST: readonly string[] = [
+export const VIEW_READ_TOOLS: readonly string[] = [
   'x_get_page_state',
   'x_read_visible_posts',
   'x_read_current_post',
@@ -51,14 +51,21 @@ export const VIEW_TOOL_ALLOWLIST: readonly string[] = [
   'x_read_bookmarks',
   'xpilot_search_history',
   'xpilot_list_library',
-  'x_scroll',
-  'x_show_new_posts',
-  'x_navigate',
-  'x_like_post',
-  'x_bookmark_post',
-  'x_compose_post',
-  'x_submit_post',
 ];
+/** Moving the X page underneath, which is how a view loads more of it. */
+export const VIEW_DRIVER_TOOLS: readonly string[] = ['x_scroll', 'x_show_new_posts', 'x_navigate'];
+/** The four account writes. From a view every one of them asks the user, whatever the mode says. */
+export const VIEW_ACCOUNT_WRITE_TOOLS: readonly string[] = ['x_like_post', 'x_bookmark_post', 'x_compose_post', 'x_submit_post'];
+
+export const VIEW_TOOL_ALLOWLIST: readonly string[] = [...VIEW_READ_TOOLS, ...VIEW_DRIVER_TOOLS, ...VIEW_ACCOUNT_WRITE_TOOLS];
+
+/**
+ * A view the user has not kept yet is on screen so they can look at it, and nothing more: it reads
+ * and it draws. Driving the X page or writing to the account is what "Keep" buys, so until the card
+ * is answered a preview gets the reads and the feeds only.
+ */
+export const VIEW_PREVIEW_TOOL_ALLOWLIST: readonly string[] = VIEW_READ_TOOLS;
+export const VIEW_PREVIEW_REFUSAL = 'This view is a preview; keep it first';
 
 export interface ViewSummary {
   name: string;

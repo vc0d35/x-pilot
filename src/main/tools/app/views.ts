@@ -111,6 +111,9 @@ export const activateView = defineTool({
       ctx.views.persist(args.view);
       return ok({ status: 'kept', view: args.view });
     }
+    // Until the card is answered the view is on screen to be looked at: the bridge gives it the
+    // reads and the feeds, and neither the drivers nor the writes.
+    ctx.views.preview(true);
     try {
       const { decision, note } = await ctx.approvals.request(
         {
@@ -127,6 +130,7 @@ export const activateView = defineTool({
         CONFIRM_TIMEOUT_MS,
       );
       if (decision === 'keep') {
+        ctx.views.preview(false);
         ctx.views.persist(args.view);
         return ok({ status: 'kept', view: args.view });
       }

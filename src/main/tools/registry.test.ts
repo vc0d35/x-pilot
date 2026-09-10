@@ -107,8 +107,8 @@ describe('ToolRegistry', () => {
     const src: ToolSource = {
       id: 's',
       list: () => [{ name: 'x_direct', description: 'd', inputSchema: {} }],
-      call: async (_n, _a, signal) => {
-        seen.push(signal);
+      call: async (_n, _a, opts) => {
+        seen.push(opts?.signal);
         return ok(null);
       },
     };

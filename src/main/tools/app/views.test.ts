@@ -71,6 +71,11 @@ function ctx(
   });
   const hide = vi.fn(() => {
     active = null;
+    previewing = false;
+  });
+  let previewing = false;
+  const preview = vi.fn((on: boolean) => {
+    previewing = on;
   });
   return {
     store,
@@ -78,6 +83,8 @@ function ctx(
     approvals,
     show,
     hide,
+    preview,
+    previewing: () => previewing,
     persisted,
     value: {
       approvals,
@@ -86,6 +93,7 @@ function ctx(
         active: () => active,
         show,
         hide,
+        preview,
         persist: (view: string | null) => persisted.push(view),
         mode: () => opts.mode ?? 'autonomous',
         logs: () => [{ at: '2026-01-01T00:00:00.000Z', source: 'console' as const, level: 'error', text: 'boom' }],
@@ -126,6 +134,19 @@ describe('xpilot_activate_view', () => {
     expect(c.show).toHaveBeenCalledWith('feed');
     expect(c.asked).toEqual([]);
     expect(c.persisted).toEqual(['feed']);
+  });
+
+  it('marks a view being previewed and unmarks it once it is kept', async () => {
+    const c = ctx({ files: { feed: { 'index.html': 'x' } }, mode: 'confirm' });
+    expect(await activateView.execute({ view: 'feed' }, c.value)).toMatchObject({ content: { status: 'kept' } });
+    expect(c.preview.mock.calls).toEqual([[true], [false]]);
+    expect(c.previewing()).toBe(false);
+  });
+
+  it('leaves nothing marked as a preview when the user reverts', async () => {
+    const c = ctx({ files: { feed: { 'index.html': 'x' } }, mode: 'confirm', decision: 'revert' });
+    await activateView.execute({ view: 'feed' }, c.value);
+    expect(c.previewing()).toBe(false);
   });
 
   it('previews it and keeps it when the user says so', async () => {

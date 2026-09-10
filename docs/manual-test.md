@@ -73,6 +73,13 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Quit with the view up and start again → it comes back after x.com has loaded. Delete the view folder by hand and start again → the app starts on x.com and forgets it.
 - [ ] "Delete the cards view" → a "Delete this view?" card listing the files; Keep it leaves the folder alone.
 - [ ] Settings → Custom views → Autonomous warns first; after switching, "show me the cards view" activates with no card.
+- [ ] While the "Keep this view?" card is still up, the view's own buttons that call a driver or a write ("load more", "like this") report `This view is a preview; keep it first`; its list of posts still fills in, because reads and the feeds still work. Keep it, and the same buttons work.
+- [ ] With Settings → Agent likes on Autonomous, click a view's own "like" button → a card appears anyway, headed "Requested by the custom view "<name>"" above "Like this post?", framed differently from the agent's cards. Cancel is reported to the view as the user's decision. The same holds for bookmarking, and for posting with Autonomous posting on: a view asks before it opens the composer and again before it posts.
+- [ ] Collapse the sidebar (⌘\) so the view owns the whole window, then have the view ask for a like → the sidebar comes back out with the card on it, rather than the request waiting somewhere nobody can see.
+- [ ] After any of that, the transcript shows `view:x_like_post` (and `view:x_get_page_state`, `view:x_scroll`, …) as tool rows — open one and it shows the arguments the view sent and the result. They are still there after a restart, in History.
+- [ ] Ask for a view whose code calls `openInX('https://t.co/…')` → refused ("may only open https pages on x.com or twitter.com"); `openInX('https://x.com/explore')` works.
+- [ ] Have a view compose a post and then click "Back to X" without posting → x.com is on the home timeline, not on a composer with the view's text in it.
+- [ ] A view that offers a "download" (an `<a download>` of a blob it built) → nothing is saved and no Save dialog appears.
 - [ ] A view drawn with three.js (the second starter from xpilot_view_api) renders: `xpilot://lib/three.module.js` and OrbitControls load, and dragging orbits the scene.
 
 ## Selectors

@@ -147,7 +147,7 @@ describe('AdapterBridge', () => {
     const { bridge, sent, fromPreload } = setup(10_000);
     fromPreload(IPC.adapterRegister, { tools: [spec] });
     const ac = new AbortController();
-    const p = bridge.call('x_get_page_state', {}, ac.signal);
+    const p = bridge.call('x_get_page_state', {}, { signal: ac.signal });
     await flush();
     expect(sent).toHaveLength(1);
     ac.abort();
@@ -157,7 +157,10 @@ describe('AdapterBridge', () => {
   it('does not send a call whose signal is already aborted, and stops waiting for the page', async () => {
     const { bridge, sent, fromPreload } = setup(10_000);
     fromPreload(IPC.adapterRegister, { tools: [spec] });
-    await expect(bridge.call('x_get_page_state', {}, AbortSignal.abort())).resolves.toEqual({ success: false, error: 'Cancelled' });
+    await expect(bridge.call('x_get_page_state', {}, { signal: AbortSignal.abort() })).resolves.toEqual({
+      success: false,
+      error: 'Cancelled',
+    });
     expect(sent).toEqual([]);
     bridge.markNavigating();
     const ac = new AbortController();

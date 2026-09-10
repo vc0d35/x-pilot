@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { defineTool, fail, ok, clampedInt, type ToolResult } from '../../../shared/tools';
+import { callingView, defineTool, fail, ok, clampedInt, type ToolResult } from '../../../shared/tools';
 import type { XViewLike, XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
@@ -29,6 +29,15 @@ interface ReadRow {
 /** The rows arrive as parsed JSON from the preload: anything that is not a string is not a field. */
 const str = (value: unknown): string => (typeof value === 'string' ? value : '');
 const tidy = (value: unknown, max: number): string => str(value).replace(/\s+/g, ' ').trim().slice(0, max);
+
+/**
+ * A card is raised whenever the setting says so — and always when a custom view asked, whatever the
+ * setting says. The user set likes or bookmarks to autonomous for the agent, whose every call is a
+ * row in a transcript they can scroll back through; a view's call is not that, so it asks.
+ */
+function asks(ctx: XViewToolCtx, mode: 'auto' | 'confirm'): boolean {
+  return mode === 'confirm' || callingView(ctx) !== null;
+}
 
 /** The post on screen, or null. Read at most once per call: the card and the index both want it. */
 function onScreenPost(ctx: XViewToolCtx, target: string): () => Promise<VisiblePostRow | null> {
@@ -99,10 +108,11 @@ export const likePost = defineTool({
     const stopped = cancelled(signal);
     if (stopped) return stopped;
     const seen = onScreenPost(ctx, target);
-    if (ctx.likesMode() === 'confirm') {
+    if (asks(ctx, ctx.likesMode())) {
       const detail = cardDetail(await seen(), target);
       const { decision } = await ctx.approvals.request(
         {
+          origin: ctx.origin,
           kind: 'post',
           title: `${action === 'like' ? 'Like' : 'Unlike'} this post?`,
           detail,
@@ -150,10 +160,11 @@ export const bookmarkPost = defineTool({
     const action = args.action ?? 'bookmark';
     const stopped = cancelled(signal);
     if (stopped) return stopped;
-    if (ctx.bookmarksMode() === 'confirm') {
+    if (asks(ctx, ctx.bookmarksMode())) {
       const detail = cardDetail(await onScreenPost(ctx, target)(), target);
       const { decision } = await ctx.approvals.request(
         {
+          origin: ctx.origin,
           kind: 'post',
           title: action === 'bookmark' ? 'Bookmark this post?' : 'Remove this bookmark?',
           detail,

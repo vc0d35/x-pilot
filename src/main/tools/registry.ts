@@ -1,9 +1,9 @@
-import { fail, runTool, type ToolModule, type ToolResult, type ToolSpec } from '../../shared/tools';
+import { fail, runTool, type ToolCallOptions, type ToolModule, type ToolResult, type ToolSpec } from '../../shared/tools';
 
 export interface ToolSource {
   id: string;
   list(): ToolSpec[];
-  call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>;
+  call(name: string, args: Record<string, unknown>, opts?: ToolCallOptions): Promise<ToolResult>;
   onChange?(cb: () => void): () => void;
 }
 
@@ -19,10 +19,13 @@ export class AppToolSource<Ctx> implements ToolSource {
   list(): ToolSpec[] {
     return [...this.byName.values()].map((m) => m.spec);
   }
-  async call(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult> {
+  async call(name: string, args: Record<string, unknown>, opts?: ToolCallOptions): Promise<ToolResult> {
     const m = this.byName.get(name);
     if (!m) return fail(`Unknown tool: ${name}`);
-    return runTool(m, args, this.ctx, signal);
+    // Who asked travels with the call rather than with the source: one registry serves the agent
+    // and every custom view, and a tool that asks the user first needs to say whose request it is.
+    const ctx = opts?.origin ? ({ ...(this.ctx as object), origin: opts.origin } as Ctx) : this.ctx;
+    return runTool(m, args, ctx, opts?.signal);
   }
 }
 
@@ -61,13 +64,13 @@ export class ToolRegistry {
     return this.resolve(name) !== undefined;
   }
 
-  async call(name: string, args: Record<string, unknown>, opts?: { allowInternal?: boolean; signal?: AbortSignal }): Promise<ToolResult> {
+  async call(name: string, args: Record<string, unknown>, opts?: ToolCallOptions & { allowInternal?: boolean }): Promise<ToolResult> {
     const src = this.resolve(name);
     if (!src) return fail(`Unknown tool: ${name}`);
     const spec = src.list().find((s) => s.name === name);
     if (spec?.annotations?.internal && !opts?.allowInternal) return fail(`Tool is internal: ${name}`);
     try {
-      return await src.call(name, args, opts?.signal);
+      return await src.call(name, args, { signal: opts?.signal, origin: opts?.origin });
     } catch (err) {
       return fail(err instanceof Error ? err.message : String(err));
     }

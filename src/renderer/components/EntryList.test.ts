@@ -6,6 +6,7 @@ import type { Entry } from '../state';
 
 const request = {
   id: 'a1',
+  origin: { kind: 'agent' as const },
   kind: 'post' as const,
   title: 'Keep these page styles?',
   detail: 'a { color: red }',
@@ -42,5 +43,25 @@ describe('ApprovalCard', () => {
     expect(html).toContain('adjust');
     expect(html).toContain('blue, not red');
     expect(html).not.toContain('<button');
+  });
+});
+
+describe('a card a custom view raised', () => {
+  it('says which view asked, above the question, and is framed differently', () => {
+    const html = renderToStaticMarkup(
+      createElement(ApprovalCard, {
+        entry: { kind: 'approval', request: { ...request, origin: { kind: 'view', name: 'timeline' } } },
+        onResolve: () => {},
+      }),
+    );
+    expect(html).toContain('Requested by the custom view');
+    expect(html).toContain('timeline');
+    expect(html).toContain('approval-from-view');
+    // The header line comes before the title, so it is read first.
+    expect(html.indexOf('approval-origin')).toBeLessThan(html.indexOf('approval-title'));
+  });
+
+  it('says nothing of the sort for a card the agent raised', () => {
+    expect(card()).not.toContain('approval-origin');
   });
 });

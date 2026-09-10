@@ -37,6 +37,52 @@ function ctx(mode: 'confirm' | 'autonomous', composerText = 'hello world') {
   };
 }
 
+/** The same context, as a call a custom view made rather than one the model made. */
+const fromView = <C>(c: C, name = 'timeline'): C & { origin: { kind: 'view'; name: string } } => ({
+  ...c,
+  origin: { kind: 'view' as const, name },
+});
+
+describe('a custom view composing and posting', () => {
+  it('asks before it opens the composer at all, and opens nothing when the user says no', async () => {
+    const { c, approvals, events } = ctx('autonomous');
+    const p = composePost.execute({ text: 'buy my coin' }, fromView(c));
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (events[0] as { request: { id: string; title: string; detail: string; origin: unknown } }).request;
+    expect(req.title).toBe('Open the composer with this text?');
+    expect(req.detail).toBe('buy my coin');
+    expect(req.origin).toEqual({ kind: 'view', name: 'timeline' });
+    approvals.resolve(req.id, 'cancel');
+    expect(await p).toMatchObject({ success: true, content: { composed: false, status: 'cancelled_by_user' } });
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+
+  it('asks before it posts even when posting is autonomous', async () => {
+    const { c, approvals, events } = ctx('autonomous');
+    const composed = composePost.execute({ text: 'hello world' }, fromView(c));
+    await new Promise((r) => setTimeout(r, 0));
+    approvals.resolve((events[0] as { request: { id: string } }).request.id, 'open');
+    const draftId = ((await composed) as { content: { draftId: string } }).content.draftId;
+    const p = submitPost.execute({ draftId }, fromView(c));
+    await new Promise((r) => setTimeout(r, 0));
+    const req = (
+      [...events].reverse().find((e) => e.type === 'approval.requested') as { request: { id: string; title: string; origin: unknown } }
+    ).request;
+    expect(req.title).toBe('Post this new post?');
+    expect(req.origin).toEqual({ kind: 'view', name: 'timeline' });
+    approvals.resolve(req.id, 'cancel');
+    expect(await p).toMatchObject({ success: true, content: { posted: false, status: 'cancelled_by_user' } });
+    expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything(), undefined);
+  });
+
+  it('leaves an autonomous post the agent asked for as it was: no card', async () => {
+    const { c, events } = ctx('autonomous');
+    const composed = (await composePost.execute({ text: 'hello world' }, c)) as { content: { draftId: string } };
+    expect(await submitPost.execute({ draftId: composed.content.draftId }, c)).toMatchObject({ success: true, content: { posted: true } });
+    expect(events).toEqual([]);
+  });
+});
+
 describe('buildIntentUrl', () => {
   it('encodes text, reply id and quote url', () => {
     expect(buildIntentUrl('hi there')).toBe('https://x.com/intent/post?text=hi%20there');

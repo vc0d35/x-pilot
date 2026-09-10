@@ -40,8 +40,12 @@ export function ApprovalCard({
   const { request, decision, note } = entry;
   const [noting, setNoting] = useState<string | null>(null);
   const [text, setText] = useState('');
+  const view = request.origin.kind === 'view' ? request.origin.name : null;
   return (
-    <div className={`approval approval-${request.kind}`} ref={cardRef}>
+    <div className={`approval approval-${request.kind}${view === null ? '' : ' approval-from-view'}`} ref={cardRef}>
+      {/* Whose request this is, above the question: a card the user cannot attribute is a card they
+          cannot judge, and a view's code was written from something a page said. */}
+      {view !== null && <div className="approval-origin">Requested by the custom view “{view}”</div>}
       <div className="approval-title">{request.title}</div>
       {request.summary && <div className="approval-summary">{request.summary}</div>}
       <pre className="approval-detail">{collapseBlankLines(request.detail)}</pre>

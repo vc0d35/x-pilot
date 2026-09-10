@@ -19,6 +19,24 @@ export const ToolResultSchema = z.discriminatedUnion('success', [
 export type ToolResult = z.infer<typeof ToolResultSchema>;
 
 /**
+ * Who asked for a tool call. The model's own calls are `agent`; a call a custom view made through
+ * its bridge is `view`, and carries the view's name so a card can say whose request it is. It never
+ * reaches the model-facing spec: it is context about the caller, not an argument.
+ */
+export type CallOrigin = { kind: 'agent' } | { kind: 'view'; name: string };
+
+/** What a caller may say about a call beyond its arguments. */
+export interface ToolCallOptions {
+  signal?: AbortSignal;
+  origin?: CallOrigin;
+}
+
+/** The view a call came from, or null when it is the agent's own. */
+export function callingView(ctx: { origin?: CallOrigin }): string | null {
+  return ctx.origin?.kind === 'view' ? ctx.origin.name : null;
+}
+
+/**
  * An integer argument that is clamped into [min, max] instead of rejected: the model guesses
  * sizes, and a guess above the cap should still get an answer.
  */

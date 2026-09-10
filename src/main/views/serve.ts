@@ -1,3 +1,4 @@
+import { lstatSync } from 'node:fs';
 import { contentTypeFor, APP_SCHEME } from '../hardening';
 import { VIEW_ENTRY_FILE } from '../../shared/views';
 import { resolveViewFile } from './store';
@@ -93,6 +94,19 @@ export function resolveViewRequest(root: string, requestUrl: string): ViewReques
   const file = resolveViewFile(root, view, path);
   if (!file) return null;
   return { view, path, file, contentType: contentTypeFor(file) };
+}
+
+/**
+ * Whether the resolved path is something we will hand to the canvas: a real file, never a symlink
+ * and never a directory. The store neither lists a symlink nor reads through one, and a file served
+ * here is script inside the view, so the two agree — what is served is what was written.
+ */
+export function isServableFile(file: string): boolean {
+  try {
+    return lstatSync(file).isFile();
+  } catch {
+    return false;
+  }
 }
 
 /** Maps `xpilot://lib/<file>` onto the shelf. Only the exact names on it resolve. */

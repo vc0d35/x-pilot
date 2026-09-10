@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { navigate } from './navigate';
+import { isComposeUrl, navigate } from './navigate';
 import { search } from './search';
 import { readPost, normalizePostUrl } from './read-post';
 import { ok, fail } from '../../../shared/tools';
@@ -93,6 +93,49 @@ describe('x_navigate', () => {
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(await navigate.execute({ url: 'https://x.com/alice/status/1' }, c)).toMatchObject({ success: true });
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/alice/status/1', undefined);
+  });
+});
+
+describe('x_navigate from a custom view', () => {
+  const fromView = <C>(c: C): C & { origin: { kind: 'view'; name: string } } => ({
+    ...c,
+    origin: { kind: 'view' as const, name: 'timeline' },
+  });
+
+  it('refuses a short link, which resolves to whatever the attacker put behind it', async () => {
+    const c = ctx();
+    expect(await navigate.execute({ url: 'https://t.co/abcdefghij' }, fromView(c))).toMatchObject({
+      success: false,
+      error: expect.stringContaining('may only open https pages'),
+    });
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+
+  it('refuses anything that is not https on x.com or twitter.com, whatever the user allowlisted', async () => {
+    const c = ctx();
+    for (const url of ['http://x.com/home', 'https://example.com/', 'https://notx.com/home', 'https://x.com.evil.example/', 'nonsense'])
+      expect(await navigate.execute({ url }, fromView(c)), url).toMatchObject({ success: false });
+    expect(c.xview.navigate).not.toHaveBeenCalled();
+  });
+
+  it('allows x.com and twitter.com, and keeps the off-limits paths off limits', async () => {
+    const c = ctx();
+    expect(await navigate.execute({ url: 'https://x.com/explore' }, fromView(c))).toMatchObject({ success: true });
+    expect(await navigate.execute({ url: 'https://mobile.twitter.com/home' }, fromView(c))).toMatchObject({ success: true });
+    expect(await navigate.execute({ url: 'https://x.com/intent/post?text=hi' }, fromView(c))).toMatchObject({ success: false });
+  });
+
+  it('leaves navigation the agent asked for on the user allowlist', async () => {
+    const c = ctx();
+    expect(await navigate.execute({ url: 'https://t.co/abcdefghij' }, c)).toMatchObject({ success: true });
+  });
+});
+
+describe('isComposeUrl', () => {
+  it('knows the pages that leave an action pre-filled', () => {
+    for (const url of ['https://x.com/intent/post?text=hi', 'https://x.com/compose/post', 'https://x.com/INTENT/post'])
+      expect(isComposeUrl(url), url).toBe(true);
+    for (const url of ['https://x.com/home', 'https://x.com/alice/status/1', 'not a url', '']) expect(isComposeUrl(url), url).toBe(false);
   });
 });
 
