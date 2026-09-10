@@ -86,12 +86,24 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
       if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.sidebarCollapsed, c);
     },
     isSidebarCollapsed: () => collapsed,
+    // The canvas stays a child of the window once added and is only hidden: navigating a
+    // WebContentsView that has just been removed from its window crashes Electron 44 (SIGSEGV
+    // seen on CI right after a view was deactivated).
     setOverlayView: (view) => {
-      if (win.isDestroyed() || overlay === view) return;
-      if (overlay) win.contentView.removeChildView(overlay);
-      overlay = view;
-      // Index 1: above the X page, below the sidebar and its floating handle.
-      if (view) win.contentView.addChildView(view, 1);
+      if (win.isDestroyed()) return;
+      if (view === null) {
+        overlay?.setVisible(false);
+        overlay = null;
+        layout();
+        return;
+      }
+      if (overlay !== view) {
+        overlay?.setVisible(false);
+        // Index 1: above the X page, below the sidebar and its floating handle.
+        if (!win.contentView.children.includes(view)) win.contentView.addChildView(view, 1);
+        overlay = view;
+      }
+      view.setVisible(true);
       layout();
     },
   };
