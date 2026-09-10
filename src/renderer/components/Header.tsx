@@ -57,18 +57,7 @@ export function ModelPill(props: {
   );
 }
 
-export function Header(props: {
-  status: AgentStatus;
-  statusMessage?: string;
-  /** What the pill says: the model in use, or the state it is stuck in. */
-  pillLabel: string;
-  canReconnect: boolean;
-  onNewThread: () => void;
-  onReconnect: () => void;
-  panel: Panel;
-  onPanel: (p: Panel) => void;
-  onCollapse: () => void;
-}) {
+export function Header(props: { onNewThread: () => void; panel: Panel; onPanel: (p: Panel) => void; onCollapse: () => void }) {
   const toggle = (p: Panel) => props.onPanel(props.panel === p ? 'chat' : p);
   return (
     <header className="header">
@@ -76,14 +65,6 @@ export function Header(props: {
         <img className="brand-mark" src={logo} alt="" width={18} height={18} />
         XPilot
       </div>
-      <ModelPill
-        status={props.status}
-        message={props.statusMessage}
-        label={props.pillLabel}
-        canReconnect={props.canReconnect}
-        onOpenSettings={() => props.onPanel('settings')}
-        onReconnect={props.onReconnect}
-      />
       <div className="spacer" />
       <button
         className={`icon${props.panel === 'chat' ? ' icon-active' : ''}`}

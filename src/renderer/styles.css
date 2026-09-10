@@ -41,7 +41,8 @@ code { font: inherit; }
 @media (prefers-reduced-motion: reduce) { .status-dot { animation: none !important; opacity: 1; } }
 
 /* The header pill: the model in use (or what is wrong), and the dot that says how it is doing. */
-.pill { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; padding: 1px 8px; font-size: 12px; color: var(--muted); max-width: 160px; }
+.pill-row { display: flex; justify-content: flex-end; padding: 2px 8px 0; }
+.pill { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 0 7px; font-size: 10.5px; color: var(--muted); max-width: 240px; min-width: 0; }
 .pill:hover { color: var(--fg); }
 .pill-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

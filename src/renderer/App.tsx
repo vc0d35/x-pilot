@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useState } from 'react';
 import { reduce, initialState, reportsBrokenAdapter } from './state';
 import { setupIssue } from './setup';
-import { Header, ExpandHandle, type Panel } from './components/Header';
+import { Header, ExpandHandle, type Panel, ModelPill } from './components/Header';
 import { EntryList } from './components/EntryList';
 import { Composer } from './components/Composer';
 import { LibraryPanel } from './components/LibraryPanel';
@@ -110,19 +110,24 @@ export function App() {
   return (
     <div className="app">
       <Header
-        status={state.status}
-        statusMessage={state.statusMessage}
-        pillLabel={pillText({ status: state.status, statusMessage: state.statusMessage, provider, modelId, models })}
-        canReconnect={showReconnect(state.status, provider)}
         onNewThread={() => {
           showFreshThread();
           void window.xpilot.newThread();
         }}
-        onReconnect={reconnect}
         panel={panel}
         onPanel={showPanel}
         onCollapse={() => void window.xpilot.setSidebarCollapsed(true)}
       />
+      <div className="pill-row">
+        <ModelPill
+          status={state.status}
+          message={state.statusMessage}
+          label={pillText({ status: state.status, statusMessage: state.statusMessage, provider, modelId, models })}
+          canReconnect={showReconnect(state.status, provider)}
+          onOpenSettings={() => showPanel('settings')}
+          onReconnect={reconnect}
+        />
+      </div>
       {adapterBroken && <div className="banner">X changed its layout; some tools may fail until the adapter is updated.</div>}
       {state.taskRun?.visibleWindow && (
         <div className="banner run-banner">
