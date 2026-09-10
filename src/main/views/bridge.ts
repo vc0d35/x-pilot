@@ -5,11 +5,16 @@ import { fail, type CallOrigin, type ToolResult } from '../../shared/tools';
 import {
   VIEW_CALLS_PER_WINDOW,
   VIEW_CALL_WINDOW_MS,
+  VIEW_ERROR_MESSAGE_MAX,
+  VIEW_ERROR_REPORTS_PER_WINDOW,
+  VIEW_ERROR_REPORT_WINDOW_MS,
+  VIEW_ERROR_SOURCE_MAX,
   VIEW_FEEDS,
   VIEW_POSTS_POLL_MS,
   VIEW_PREVIEW_REFUSAL,
   VIEW_PREVIEW_TOOL_ALLOWLIST,
   VIEW_TOOL_ALLOWLIST,
+  type ViewErrorReport,
   type ViewFeed,
 } from '../../shared/views';
 import type { AgentEvent } from '../../shared/agent';
@@ -21,6 +26,21 @@ const TRACE_OUTPUT_MAX = 4000;
 
 const CallSchema = z.object({ tool: z.string().max(80), args: z.record(z.string(), z.unknown()).optional() });
 const FeedSchema = z.object({ feed: z.enum(VIEW_FEEDS) });
+/** What a view's preload may say about an error of its own. Capped again here: it is renderer input. */
+const ErrorSchema = z.object({
+  kind: z.enum(['error', 'unhandledrejection', 'securitypolicyviolation']),
+  message: z
+    .string()
+    .max(VIEW_ERROR_MESSAGE_MAX * 2)
+    .transform((m) => m.slice(0, VIEW_ERROR_MESSAGE_MAX)),
+  source: z
+    .string()
+    .max(VIEW_ERROR_SOURCE_MAX * 2)
+    .transform((m) => m.slice(0, VIEW_ERROR_SOURCE_MAX))
+    .optional(),
+  line: z.number().int().nonnegative().max(10_000_000).optional(),
+  column: z.number().int().nonnegative().max(10_000_000).optional(),
+});
 
 /** The slice of ipcMain this module drives, so the wiring can be tested without Electron. */
 export interface ViewBridgeIpc {
@@ -53,6 +73,8 @@ export interface ViewBridgeDeps {
   pageContext(): PageContext | null;
   /** `back()`: take the view off and put the user back on X. */
   deactivate(): void;
+  /** An error the view's own scripts threw, relayed by its preload. */
+  reportError(report: ViewErrorReport): void;
   now?: () => number;
   setInterval?: (fn: () => void, ms: number) => NodeJS.Timeout;
   clearInterval?: (timer: NodeJS.Timeout) => void;
@@ -175,6 +197,17 @@ export function registerViewBridgeIpc(deps: ViewBridgeDeps): ViewBridge {
         `Too many tool calls from this view: at most ${VIEW_CALLS_PER_WINDOW} every ${VIEW_CALL_WINDOW_MS / 1000} s. Subscribe to a feed instead of polling.`,
       );
     return traced(parsed.data.tool, parsed.data.args ?? {});
+  });
+
+  // The preload's error relay. It is budgeted here as well as there: the renderer's own limiter is
+  // the view's code path, and a view is agent-written code we do not get to trust with a rate.
+  const errorBudget = createBudget({ max: VIEW_ERROR_REPORTS_PER_WINDOW, windowMs: VIEW_ERROR_REPORT_WINDOW_MS, now: deps.now });
+  deps.ipc.on(IPC.viewError, (event, raw) => {
+    if (!fromCanvas(event)) return;
+    const parsed = ErrorSchema.safeParse(raw);
+    if (!parsed.success) return;
+    if (!errorBudget.take()) return;
+    deps.reportError(parsed.data);
   });
 
   deps.ipc.handle(IPC.viewBack, (event) => {

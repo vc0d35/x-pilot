@@ -1,8 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { reduce, initialState, reportsBrokenAdapter, type State } from './state';
+import { reduce, initialState, reportsBrokenAdapter, fixItPrompt, type State } from './state';
 import type { AgentEvent } from '../shared/agent';
 
 const run = (events: AgentEvent[], s: State = initialState) => events.reduce(reduce, s);
+const AT = '2026-09-10T10:00:00.000Z';
 
 describe('the banner over a scheduled run that has the window', () => {
   it('raises it while the run is going and takes it down when the run ends', () => {
@@ -39,10 +40,31 @@ describe('the banner over a custom view', () => {
   it('carries the reason a view took itself off, and clears it when another one comes up', () => {
     const broken = run([
       { type: 'view.active', view: 'feed' },
-      { type: 'view.active', view: null, error: 'feed: ERR_FAILED' },
+      { type: 'view.active', view: null },
+      { type: 'view.error', view: 'feed', phase: 'load', message: 'ERR_FAILED', at: AT },
     ]);
-    expect(broken).toMatchObject({ view: null, viewError: 'feed: ERR_FAILED' });
+    expect(broken).toMatchObject({ view: null, viewError: { view: 'feed', phase: 'load', message: 'ERR_FAILED' } });
     expect(reduce(broken, { type: 'view.active', view: 'other' })).toMatchObject({ view: 'other', viewError: null });
+  });
+
+  it('leaves a view that is only erring on screen, so the banner sits above a working view', () => {
+    const erring = run([
+      { type: 'view.active', view: 'feed' },
+      { type: 'view.error', view: 'feed', phase: 'runtime', message: 'TypeError: x is not a function', at: AT },
+    ]);
+    expect(erring).toMatchObject({ view: 'feed', viewError: { phase: 'runtime' } });
+    expect(reduce(erring, { type: 'view.error.dismiss' })).toMatchObject({ view: 'feed', viewError: null });
+  });
+
+  it('keeps the failure through a reset: it belongs to the window, not to the conversation', () => {
+    const broken = run([{ type: 'view.error', view: 'feed', phase: 'crash', message: 'the renderer stopped', at: AT }]);
+    expect(reduce(broken, { type: 'reset' }).viewError).toEqual(broken.viewError);
+  });
+
+  it('asks the agent to read the view and fix it, naming the phase and the message', () => {
+    expect(fixItPrompt({ view: 'feed', phase: 'runtime', message: 'TypeError: x', at: AT })).toBe(
+      'The custom view "feed" failed (runtime): TypeError: x. Read its files and console with xpilot_view_console and xpilot_read_view_file, fix the problem, and activate it again.',
+    );
   });
 });
 

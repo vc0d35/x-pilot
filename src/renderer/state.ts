@@ -1,4 +1,5 @@
 import type { AgentEvent, AgentStatus, ApprovalRequest, ProviderKind, UserInputAnswers, UserInputRequest } from '../shared/agent';
+import type { ViewErrorPhase } from '../shared/views';
 
 export interface Message {
   id: string;
@@ -52,6 +53,8 @@ export interface ForeignConversation {
 /** Everything the sidebar dispatches that is not an agent event of the live conversation. */
 export type LocalAction =
   | { type: 'reset' }
+  /** The user has read the custom-view banner: it goes, whatever the view itself is doing. */
+  | { type: 'view.error.dismiss' }
   | { type: 'view.task'; threadId: string; taskId: number | null; title: string; running: boolean }
   | { type: 'view.foreign'; threadId: string; provider: ProviderKind }
   | { type: 'view.live' }
@@ -78,9 +81,25 @@ export interface State {
   taskRun: TaskRun | null;
   /** The custom view on screen in place of x.com, or null when the user is looking at X. */
   view: string | null;
-  /** Why the last view was taken off the screen by itself, until another one is shown. */
-  viewError: string | null;
+  /** The last thing that went wrong in a custom view, until it is dismissed or another view is shown. */
+  viewError: ViewFailure | null;
 }
+
+/** What the sidebar says went wrong in a custom view, and what it offers to do about it. */
+export interface ViewFailure {
+  view: string;
+  phase: ViewErrorPhase;
+  message: string;
+  at: string;
+}
+
+/**
+ * What the user sends the agent when they press "Fix it". It is a hint rather than a script: the
+ * agent has the tools to read the view and its console, and the phase and the message are the two
+ * things it cannot find out for itself once the view is off the screen.
+ */
+export const fixItPrompt = (failure: ViewFailure): string =>
+  `The custom view "${failure.view}" failed (${failure.phase}): ${failure.message}. Read its files and console with xpilot_view_console and xpilot_read_view_file, fix the problem, and activate it again.`;
 
 export const initialState: State = {
   status: 'starting',
@@ -112,9 +131,14 @@ export function reduce(state: State, e: AgentEvent | LocalAction): State {
     case 'view.live':
       return { ...state, viewing: null, foreign: null };
     // Which view is on screen belongs to the window, not to a conversation: like a run, it outlives
-    // a reset. An error is only ever the reason the view that was up is gone.
+    // a reset. A view coming up is the one thing that clears the last failure — a view going away
+    // arrives just before the `view.error` saying why, so it must not clear anything.
     case 'view.active':
-      return { ...state, view: e.view, viewError: e.view ? null : (e.error ?? null) };
+      return { ...state, view: e.view, viewError: e.view ? null : state.viewError };
+    case 'view.error':
+      return { ...state, viewError: { view: e.view, phase: e.phase, message: e.message, at: e.at } };
+    case 'view.error.dismiss':
+      return { ...state, viewError: null };
     // A run of the user's own is not part of any conversation, so it outlives a reset or a new thread.
     case 'task.run':
       return { ...state, taskRun: e.running ? { taskId: e.taskId, title: e.title, visibleWindow: e.visibleWindow } : null };

@@ -208,7 +208,16 @@ export class ViewsStore {
     this.timer = null;
     const changed = [...this.pending];
     this.pending.clear();
-    for (const view of changed) for (const cb of [...this.listeners]) cb(view);
+    // A watcher callback runs on a timer with nothing above it: one that throws would take main
+    // down, and the thing it usually reaches into is a canvas that may have just gone away.
+    for (const view of changed)
+      for (const cb of [...this.listeners]) {
+        try {
+          cb(view);
+        } catch (err) {
+          console.warn(`[xpilot] a views watcher listener failed for ${view}`, err);
+        }
+      }
   }
 }
 

@@ -6,7 +6,7 @@ import type { SelectorOverrides } from '../../page-config/selectors';
 import type { TaskManager } from '../../tasks/manager';
 import type { SelectorKey } from '../../../shared/selectors';
 import type { ViewsStore } from '../../views/store';
-import type { ViewLogEntry } from '../../../shared/views';
+import type { ViewErrorPhase, ViewLogEntry } from '../../../shared/views';
 import type { ViewInspection } from '../../views/inspect';
 
 /** The custom views the agent writes, and the one window they are shown in. */
@@ -17,6 +17,11 @@ export interface ViewsCtx {
   /** Puts a view on screen; resolves with why it could not be shown, or null when it is up. */
   show(view: string): Promise<string | null>;
   hide(): void;
+  /**
+   * A view that could not be put on screen at all — no index.html when it was asked for. Nothing
+   * comes off the screen, but the user is told and the remembered view is forgotten.
+   */
+  failed(view: string, phase: ViewErrorPhase, message: string): void;
   /**
    * Marks the view on screen as one the user has not decided on yet. A preview renders and reads;
    * the bridge refuses the drivers and the writes until it is kept.

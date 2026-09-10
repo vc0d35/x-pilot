@@ -18,6 +18,7 @@ export const IPC = {
   viewUnsubscribe: 'view:unsubscribe',
   viewFeed: 'view:feed',
   viewBack: 'view:back',
+  viewError: 'view:error',
   // sidebar <-> main
   agentSend: 'agent:send',
   agentInterrupt: 'agent:interrupt',

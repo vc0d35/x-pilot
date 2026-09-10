@@ -73,6 +73,7 @@ function ctx(
     active = null;
     previewing = false;
   });
+  const failed = vi.fn();
   let previewing = false;
   const preview = vi.fn((on: boolean) => {
     previewing = on;
@@ -84,6 +85,7 @@ function ctx(
     show,
     hide,
     preview,
+    failed,
     previewing: () => previewing,
     persisted,
     value: {
@@ -93,6 +95,7 @@ function ctx(
         active: () => active,
         show,
         hide,
+        failed,
         preview,
         persist: (view: string | null) => persisted.push(view),
         mode: () => opts.mode ?? 'autonomous',
@@ -190,10 +193,13 @@ describe('xpilot_activate_view', () => {
 
   it('says so when the view is not there, has no entry point, or will not load', async () => {
     expect(await activateView.execute({ view: 'feed' }, ctx().value)).toMatchObject({ success: false, error: /no view called/ });
-    expect(await activateView.execute({ view: 'feed' }, ctx({ files: { feed: { 'app.js': 'x' } } }).value)).toMatchObject({
+    const noEntry = ctx({ files: { feed: { 'app.js': 'x' } } });
+    expect(await activateView.execute({ view: 'feed' }, noEntry.value)).toMatchObject({
       success: false,
       error: /no index.html/,
     });
+    // The user asked for this view: they are told the same way a crash is told, and it is forgotten.
+    expect(noEntry.failed).toHaveBeenCalledWith('feed', 'load', 'there is no index.html to load');
     const broken = ctx({ files: { feed: { 'index.html': 'x' } }, showFailure: 'ERR_FAILED' });
     expect(await activateView.execute({ view: 'feed' }, broken.value)).toMatchObject({ success: false, error: /ERR_FAILED/ });
     expect(broken.persisted).toEqual([]);

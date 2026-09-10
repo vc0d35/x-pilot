@@ -48,7 +48,7 @@ type Harness = {
   xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
   styles: { set(css: string): { ok: boolean }; reset(): void };
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
-  settings: { update(patch: object): unknown };
+  settings: { update(patch: object): unknown; get(): { views: { active: string | null } } };
   views: { dir: string; write(view: string, path: string, content: string): { bytes: number }; delete(view: string): boolean };
   agent: { onEvent(cb: (e: { type: string; name?: string }) => void): () => void };
   viewCanvas: {
@@ -392,6 +392,65 @@ test('the library shelf serves three.js to a view, and nothing else', async () =
   expect(await inCanvas("import('xpilot://lib/../package.json').then(() => 'loaded', () => 'blocked')")).toBe('blocked');
   await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
   await inMain((t) => t.views.delete('lib-check'));
+});
+
+/**
+ * What a view that goes wrong does to the user's screen. A view is code a model wrote out of what a
+ * page said, so the two answers that matter are: an error while it renders leaves it up and says so,
+ * and a view that cannot be loaded at all puts the X page back and is forgotten.
+ */
+const BROKEN_APP = [
+  "document.getElementById('out').textContent = 'rendered';",
+  // A starter that throws on load: the module runs, draws, and then dies where a typo would.
+  "throw new TypeError('deliberate boom: posts.map is not a function');",
+].join('\n');
+
+const sidebarText = () => inMain((t) => t.sidebar.webContents.executeJavaScript('document.body.innerText'));
+
+test('a view whose script throws keeps rendering, and the sidebar says what threw', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      t.settings.update({ views: { mode: 'autonomous' } });
+      t.views.write('boom', 'index.html', files.index);
+      t.views.write('boom', 'app.js', files.app);
+    },
+    { index: VIEW_INDEX, app: BROKEN_APP },
+  );
+  expect(await inMain((t) => t.registry.call('xpilot_activate_view', { view: 'boom' }))).toMatchObject({
+    success: true,
+    content: { status: 'kept' },
+  });
+  // The banner is the whole point: it reached the sidebar, over a view that is still on screen.
+  await expect.poll(sidebarText, { timeout: 15_000 }).toContain('Custom view “boom” failed');
+  expect(await sidebarText()).toContain('deliberate boom');
+  expect(await inMain((t) => t.viewCanvas.active())).toBe('boom');
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  // And the agent can read it back, with where in the view's own file it happened.
+  const logged = (await inMain((t) => t.registry.call('xpilot_view_console', { view: 'boom' }))) as {
+    content: { entries: { source: string; text: string; where?: string }[] };
+  };
+  const thrown = logged.content.entries.find((e) => e.source === 'error');
+  expect(thrown!.text).toContain('deliberate boom');
+  expect(thrown!.where).toContain('xpilot://views/boom/app.js');
+  await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
+  await inMain((t) => t.views.delete('boom'));
+});
+
+test('a view with no index.html falls back to X, and is not remembered for the next start', async () => {
+  await inMain((t) => {
+    t.views.write('gone', 'app.js', "console.log('nothing loads this');");
+    // As if the user had kept this view and its entry point had been deleted since.
+    t.settings.update({ views: { active: 'gone' } });
+  });
+  expect(await inMain((t) => t.registry.call('xpilot_activate_view', { view: 'gone' }))).toMatchObject({
+    success: false,
+    error: expect.stringContaining('no index.html'),
+  });
+  expect(await inMain((t) => t.viewCanvas.active())).toBeNull();
+  await expect.poll(() => inMain((t) => t.settings.get().views.active), { timeout: 15_000 }).toBeNull();
+  await expect.poll(sidebarText, { timeout: 15_000 }).toContain('Custom view “gone” failed');
+  await inMain((t) => t.views.delete('gone'));
 });
 
 test('external links are routed to the system browser', async () => {

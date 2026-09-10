@@ -19,9 +19,44 @@ export const MAX_VIEW_BYTES = 5 * 1024 * 1024;
 /** The file the canvas loads; a view without one cannot be shown. */
 export const VIEW_ENTRY_FILE = 'index.html';
 
-/** Console, preload and crash lines kept per view, oldest dropped. */
+/** Console, preload, crash and script-error lines kept per view, oldest dropped. */
 export const VIEW_LOG_LIMIT = 200;
 export const VIEW_LOG_TEXT_MAX = 2000;
+
+/**
+ * How a view failed, as the sidebar says it. `load` is a page that would not load at all (or has no
+ * index.html, or whose preload failed), `crash` a renderer that died, `unresponsive` one that wedged,
+ * `runtime` an error the view's own scripts threw while it was up and rendering.
+ */
+export const VIEW_ERROR_PHASES = ['load', 'crash', 'unresponsive', 'runtime'] as const;
+export type ViewErrorPhase = (typeof VIEW_ERROR_PHASES)[number];
+
+/** How long a wedged renderer is given to come back before the view is taken off the screen. */
+export const VIEW_UNRESPONSIVE_MS = 10_000;
+/** More runtime errors than this inside the window and the view is deactivated rather than watched. */
+export const VIEW_RUNTIME_ERRORS_PER_WINDOW = 20;
+export const VIEW_RUNTIME_ERROR_WINDOW_MS = 60_000;
+/** A second crash or wedge this soon after the first is a view that cannot be retried into. */
+export const VIEW_FATAL_ERRORS_PER_WINDOW = 2;
+export const VIEW_FATAL_ERROR_WINDOW_MS = 5 * 60_000;
+/** After the first runtime error of an activation, the banner is raised at most this often. */
+export const VIEW_RUNTIME_REPORT_MS = 30_000;
+/** Consecutive change-triggered reloads that failed to load before reloading is stopped. */
+export const VIEW_RELOAD_FAILURES_MAX = 2;
+/** What the user and the agent are told when a view is deactivated for erroring too much. */
+export const VIEW_STORM_MESSAGE = 'too many errors; deactivated';
+
+/** The preload's error relay: how many reports a view may send, how often, and how long one may be. */
+export const VIEW_ERROR_REPORTS_PER_WINDOW = 10;
+export const VIEW_ERROR_REPORT_WINDOW_MS = 10_000;
+export const VIEW_ERROR_MESSAGE_MAX = 1024;
+export const VIEW_ERROR_SOURCE_MAX = 200;
+
+/** What xpilot_view_console may return: entries, how long each line may be, and how much in total. */
+export const VIEW_CONSOLE_DEFAULT_LIMIT = 50;
+export const VIEW_CONSOLE_MAX_LIMIT = 200;
+export const VIEW_CONSOLE_TEXT_MAX = 500;
+export const VIEW_CONSOLE_BYTES_MAX = 20 * 1024;
 
 /** The canvas may call this many tools per window; the rest are refused with a reason. */
 export const VIEW_CALLS_PER_WINDOW = 20;
@@ -75,12 +110,23 @@ export interface ViewSummary {
   hasIndex: boolean;
 }
 
-/** One line the canvas produced: a console message, a preload failure, or a dead renderer. */
+/** One line the canvas produced: a console message, a preload failure, a dead renderer, or a thrown error. */
 export interface ViewLogEntry {
   at: string;
-  source: 'console' | 'preload' | 'crash';
+  source: 'console' | 'preload' | 'crash' | 'error';
   level: string;
   text: string;
+  /** `file:line:col` for an error the view's own scripts threw, when it said where. */
+  where?: string;
+}
+
+/** What a view's preload relays when its scripts throw; every field is capped before it is kept. */
+export interface ViewErrorReport {
+  kind: 'error' | 'unhandledrejection' | 'securitypolicyviolation';
+  message: string;
+  source?: string;
+  line?: number;
+  column?: number;
 }
 
 /** What the sidebar shows in the Views row: which view is up, where they live, and what there is. */
@@ -108,10 +154,13 @@ export interface ViewFeedPayload {
 export interface XPilotViewApi {
   /** Calls back with the current value straight away, then on every change. Returns an unsubscribe. */
   subscribe<F extends ViewFeed>(feed: F, cb: (data: ViewFeedPayload[F]) => void): () => void;
-  /** Runs one allowlisted registry tool; the result is the plain `{ success, content }` a tool returns. */
+  /**
+   * Runs one allowlisted registry tool. Nothing here ever throws or rejects: a refusal, a budget,
+   * a dead bridge and a tool that failed all come back the same way, as `{ success: false, error }`.
+   */
   call(tool: string, args?: Record<string, unknown>): Promise<ToolResult>;
   /** Moves the X page underneath to a URL on x.com, which is how a view loads something new. */
   openInX(url: string): Promise<ToolResult>;
-  /** Closes the view and puts the user back on X. */
+  /** Closes the view and puts the user back on X. Never rejects. */
   back(): Promise<void>;
 }

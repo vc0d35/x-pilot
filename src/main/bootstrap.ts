@@ -18,7 +18,7 @@ import { ViewCanvas } from './views/canvas';
 import { registerViewBridgeIpc, type ViewBridge } from './views/bridge';
 import { LIB_FILES, VIEW_CSP, isServableFile, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports } from './views/serve';
 import { inspectScript, type ViewInspection } from './views/inspect';
-import { isViewName, type ViewsStatus } from '../shared/views';
+import { VIEW_ENTRY_FILE, isViewName, type ViewErrorPhase, type ViewsStatus } from '../shared/views';
 import { isComposeUrl } from './tools/xview/navigate';
 import type { AgentEvent } from '../shared/agent';
 import type { PageContext } from '../shared/page';
@@ -231,7 +231,8 @@ export function createApp(opts: AppOptions): XPilotApp {
   const notFound = () => new Response('Not found', { status: 404 });
   // Every response on the views session carries the policy, including the ones that carry no
   // content: "every response on this scheme" is a property worth being able to state plainly.
-  const notFoundInView = () => new Response('Not found', { status: 404, headers: { 'content-security-policy': VIEW_CSP } });
+  const notFoundInView = () =>
+    new Response('Not found', { status: 404, headers: { 'content-security-policy': VIEW_CSP, 'cache-control': 'no-store' } });
   /** A custom view's own files, under its CSP; null when the URL is not one of a view's. */
   const serveView = async (url: string): Promise<Response | null> => {
     const view = resolveViewRequest(viewsDir, url);
@@ -239,7 +240,9 @@ export function createApp(opts: AppOptions): XPilotApp {
     if (!isServableFile(view.file)) return notFoundInView();
     try {
       return new Response(await readFile(view.file), {
-        headers: { 'content-type': view.contentType, 'content-security-policy': VIEW_CSP },
+        // Never cached: writing a file is what reloads a view, and a reload that answered out of
+        // Chromium's cache would show the agent its own last version and lose the edit it just made.
+        headers: { 'content-type': view.contentType, 'content-security-policy': VIEW_CSP, 'cache-control': 'no-store' },
       });
     } catch {
       return notFoundInView();
@@ -391,11 +394,15 @@ export function createApp(opts: AppOptions): XPilotApp {
     mount: (view) => setOverlayView(view),
     unmount: () => setOverlayView(null),
     bounds: () => xView.getBounds(),
-    // A view that will not load, or whose renderer died, is not something to retry into: the app
-    // falls back to the X page underneath and tells the user in the sidebar why it went.
-    onFailure: (view, message) => {
-      console.warn(`[xpilot] custom view ${view} was taken off the screen: ${message}`);
-      sendToSidebar({ type: 'view.active', view: null, error: `${view}: ${message}` });
+    // A view that will not load, whose renderer died or that is erroring in a loop is not something
+    // to retry into: the app falls back to the X page underneath, forgets the view so the next start
+    // is on x.com, and tells the user in the sidebar why it went and offers to have it fixed.
+    onError: ({ view, phase, message, fatal }) => {
+      if (fatal) {
+        console.warn(`[xpilot] custom view ${view} was taken off the screen (${phase}): ${message}`);
+        if (settings.get().views.active === view) settings.update({ views: { active: null } });
+      }
+      sendToSidebar({ type: 'view.error', view, phase, message, at: new Date().toISOString() });
     },
     onActive: (view) => {
       // A canvas that navigated has a new document, and its subscriptions went with the old one.
@@ -455,6 +462,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     trace: (event) => agent.record(event),
     pageContext: () => lastPageContext,
     deactivate: deactivateView,
+    reportError: (report) => canvas.noteRuntimeError(report),
   });
   const trackXContents = (contents: WebContents): void => {
     xContents.set(contents.id, contents);
@@ -565,6 +573,8 @@ export function createApp(opts: AppOptions): XPilotApp {
       active: () => canvas.active(),
       show: (view: string) => canvas.show(view),
       hide: () => hideView(),
+      /** A view that could not be put on screen at all, said the same way a crash is said. */
+      failed: (view: string, phase: ViewErrorPhase, message: string) => canvas.reportFailure(view, phase, message),
       preview: (previewing: boolean) => canvas.setPreviewing(previewing),
       persist: (view: string | null) => {
         settings.update({ views: { active: view } });
@@ -574,7 +584,13 @@ export function createApp(opts: AppOptions): XPilotApp {
       inspect: async (selector?: string, limit?: number) => {
         const contents = canvas.active() ? canvas.contents() : null;
         if (!contents) return null;
-        return (await contents.executeJavaScript(inspectScript(selector, limit))) as ViewInspection | { error: string };
+        // The canvas can go away between the check and the answer — the user pressing Back to X
+        // while the snippet runs — and a rejected executeJavaScript here would be an unhandled one.
+        try {
+          return (await contents.executeJavaScript(inspectScript(selector, limit))) as ViewInspection | { error: string };
+        } catch (err) {
+          return { error: err instanceof Error ? err.message : String(err) };
+        }
       },
     },
     stylesMode: () => settings.get().styles.mode,
@@ -718,6 +734,8 @@ export function createApp(opts: AppOptions): XPilotApp {
     const activeView = settings.get().views.active;
     if (activeView) {
       if (isViewName(activeView) && views.exists(activeView) && views.hasIndex(activeView)) await canvas.show(activeView);
+      else if (isViewName(activeView) && views.exists(activeView))
+        canvas.reportFailure(activeView, 'load', `there is no ${VIEW_ENTRY_FILE} to load any more`);
       else {
         console.warn(`[xpilot] the remembered custom view ${activeView} is gone; starting on x.com`);
         settings.update({ views: { active: null } });

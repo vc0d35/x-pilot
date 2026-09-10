@@ -3,6 +3,15 @@ import { join } from 'node:path';
 import { APP_SCHEME, hasBannedSwitch } from './hardening';
 import { createApp, resolveDevSwitches } from './bootstrap';
 
+/**
+ * Main is a long-lived process holding the user's window, their agent and their session; a stray
+ * rejection out of a timer or a WebContents that went away is not a reason to lose all of it. Both
+ * are logged with their stack and swallowed: a crash that prints nothing is a crash nobody can fix,
+ * and CI in particular only ever sees what was written here.
+ */
+process.on('uncaughtException', (err) => console.error('[xpilot] uncaught exception in main', err));
+process.on('unhandledRejection', (reason) => console.error('[xpilot] unhandled rejection in main', reason));
+
 const DEV = !app.isPackaged;
 const dev = resolveDevSwitches(process.env, DEV);
 

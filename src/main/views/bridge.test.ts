@@ -4,6 +4,10 @@ import { ok } from '../../shared/tools';
 import {
   VIEW_CALLS_PER_WINDOW,
   VIEW_DRIVER_TOOLS,
+  VIEW_ERROR_MESSAGE_MAX,
+  VIEW_ERROR_REPORTS_PER_WINDOW,
+  VIEW_ERROR_REPORT_WINDOW_MS,
+  VIEW_ERROR_SOURCE_MAX,
   VIEW_ACCOUNT_WRITE_TOOLS,
   VIEW_READ_TOOLS,
   VIEW_TOOL_ALLOWLIST,
@@ -31,6 +35,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
   const sent: { feed: string; data: unknown }[] = [];
   const callTool = vi.fn(async (name: string) => ok({ called: name }));
   const deactivate = vi.fn();
+  const reportError = vi.fn();
   const traced: AgentEvent[] = [];
   const timers: (() => void)[] = [];
   const bridge = registerViewBridgeIpc({
@@ -43,6 +48,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
     trace: (event) => traced.push(event),
     pageContext: () => opts.context ?? null,
     deactivate,
+    reportError,
     now: opts.now,
     setInterval: (fn) => {
       timers.push(fn);
@@ -55,12 +61,14 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
     sent,
     callTool,
     deactivate,
+    reportError,
     traced,
     timers,
     call: (payload: unknown, from = CANVAS_ID) => handlers.get(IPC.viewCall)!({ sender: { id: from } }, payload),
     back: (from = CANVAS_ID) => handlers.get(IPC.viewBack)!({ sender: { id: from } }, {}),
     subscribe: (feed: string, from = CANVAS_ID) => listeners.get(IPC.viewSubscribe)!({ sender: { id: from } }, { feed }),
     unsubscribe: (feed: string, from = CANVAS_ID) => listeners.get(IPC.viewUnsubscribe)!({ sender: { id: from } }, { feed }),
+    reportedError: (payload: unknown, from = CANVAS_ID) => listeners.get(IPC.viewError)!({ sender: { id: from } }, payload),
   };
 }
 
@@ -230,5 +238,37 @@ describe('the view bridge', () => {
     const h = harness({ previewing: true });
     h.back();
     expect(h.deactivate).toHaveBeenCalled();
+  });
+});
+
+describe('the errors a view relays about itself', () => {
+  it('passes on what the view threw, capped, and only from the canvas', () => {
+    const h = harness();
+    h.reportedError({ kind: 'error', message: 'TypeError: x', source: 'app.js', line: 4, column: 2 });
+    expect(h.reportError).toHaveBeenCalledWith({ kind: 'error', message: 'TypeError: x', source: 'app.js', line: 4, column: 2 });
+    // Another renderer on the same ipcMain — the sidebar, an X view — is not the canvas.
+    h.reportedError({ kind: 'error', message: 'from elsewhere' }, CANVAS_ID + 1);
+    expect(h.reportError).toHaveBeenCalledTimes(1);
+    h.reportedError({ kind: 'unknown', message: 'nonsense' });
+    h.reportedError('not an object');
+    expect(h.reportError).toHaveBeenCalledTimes(1);
+  });
+
+  it('cuts a message the view padded out, whatever the preload sent', () => {
+    const h = harness();
+    h.reportedError({ kind: 'error', message: 'x'.repeat(VIEW_ERROR_MESSAGE_MAX * 2), source: 'y'.repeat(VIEW_ERROR_SOURCE_MAX * 2) });
+    const report = h.reportError.mock.calls[0][0] as { message: string; source: string };
+    expect(report.message).toHaveLength(VIEW_ERROR_MESSAGE_MAX);
+    expect(report.source).toHaveLength(VIEW_ERROR_SOURCE_MAX);
+  });
+
+  it('takes ten reports in ten seconds and drops the rest: a broken view throws in a loop', () => {
+    let at = 0;
+    const h = harness({ now: () => at });
+    for (let i = 0; i < 25; i++) h.reportedError({ kind: 'error', message: `boom ${i}` });
+    expect(h.reportError).toHaveBeenCalledTimes(VIEW_ERROR_REPORTS_PER_WINDOW);
+    at += VIEW_ERROR_REPORT_WINDOW_MS;
+    h.reportedError({ kind: 'error', message: 'later' });
+    expect(h.reportError).toHaveBeenCalledTimes(VIEW_ERROR_REPORTS_PER_WINDOW + 1);
   });
 });

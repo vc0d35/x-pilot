@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useState } from 'react';
-import { reduce, initialState, reportsBrokenAdapter } from './state';
+import { reduce, initialState, reportsBrokenAdapter, fixItPrompt } from './state';
 import { setupIssue } from './setup';
 import { Header, ExpandHandle, type Panel, ModelPill } from './components/Header';
 import { EntryList } from './components/EntryList';
@@ -8,6 +8,7 @@ import { LibraryPanel } from './components/LibraryPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { HistoryPanel } from './components/HistoryPanel';
 import { SetupCard } from './components/SetupCard';
+import { ViewErrorBanner } from './components/ViewErrorBanner';
 import { OnboardingCard } from './components/OnboardingCard';
 import { ModelPicker } from './components/ModelPicker';
 import { needsProviderChoice, pillText, showReconnect } from './provider-ui';
@@ -145,7 +146,19 @@ export function App() {
           </button>
         </div>
       )}
-      {state.viewError && <div className="banner">The custom view was closed: {state.viewError}</div>}
+      {state.viewError && (
+        <ViewErrorBanner
+          failure={state.viewError}
+          stillShowing={state.view !== null}
+          onDismiss={() => dispatch({ type: 'view.error.dismiss' })}
+          onFix={() => {
+            // Sent as the user, through the same path the composer uses, so it is a message in the
+            // transcript rather than something the app did to the conversation behind their back.
+            void window.xpilot.send(fixItPrompt(state.viewError!), null);
+            dispatch({ type: 'view.error.dismiss' });
+          }}
+        />
+      )}
       {settings?.posting.mode === 'autonomous' && (
         <div className="banner">Autonomous posting is on: the agent can post without confirmation.</div>
       )}

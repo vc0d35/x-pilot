@@ -1,4 +1,5 @@
 import type { CallOrigin } from './tools';
+import type { ViewErrorPhase } from './views';
 
 /** The agent backends XPilot can drive; `null` in settings means the user has not chosen yet. */
 export const PROVIDER_KINDS = ['codex', 'claude'] as const;
@@ -64,8 +65,11 @@ export type AgentEvent =
   | { type: 'input.resolved'; id: string; answers: UserInputAnswers }
   /** A scheduled run started or ended; `visibleWindow` runs drive the window the user is looking at. */
   | { type: 'task.run'; taskId: number; title: string; visibleWindow: boolean; running: boolean }
+  /** Which custom view is on screen in place of x.com, or null for X itself. */
+  | { type: 'view.active'; view: string | null }
   /**
-   * Which custom view is on screen in place of x.com, or null for X itself. `error` is set when a
-   * view was taken off because it would not load or its renderer died, so the sidebar can say so.
+   * A custom view failed. `load`, `crash` and `unresponsive` mean it is already off the screen and
+   * the user is back on X; `runtime` is an error its own scripts threw while it stays up. The
+   * sidebar raises a banner offering to hand the whole thing to the agent to fix.
    */
-  | { type: 'view.active'; view: string | null; error?: string };
+  | { type: 'view.error'; view: string; phase: ViewErrorPhase; message: string; at: string };

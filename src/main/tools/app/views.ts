@@ -1,8 +1,19 @@
 import { z } from 'zod';
 import { clampedInt, defineTool, fail, ok, type ToolResult } from '../../../shared/tools';
 import { formatBytes } from '../../../shared/bytes';
-import { MAX_VIEW_FILE_BYTES, VIEW_ENTRY_FILE, VIEW_FILE_EXTENSIONS, VIEW_NAME_PATTERN, VIEW_PREVIEW_MAX_MS } from '../../../shared/views';
+import {
+  MAX_VIEW_FILE_BYTES,
+  VIEW_CONSOLE_BYTES_MAX,
+  VIEW_CONSOLE_DEFAULT_LIMIT,
+  VIEW_CONSOLE_MAX_LIMIT,
+  VIEW_CONSOLE_TEXT_MAX,
+  VIEW_ENTRY_FILE,
+  VIEW_FILE_EXTENSIONS,
+  VIEW_NAME_PATTERN,
+  VIEW_PREVIEW_MAX_MS,
+} from '../../../shared/views';
 import { VIEW_API_CONTRACT, VIEW_STARTERS } from '../../views/api';
+import { boundConsoleEntries } from '../../views/errors';
 import type { AppToolCtx } from './context';
 
 const WHAT_IT_IS =
@@ -104,7 +115,13 @@ export const activateView = defineTool({
   args: z.strictObject({ view: ViewName }),
   execute: async (args, ctx: AppToolCtx): Promise<ToolResult> => {
     if (!ctx.views.store.exists(args.view)) return fail(`There is no view called ${args.view}`);
-    if (!ctx.views.store.hasIndex(args.view)) return fail(`${args.view} has no ${VIEW_ENTRY_FILE}; write one before activating it`);
+    if (!ctx.views.store.hasIndex(args.view)) {
+      // Nothing goes on screen, but the user asked for this view and is owed the same banner: a
+      // remembered view with no entry point is forgotten here rather than retried at the next start.
+      const message = `there is no ${VIEW_ENTRY_FILE} to load`;
+      ctx.views.failed(args.view, 'load', message);
+      return fail(`${args.view} has no ${VIEW_ENTRY_FILE}; write one before activating it`);
+    }
     const failure = await ctx.views.show(args.view);
     if (failure) return fail(`${args.view} could not be shown: ${failure}`);
     if (ctx.views.mode() !== 'confirm') {
@@ -174,14 +191,16 @@ export const deactivateView = defineTool({
 
 export const viewConsole = defineTool({
   name: 'xpilot_view_console',
-  description:
-    'Returns the console messages, preload failures and renderer crashes a view produced, newest last. This is how you debug a view: it has no devtools of its own. Omit `view` for every view.',
+  description: `Returns the console messages, preload failures and renderer crashes a view produced, newest last. Errors the view's own scripts threw are here too — uncaught exceptions, unhandled rejections and content-policy refusals — each with source:line:col when the view said where. This is how you debug a view: it has no devtools of its own. Omit \`view\` for every view. Newest first out of the caps: ${VIEW_CONSOLE_MAX_LIMIT} entries at most, ${VIEW_CONSOLE_TEXT_MAX} characters per line, ${VIEW_CONSOLE_BYTES_MAX / 1024} KB in all.`,
   args: z.strictObject({
     view: ViewName.optional().describe('The view to read; every view when omitted'),
-    limit: clampedInt(1, 200, 'How many entries to return', 50),
+    limit: clampedInt(1, VIEW_CONSOLE_MAX_LIMIT, 'How many entries to return', VIEW_CONSOLE_DEFAULT_LIMIT),
   }),
   annotations: { readOnlyHint: true },
-  execute: async (args, ctx: AppToolCtx) => ok({ view: args.view ?? null, entries: ctx.views.logs(args.view, args.limit) }),
+  execute: async (args, ctx: AppToolCtx) => {
+    const { entries, truncated } = boundConsoleEntries(ctx.views.logs(args.view, args.limit));
+    return ok({ view: args.view ?? null, entries, ...(truncated ? { truncated: true } : {}) });
+  },
 });
 
 export const viewInspect = defineTool({

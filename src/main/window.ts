@@ -87,7 +87,7 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
     },
     isSidebarCollapsed: () => collapsed,
     setOverlayView: (view) => {
-      if (overlay === view) return;
+      if (win.isDestroyed() || overlay === view) return;
       if (overlay) win.contentView.removeChildView(overlay);
       overlay = view;
       // Index 1: above the X page, below the sidebar and its floating handle.
