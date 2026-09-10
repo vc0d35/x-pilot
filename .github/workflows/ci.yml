@@ -42,3 +42,5 @@ jobs:
       # Playwright drives the Electron binary directly, so no browser download is needed. The two
       # tests that talk to x.com stay skipped: they only run when XPILOT_E2E_NETWORK is set.
       - run: npx playwright test
+        env:
+          DEBUG: pw:browser
