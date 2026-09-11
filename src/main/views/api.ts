@@ -20,7 +20,8 @@ The view's window has no network. fetch, XHR, WebSocket and any foreign URL are 
 window.xpilotView
   subscribe(feed, cb) -> unsubscribe()
     'page'   the page the user is on: { url, kind, post, visible } (the same context the sidebar gets)
-    'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s
+    'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s — the
+             re-read carries the whole post object, pictures and all
     Both call back immediately with what is known now, then on every change.
   call(tool, args) -> Promise<{ success: true, content } | { success: false, error }>
     reads:   x_get_page_state, x_read_visible_posts, x_read_current_post, x_read_post, x_search,
@@ -34,6 +35,14 @@ window.xpilotView
     At most ${VIEW_CALLS_PER_WINDOW} calls per ${VIEW_CALL_WINDOW_MS / 1000} s: subscribe to a feed rather than polling one.
   openInX(url) -> the same as call('x_navigate', { url })
   back() -> closes the view and puts the user back on X
+
+A post object carries its pictures as well as its words. media[] entries are
+{ kind: 'image' | 'video' | 'gif', alt?, url?, preview? } — url is the picture itself or a video's own
+file, preview a video's poster frame; cards[] entries carry image?; and the post carries authorAvatar.
+Every one of those is an https URL on a twimg.com host, which is exactly what this page's policy lets
+you put in an <img> or a <video>, so draw them as they are and never rewrite one. All four are
+optional — a video that plays from a blob has only a preview, an older post may have nothing — so
+check before you build the element rather than after.
 
 What the page may load: its own files, inline <style> (inline <script> is refused, so put JavaScript
 in a .js file and load it with <script type="module" src="app.js">), pictures from https://*.twimg.com
@@ -63,6 +72,9 @@ const MINIMAL_HTML = `<!doctype html>
   ol { list-style: none; margin: 0; padding: 8px 16px; }
   li { padding: 12px 0; border-bottom: 1px solid #1a1a21; cursor: pointer; }
   b { color: #8b98a5; font-weight: 600; }
+  .who { display: flex; align-items: center; gap: 8px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; }
+  .photo { display: block; max-width: 100%; margin-top: 8px; border-radius: 12px; }
   #error { margin: 0; padding: 8px 16px; color: #ffb4a9; background: #2a1414; font-size: 13px; }
   #error:empty { display: none; }
 </style>
@@ -93,13 +105,31 @@ async function call(tool, args) {
   return result;
 }
 
+/** An <img> for a twimg URL, or nothing: every picture on a post is optional. */
+function picture(url, alt, className) {
+  if (!url) return null;
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = alt || '';
+  img.loading = 'lazy';
+  img.className = className;
+  return img;
+}
+
 function render(post) {
   const li = document.createElement('li');
+  const head = document.createElement('div');
+  head.className = 'who';
   const who = document.createElement('b');
   who.textContent = '@' + post.authorHandle;
+  head.append(...[picture(post.authorAvatar, '', 'avatar'), who].filter(Boolean));
   const text = document.createElement('div');
   text.textContent = post.text;
-  li.append(who, text);
+  li.append(head, text);
+  // A video that plays from a blob has only its poster frame, so either URL is worth showing.
+  const media = (post.media || []).find((m) => m.url || m.preview);
+  const photo = media && picture(media.url || media.preview, media.alt || post.text, 'photo');
+  if (photo) li.append(photo);
   li.onclick = () => call('x_navigate', { url: post.url });
   return li;
 }
@@ -127,6 +157,8 @@ const THREE_HTML = `<!doctype html>
   button { position: fixed; top: 12px; right: 12px; background: #1d9bf0; border: 0; border-radius: 999px; color: #fff; padding: 6px 14px; cursor: pointer; }
   #flat { margin: 0; padding: 56px 16px 16px; list-style: none; overflow: auto; height: 100vh; box-sizing: border-box; }
   #flat li { padding: 12px 0; border-bottom: 1px solid #1a1a21; }
+  #flat img.avatar { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 8px; }
+  #flat img.photo { display: block; max-width: 100%; margin-top: 8px; border-radius: 12px; }
   #error { position: fixed; left: 0; right: 0; top: 0; margin: 0; padding: 8px 16px; background: #2a1414; color: #ffb4a9; font-size: 13px; }
   #error:empty { display: none; }
 </style>
@@ -160,13 +192,36 @@ try {
   show('WebGL is not available here (' + (err && err.message ? err.message : err) + '); showing the posts as a list.');
 }
 
+/**
+ * A post's pictures are plain <img> elements here rather than textures on the ring: a WebGL texture
+ * from another origin needs CORS the X CDN does not promise, while an <img> only needs the content
+ * policy, which already allows twimg.
+ */
+const picture = (url, alt, className) => {
+  if (!url) return null;
+  const img = document.createElement('img');
+  img.src = url;
+  img.alt = alt || '';
+  img.loading = 'lazy';
+  img.className = className;
+  return img;
+};
+
 if (!renderer) {
   flat.hidden = false;
   window.xpilotView.subscribe('posts', (posts) => {
     flat.replaceChildren(
       ...posts.map((post) => {
         const li = document.createElement('li');
-        li.textContent = '@' + post.authorHandle + ' — ' + post.text;
+        const text = document.createElement('span');
+        text.textContent = '@' + post.authorHandle + ' — ' + post.text;
+        const media = (post.media || []).find((m) => m.url || m.preview);
+        const parts = [
+          picture(post.authorAvatar, '', 'avatar'),
+          text,
+          media && picture(media.url || media.preview, media.alt || post.text, 'photo'),
+        ];
+        li.append(...parts.filter(Boolean));
         return li;
       }),
     );

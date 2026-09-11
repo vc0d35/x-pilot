@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { MEDIA_URL_MAX } from './media-url';
 
 /** The post a post quotes: another author's post, rendered inside the quoting one. */
 export const QuotedPostSchema = z.object({
@@ -9,12 +10,26 @@ export const QuotedPostSchema = z.object({
 });
 export type QuotedPost = z.infer<typeof QuotedPostSchema>;
 
-/** A link preview card attached to a post. */
-export const LinkCardSchema = z.object({ url: z.string().max(512), title: z.string().max(200) });
+/** A link preview card attached to a post; `image` is the card's picture, on one of X's own hosts. */
+export const LinkCardSchema = z.object({
+  url: z.string().max(512),
+  title: z.string().max(200),
+  image: z.string().max(MEDIA_URL_MAX).optional(),
+});
 export type LinkCard = z.infer<typeof LinkCardSchema>;
 
-/** An image or video attached to a post; `alt` is whatever description X carries, when it is not the generic one. */
-export const MediaSchema = z.object({ kind: z.enum(['image', 'video']), alt: z.string().max(1000).optional() });
+/**
+ * An image, video or GIF attached to a post. `alt` is whatever description X carries, when it is not
+ * the generic one; `url` is the picture itself or a video's own file, `preview` a video's poster
+ * frame. Every URL here came through `mediaUrl`, so it is https on one of X's own hosts or absent —
+ * a video played from a `blob:` source has no `url`, only a `preview`.
+ */
+export const MediaSchema = z.object({
+  kind: z.enum(['image', 'video', 'gif']),
+  alt: z.string().max(1000).optional(),
+  url: z.string().max(MEDIA_URL_MAX).optional(),
+  preview: z.string().max(MEDIA_URL_MAX).optional(),
+});
 export type Media = z.infer<typeof MediaSchema>;
 
 // Every string here is page-controlled and ends up persisted or in a prompt, so each one is bounded.
@@ -30,8 +45,10 @@ export const PostSchema = z.object({
   articleBody: z.string().max(200_000).nullable().optional(),
   stats: z.object({ replies: z.number(), reposts: z.number(), likes: z.number(), views: z.number() }).nullable().optional(),
   quoted: QuotedPostSchema.nullable().optional(),
+  /** The author's profile picture, on one of X's own hosts. */
+  authorAvatar: z.string().max(MEDIA_URL_MAX).optional(),
   cards: z.array(LinkCardSchema).max(8).optional(),
-  media: z.array(MediaSchema).max(8).optional(),
+  media: z.array(MediaSchema).max(4).optional(),
 });
 export type Post = z.infer<typeof PostSchema>;
 

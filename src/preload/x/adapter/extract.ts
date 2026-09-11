@@ -1,3 +1,4 @@
+import { mediaUrl } from '../../../shared/media-url';
 import type { LinkCard, Media, PageKind, Post, QuotedPost } from '../../../shared/page';
 import { RESERVED_TOP_LEVEL, SEL } from './selectors';
 
@@ -5,8 +6,10 @@ import { RESERVED_TOP_LEVEL, SEL } from './selectors';
 const TEXT_MAX = 20_000;
 const CARD_TITLE_MAX = 200;
 const ALT_MAX = 1000;
-/** X allows four images, and a card or a player is one thing more; the schemas allow eight of each. */
+/** X allows four images, and a card or a player is one thing more; the schema allows eight cards. */
 const ATTACHMENT_LIMIT = 8;
+/** `PostSchema.media`: four pictures is X's own limit, and a player stands where a picture would. */
+const MEDIA_LIMIT = 4;
 
 export function pageKindFromUrl(url: string): PageKind {
   let u: URL;
@@ -184,20 +187,61 @@ function extractCards(article: Element): LinkCard[] {
     const url = a?.href || a?.getAttribute('href') || '';
     if (!url) continue;
     const lines = cardLines(card);
-    out.push({ url: url.slice(0, 512), title: (lines.find((l) => !DOMAIN_LINE.test(l)) ?? '').slice(0, CARD_TITLE_MAX) });
+    const image = mediaUrl(card.querySelector('img')?.getAttribute('src'));
+    out.push({
+      url: url.slice(0, 512),
+      title: (lines.find((l) => !DOMAIN_LINE.test(l)) ?? '').slice(0, CARD_TITLE_MAX),
+      ...(image ? { image } : {}),
+    });
   }
   return out;
 }
 
+const GIF_LABEL = /\bGIF\b/;
+
+/**
+ * Whether the player is looping a GIF rather than playing a video. X marks it with no test id of its
+ * own: it prints a "GIF" badge over the player and serves the file from its `tweet_video` path, so
+ * either is taken as the mark. Only the label rides on this, never what is kept.
+ */
+function isGif(player: Element, video: Element | null): boolean {
+  if (GIF_LABEL.test(player.getAttribute('aria-label') ?? '') || GIF_LABEL.test(video?.getAttribute('aria-label') ?? '')) return true;
+  if ([...player.querySelectorAll('span, div')].some((el) => el.textContent?.trim() === 'GIF')) return true;
+  return `${video?.getAttribute('poster') ?? ''} ${video?.getAttribute('src') ?? ''}`.includes('tweet_video');
+}
+
+/**
+ * X serves a video's poster frame from a thumbnail path of its own, and a GIF's from another. Until
+ * the player mounts it renders that poster as an ordinary `tweetPhoto`, so the path is what says
+ * whether a post attached a picture or a video nobody has pressed play on yet.
+ */
+const VIDEO_THUMB = /\/(amplify_video_thumb|ext_tw_video_thumb|tweet_video_thumb)\//;
+
 function extractMedia(article: Element): Media[] {
   const out: Media[] = [];
+  const player = article.querySelector(SEL.videoPlayer);
   for (const img of article.querySelectorAll(SEL.tweetPhoto)) {
-    if (out.length >= ATTACHMENT_LIMIT) break;
+    if (out.length >= MEDIA_LIMIT) break;
+    // The player's own poster belongs to the player, which is read once, below.
+    if (player?.contains(img)) continue;
+    const src = img.getAttribute('src') ?? '';
+    const url = mediaUrl(src);
+    if (VIDEO_THUMB.test(src)) {
+      out.push({ kind: src.includes('tweet_video_thumb') ? 'gif' : 'video', ...(url ? { preview: url } : {}) });
+      continue;
+    }
     // X labels an undescribed image "Image", which tells the model nothing the `kind` does not.
     const alt = (img.getAttribute('alt') ?? '').trim();
-    out.push(alt && alt !== 'Image' ? { kind: 'image', alt: alt.slice(0, ALT_MAX) } : { kind: 'image' });
+    out.push({ kind: 'image', ...(alt && alt !== 'Image' ? { alt: alt.slice(0, ALT_MAX) } : {}), ...(url ? { url } : {}) });
   }
-  if (out.length < ATTACHMENT_LIMIT && article.querySelector(SEL.videoPlayer)) out.push({ kind: 'video' });
+  if (player && out.length < MEDIA_LIMIT) {
+    const video = player.querySelector('video');
+    // X plays most videos through a MediaSource, whose `src` is a blob: URL of the page's own
+    // making: `mediaUrl` drops it, and the poster frame is what is left to show.
+    const url = mediaUrl(video?.getAttribute('src'));
+    const preview = mediaUrl(video?.getAttribute('poster')) ?? mediaUrl(player.querySelector(SEL.tweetPhoto)?.getAttribute('src'));
+    out.push({ kind: isGif(player, video) ? 'gif' : 'video', ...(url ? { url } : {}), ...(preview ? { preview } : {}) });
+  }
   return out;
 }
 
@@ -240,6 +284,7 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
   const statsLabel = article.querySelector(SEL.statsGroup)?.getAttribute('aria-label') ?? '';
   const cards = extractCards(article);
   const media = extractMedia(article);
+  const avatar = mediaUrl(own(article, SEL.authorAvatar)?.getAttribute('src'));
   return {
     id,
     url: `https://x.com/${handle}/status/${id}`,
@@ -250,6 +295,7 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
     kind: 'post',
     stats: statsLabel ? parseStats(statsLabel) : null,
     quoted: extractQuoted(article),
+    ...(avatar ? { authorAvatar: avatar } : {}),
     ...(cards.length > 0 ? { cards } : {}),
     ...(media.length > 0 ? { media } : {}),
   };

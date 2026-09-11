@@ -31,6 +31,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Roll my timeline until you find a post by @dhh" → the visible window scrolls (x_scroll + x_read_visible_posts).
 - [ ] Open a post that quotes another post; "what does the quoted post say?" is answered from the quote, and "what did the author themselves write?" from the post's own text.
 - [ ] Open a post with a link card; "what is that link?" → the agent knows the URL and the headline without opening it. A post with images: "what is in the picture?" → it reports the alt text, or that there is an image it cannot see.
+- [ ] Open a post with a photo; "what is the URL of that image?" → a `https://pbs.twimg.com/media/…` one (from `x_read_current_post`, not from the fenced hint, which still says only `media: image "…"`). A post with a video: the same question gives the poster frame's URL. A post whose picture X serves from anywhere else, or from `http`, gives no URL at all rather than a patched-up one.
 - [ ] Open an X Article; "summarise this article" returns title + body.
 - [ ] Open an X Article directly by URL (not from the timeline): "summarise this article" works and the chip shows the article title.
 
@@ -66,6 +67,7 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Build me a view that shows the posts on my timeline as cards" → the agent calls xpilot_view_api first, writes index.html and app.js, and the view appears in place of the X page with a "Keep this view?" card (Keep / Adjust… / Revert). Revert puts x.com back and the agent reports the decision rather than retrying; Adjust… ("bigger cards") takes it off and comes back with a rewrite; Keep leaves it up and the sidebar carries a "Custom view: <name>" banner with "Back to X".
 - [ ] While the view is up: scrolling the timeline is impossible with the mouse (the X page is underneath), but the view's own "load more" button (x_scroll) brings new posts in and the list updates within about three seconds without the agent doing anything.
 - [ ] Click a post in the view → the X page underneath navigates (openInX), and "Back to X" shows it already on that post.
+- [ ] Scroll to a post with a photo, then "show the pictures in the view too" → the view draws the image and the author's avatars, loaded straight from twimg with no network of its own; a post with no picture keeps its row, with nothing missing.
 - [ ] Ask the agent to change a colour → the file is rewritten and the view on screen reloads by itself, with no card (only activation is confirmed).
 - [ ] Edit `<profile>/views/<name>/app.js` in your own editor and save → the same reload. Settings → Page config → Views → "Open folder" opens the views folder.
 - [ ] Put `console.log('hello')` and a deliberate `throw` in the view → "what is the view logging?" (xpilot_view_console) shows both lines, the thrown one as an error with `app.js:<line>:<col>`; "what did the view render?" (xpilot_view_inspect) shows the markup.

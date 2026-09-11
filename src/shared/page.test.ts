@@ -40,9 +40,43 @@ describe('PostSchema caps', () => {
     expect(PostSchema.safeParse(post({ cards: [{ url: 'https://t.co/x', title: 'x'.repeat(201) }] })).success).toBe(false);
     expect(PostSchema.safeParse(post({ cards: Array(9).fill({ url: 'https://t.co/x', title: 'A' }) })).success).toBe(false);
 
-    expect(PostSchema.safeParse(post({ media: [{ kind: 'image', alt: 'a chart' }, { kind: 'video' }] })).success).toBe(true);
-    expect(PostSchema.safeParse(post({ media: [{ kind: 'gif' }] })).success).toBe(false);
+    expect(PostSchema.safeParse(post({ media: [{ kind: 'image', alt: 'a chart' }, { kind: 'video' }, { kind: 'gif' }] })).success).toBe(
+      true,
+    );
+    expect(PostSchema.safeParse(post({ media: [{ kind: 'audio' }] })).success).toBe(false);
     expect(PostSchema.safeParse(post({ media: [{ kind: 'image', alt: 'x'.repeat(1001) }] })).success).toBe(false);
+  });
+
+  it('accepts the media URLs and caps their length and their number', () => {
+    const url = 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&name=small';
+    const poster = 'https://pbs.twimg.com/amplify_video_thumb/1889404481/img/ZJ0mCxQ0.jpg';
+    expect(
+      PostSchema.safeParse(
+        post({
+          media: [
+            { kind: 'image', url },
+            { kind: 'video', preview: poster },
+          ],
+        }),
+      ).success,
+    ).toBe(true);
+    expect(PostSchema.safeParse(post({ media: [{ kind: 'image', url: 'x'.repeat(513) }] })).success).toBe(false);
+    expect(PostSchema.safeParse(post({ media: [{ kind: 'video', preview: 'x'.repeat(513) }] })).success).toBe(false);
+    // Four pictures is X's own limit, and a player stands where a picture would.
+    expect(PostSchema.safeParse(post({ media: Array(4).fill({ kind: 'image', url }) })).success).toBe(true);
+    expect(PostSchema.safeParse(post({ media: Array(5).fill({ kind: 'image', url }) })).success).toBe(false);
+
+    expect(PostSchema.safeParse(post({ cards: [{ url: 'https://t.co/x', title: 'A', image: url }] })).success).toBe(true);
+    expect(PostSchema.safeParse(post({ cards: [{ url: 'https://t.co/x', title: 'A', image: 'x'.repeat(513) }] })).success).toBe(false);
+
+    expect(PostSchema.safeParse(post({ authorAvatar: url })).success).toBe(true);
+    expect(PostSchema.safeParse(post({ authorAvatar: 'x'.repeat(513) })).success).toBe(false);
+  });
+
+  it('leaves the visible-post hint without media: the fence says what is attached, not where it lives', () => {
+    const visible = { id: '1', url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'hi' };
+    const parsed = VisiblePostSchema.parse({ ...visible, media: [{ kind: 'image', url: 'https://pbs.twimg.com/media/x.jpg' }] });
+    expect(parsed).not.toHaveProperty('media');
   });
 
   it('caps the visible-post fields too', () => {

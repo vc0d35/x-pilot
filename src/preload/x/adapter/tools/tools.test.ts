@@ -163,11 +163,19 @@ describe('preload tools', () => {
     document.body.innerHTML = fixture('x-timeline.html');
     const r = (await run(readVisiblePosts, {})) as { content: { id: string; cards?: unknown[]; media?: unknown[] }[] };
     expect(r.content.find((p) => p.id === '333')?.cards).toEqual([
-      { url: 'https://t.co/abc123', title: 'Electron 40 ships a new renderer' },
+      {
+        url: 'https://t.co/abc123',
+        title: 'Electron 40 ships a new renderer',
+        image: 'https://pbs.twimg.com/card_img/1889404481/ZJ0mCxQ0?format=jpg&name=800x320_1',
+      },
     ]);
     expect(r.content.find((p) => p.id === '444')?.media).toEqual([
-      { kind: 'image', alt: 'A chart of release cadence since 2013' },
-      { kind: 'image' },
+      {
+        kind: 'image',
+        alt: 'A chart of release cadence since 2013',
+        url: 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&name=small',
+      },
+      { kind: 'image', url: 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWw?format=jpg&name=small' },
     ]);
   });
 

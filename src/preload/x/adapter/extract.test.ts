@@ -267,10 +267,16 @@ describe('quoted posts, cards and media', () => {
     });
   });
 
-  it('reads a link card as its target and its headline, skipping the domain line', () => {
+  it('reads a link card as its target, its headline and its picture, skipping the domain line', () => {
     document.body.innerHTML = fixture('x-timeline.html');
     const card = extractVisiblePosts(document).find((p) => p.id === '333')!;
-    expect(card.cards).toEqual([{ url: 'https://t.co/abc123', title: 'Electron 40 ships a new renderer' }]);
+    expect(card.cards).toEqual([
+      {
+        url: 'https://t.co/abc123',
+        title: 'Electron 40 ships a new renderer',
+        image: 'https://pbs.twimg.com/card_img/1889404481/ZJ0mCxQ0?format=jpg&name=800x320_1',
+      },
+    ]);
     expect(card.media).toBeUndefined();
   });
 
@@ -291,13 +297,122 @@ describe('quoted posts, cards and media', () => {
     ]);
   });
 
-  it('reads attached images with their alt text, and a player as one video', () => {
+  it('reads attached images with their alt text and their URL, and a player as one video', () => {
     document.body.innerHTML = fixture('x-timeline.html');
     const photos = extractVisiblePosts(document).find((p) => p.id === '444')!;
     // The second image is labelled "Image", which says nothing the kind does not.
-    expect(photos.media).toEqual([{ kind: 'image', alt: 'A chart of release cadence since 2013' }, { kind: 'image' }]);
+    expect(photos.media).toEqual([
+      {
+        kind: 'image',
+        alt: 'A chart of release cadence since 2013',
+        url: 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&name=small',
+      },
+      { kind: 'image', url: 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWw?format=jpg&name=small' },
+    ]);
     expect(photos.cards).toBeUndefined();
     document.querySelectorAll(SEL.article)[4].insertAdjacentHTML('beforeend', '<div data-testid="videoPlayer"><video></video></div>');
     expect(extractVisiblePosts(document).find((p) => p.id === '444')!.media).toContainEqual({ kind: 'video' });
+  });
+
+  it("reads the author's avatar, and not the avatar of the post they quote", () => {
+    document.body.innerHTML = fixture('x-status-quote.html');
+    const url = 'https://x.com/pilvar222/status/2098139345328959887';
+    expect(extractPost(findMainArticle(document, url)!, url)!.authorAvatar).toBe(
+      'https://pbs.twimg.com/profile_images/1833196679610175488/Cjtuov9z_normal.jpg',
+    );
+    document.body.innerHTML = fixture('x-timeline.html');
+    const posts = extractVisiblePosts(document);
+    expect(posts.find((p) => p.id === '444')!.authorAvatar).toBe(
+      'https://pbs.twimg.com/profile_images/719163421934137344/RsnjNy0I_normal.jpg',
+    );
+    // The fixtures' other posts carry no avatar at all, and a missing field is not an empty one.
+    expect(posts.find((p) => p.id === '111')).not.toHaveProperty('authorAvatar');
+  });
+
+  it('reads a video player as its poster frame, and an https source when there is one', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const poster = 'https://pbs.twimg.com/amplify_video_thumb/1889404481/img/ZJ0mCxQ0.jpg';
+    const src = 'https://video.twimg.com/amplify_video/1889404481/vid/avc1/1280x720/ZJ0mCxQ0.mp4';
+    const player = (video: string) => {
+      const article = document.querySelectorAll(SEL.article)[1];
+      article.querySelector('[data-testid="videoPlayer"]')?.remove();
+      article.insertAdjacentHTML('beforeend', `<div data-testid="videoPlayer">${video}</div>`);
+      return extractVisiblePosts(document).find((p) => p.id === '222')!.media;
+    };
+    expect(player(`<video poster="${poster}" src="${src}"></video>`)).toEqual([{ kind: 'video', url: src, preview: poster }]);
+    // X plays most videos from a MediaSource: the blob: source is dropped and the poster is all there is.
+    expect(player(`<video poster="${poster}" src="blob:https://x.com/8b3c-4f2a"></video>`)).toEqual([{ kind: 'video', preview: poster }]);
+  });
+
+  it('reads a video whose player has not mounted yet as its poster frame, not as a picture', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const article = document.querySelectorAll(SEL.article)[1];
+    const thumb = (path: string) => `https://pbs.twimg.com/${path}/2097703920818954240/img/1NledwbaMPwHmGfb?format=jpg&name=medium`;
+    const poster = (src: string) => {
+      article.querySelector('[data-testid="tweetPhoto"]')?.remove();
+      article.insertAdjacentHTML('beforeend', `<div data-testid="tweetPhoto"><img alt="Embedded video" src="${src}" /></div>`);
+      return extractVisiblePosts(document).find((p) => p.id === '222')!.media;
+    };
+    expect(poster(thumb('amplify_video_thumb'))).toEqual([{ kind: 'video', preview: thumb('amplify_video_thumb') }]);
+    expect(poster(thumb('ext_tw_video_thumb'))).toEqual([{ kind: 'video', preview: thumb('ext_tw_video_thumb') }]);
+    expect(poster(thumb('tweet_video_thumb'))).toEqual([{ kind: 'gif', preview: thumb('tweet_video_thumb') }]);
+  });
+
+  it('counts a mounted player once, taking its poster from the photo it wraps', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const poster = 'https://pbs.twimg.com/amplify_video_thumb/1889404481/img/ZJ0mCxQ0.jpg';
+    document
+      .querySelectorAll(SEL.article)[1]
+      .insertAdjacentHTML(
+        'beforeend',
+        `<div data-testid="videoPlayer"><div data-testid="tweetPhoto"><img alt="Embedded video" src="${poster}" /></div><video src="blob:https://x.com/8b3c"></video></div>`,
+      );
+    expect(extractVisiblePosts(document).find((p) => p.id === '222')!.media).toEqual([{ kind: 'video', preview: poster }]);
+  });
+
+  it('calls a looping attachment a gif, by the badge X prints or by the path it serves it from', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const gif = (player: string) => {
+      const article = document.querySelectorAll(SEL.article)[1];
+      article.querySelector('[data-testid="videoPlayer"]')?.remove();
+      article.insertAdjacentHTML('beforeend', player);
+      return extractVisiblePosts(document).find((p) => p.id === '222')!.media![0].kind;
+    };
+    expect(gif('<div data-testid="videoPlayer"><video></video><span>GIF</span></div>')).toBe('gif');
+    expect(gif('<div data-testid="videoPlayer" aria-label="Embedded GIF"><video></video></div>')).toBe('gif');
+    expect(gif('<div data-testid="videoPlayer"><video src="https://video.twimg.com/tweet_video/ZJ0mCxQ0.mp4"></video></div>')).toBe('gif');
+    expect(gif('<div data-testid="videoPlayer"><video></video><span>0:42</span></div>')).toBe('video');
+  });
+
+  it("drops every media URL that is not https on one of X's own hosts, and never rewrites one", () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const photo = document.querySelectorAll(SEL.tweetPhoto)[0];
+    const avatar = document.querySelector(SEL.authorAvatar)!;
+    const cardImage = document.querySelector(`${SEL.linkCard} img`)!;
+    for (const bad of [
+      'data:image/png;base64,iVBORw0KGgo=',
+      'http://pbs.twimg.com/media/HR7XqfOWAAcGIWv.jpg',
+      'https://evil.test/media/HR7XqfOWAAcGIWv.jpg',
+      'https://twimg.com.evil.test/media/HR7XqfOWAAcGIWv.jpg',
+    ]) {
+      photo.setAttribute('src', bad);
+      avatar.setAttribute('src', bad);
+      cardImage.setAttribute('src', bad);
+      const posts = extractVisiblePosts(document);
+      expect(posts.find((p) => p.id === '444')!.media![0]).toEqual({ kind: 'image', alt: 'A chart of release cadence since 2013' });
+      expect(posts.find((p) => p.id === '444')).not.toHaveProperty('authorAvatar');
+      expect(posts.find((p) => p.id === '333')!.cards![0]).not.toHaveProperty('image');
+    }
+  });
+
+  it('keeps at most four media entries, dropping the player when four pictures already filled them', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const article = document.querySelectorAll(SEL.article)[4];
+    const src = 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWx?format=jpg&name=small';
+    for (let i = 0; i < 6; i++) article.insertAdjacentHTML('beforeend', `<div data-testid="tweetPhoto"><img alt="" src="${src}" /></div>`);
+    article.insertAdjacentHTML('beforeend', '<div data-testid="videoPlayer"><video></video></div>');
+    const media = extractVisiblePosts(document).find((p) => p.id === '444')!.media!;
+    expect(media).toHaveLength(4);
+    expect(media.map((m) => m.kind)).toEqual(['image', 'image', 'image', 'image']);
   });
 });

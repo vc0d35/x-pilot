@@ -40,7 +40,9 @@
       <div data-testid="tweetText"><span>Worth a read</span></div>
       <div data-testid="card.wrapper">
         <a href="https://t.co/abc123" role="link">
-          <div data-testid="card.layoutLarge.media"><img alt="" src="c.png" /></div>
+          <div data-testid="card.layoutLarge.media">
+            <img alt="" src="https://pbs.twimg.com/card_img/1889404481/ZJ0mCxQ0?format=jpg&amp;name=800x320_1" />
+          </div>
           <div data-testid="card.layoutLarge.detail">
             <div dir="ltr"><span>theverge.com</span></div>
             <div dir="ltr"><span>Electron 40 ships a new renderer</span></div>
@@ -56,9 +58,16 @@
         <a role="link" href="/dave"><span>@dave</span></a>
       </div>
       <a href="/dave/status/444" role="link"><time datetime="2026-09-04T09:00:00.000Z">Sep 4</time></a>
+      <div data-testid="Tweet-User-Avatar">
+        <div data-testid="UserAvatar-Container-dave">
+          <a href="/dave" role="link"><img alt="" src="https://pbs.twimg.com/profile_images/719163421934137344/RsnjNy0I_normal.jpg" /></a>
+        </div>
+      </div>
       <div data-testid="tweetText"><span>Look at this</span></div>
-      <div data-testid="tweetPhoto"><img alt="A chart of release cadence since 2013" src="p.png" /></div>
-      <div data-testid="tweetPhoto"><img alt="Image" src="q.png" /></div>
+      <div data-testid="tweetPhoto">
+        <img alt="A chart of release cadence since 2013" src="https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&amp;name=small" />
+      </div>
+      <div data-testid="tweetPhoto"><img alt="Image" src="https://pbs.twimg.com/media/HR7XqfOWAAcGIWw?format=jpg&amp;name=small" /></div>
       <div role="group" aria-label="0 replies, 0 reposts, 0 likes, 7 views"><button data-testid="like"></button></div>
     </article>
   </section>

@@ -22,6 +22,8 @@ function attachmentLines(cards: LinkCard[] | undefined, media: Media[] | undefin
     const title = fenceLine(c.title, TITLE_MAX);
     lines.push(`link: ${title ? `${title} ` : ''}${fenceLine(c.url, URL_MAX)}`);
   }
+  // The hint says what is attached, not where it lives: a post's media URLs are long, they buy the
+  // model nothing it can see, and the read tools carry them for anything that actually renders one.
   for (const m of media ?? []) lines.push(`media: ${fenceLine(m.kind, 16)}${m.alt ? ` "${fenceLine(m.alt, ALT_MAX)}"` : ''}`);
   return lines;
 }
