@@ -32,6 +32,8 @@ vi.mock('electron', async () => {
     reloadIgnoringCache(): void {
       this.reloads += 1;
     }
+    stop(): void {}
+    setAudioMuted(): void {}
     close(): void {
       this.destroyed = true;
     }

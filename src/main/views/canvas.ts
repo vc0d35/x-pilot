@@ -163,6 +163,7 @@ export class ViewCanvas {
     this.errors.activated(name);
     if (!was) this.deps.mount(view);
     view.setBounds(this.deps.bounds());
+    view.webContents.setAudioMuted(false);
     // Said before the load, not after: the canvas is on screen from here, the bridge's subscriptions
     // are the old document's and have to go before the new one makes its own, and anything the page
     // says on its way up — an error thrown out of a module — has to arrive after the view it is about.
@@ -190,8 +191,11 @@ export class ViewCanvas {
     this.previewingView = false;
     if (this.view && !this.view.webContents.isDestroyed()) {
       this.deps.unmount(this.view);
-      // Nothing of the view keeps running behind the X page: the canvas is left on a blank page.
-      void this.view.webContents.loadURL('about:blank').catch(() => {});
+      // No navigation on hide: a blank-page load racing the next activation's load on a view whose
+      // visibility just flipped crashed Electron (SIGSEGV on CI). The hidden page is stopped and
+      // muted instead, and the next activation replaces it.
+      this.view.webContents.stop();
+      this.view.webContents.setAudioMuted(true);
     }
     if (wasActive) this.deps.onActive(null);
   }
@@ -305,7 +309,6 @@ export class ViewCanvas {
         contextIsolation: true,
         nodeIntegration: false,
         sandbox: true,
-        backgroundThrottling: false,
       },
     });
     const contents = view.webContents;
