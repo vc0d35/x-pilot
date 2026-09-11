@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { IPC } from '../shared/ipc';
 import { PageContextSchema, type PageContext } from '../shared/page';
 import type { PageConfigStatus } from '../shared/sidebar-api';
-import type { ViewsStatus } from '../shared/views';
+import type { ViewListEntry, ViewsStatus } from '../shared/views';
 import { isOpenablePdf } from './library/paths';
 import type { AgentEvent } from '../shared/agent';
 import type { AgentController } from './agent/controller';
@@ -21,6 +21,8 @@ import { isSafeExecutable } from './agent/binary';
 const ProviderSchema = z.object({ provider: z.enum(PROVIDER_KINDS) });
 const ProviderBinaryActionSchema = z.object({ provider: z.enum(PROVIDER_KINDS), action: z.enum(['choose', 'clear']) });
 const PageConfigKindSchema = z.object({ kind: z.enum(['styles', 'selectors']) });
+/** A view name is checked properly by the switcher; this only keeps a wedged renderer's string short. */
+const ViewNameSchema = z.object({ name: z.string().max(100) });
 import type { BridgeIpc } from './adapter/bridge';
 
 export interface SidebarIpcDeps {
@@ -42,10 +44,13 @@ export interface SidebarIpcDeps {
   selectors: SelectorOverrides;
   libraryDir: () => string;
   openPath: (p: string) => Promise<string>;
-  /** The custom views: what there is, what is on screen, and where the folder lives. */
+  /** The custom views: what there is, what is on screen, where the folder lives, and switching them. */
   views: {
     status: () => ViewsStatus;
-    deactivate: () => void;
+    list: () => ViewListEntry[];
+    activate: (view: string) => Promise<ViewListEntry[]>;
+    deactivate: () => ViewListEntry[];
+    remove: (view: string) => ViewListEntry[];
     dir: () => string;
     active: () => string | null;
   };
@@ -302,10 +307,26 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     IPC.viewsStatus,
     guarded(() => views.status()),
   );
+  ipcMain.handle(
+    IPC.viewsList,
+    guarded(() => views.list()),
+  );
+  // Activating from Settings is the user acting, so the view goes on screen and is remembered with
+  // no card at all: the "Keep this view?" question exists because the agent decided, not the user.
+  // Every one of these answers with the new list, so the panel that asked cannot be left stale.
+  ipcMain.handle(
+    IPC.viewsActivate,
+    guarded((_e, raw) => views.activate(ViewNameSchema.parse(raw).name)),
+  );
   // Back to X from the banner or the Settings row: the user's own decision, so nothing is confirmed.
   ipcMain.handle(
     IPC.viewsDeactivate,
     guarded(() => views.deactivate()),
+  );
+  // The confirm() is in the sidebar, where the user clicked Delete; a view on screen comes off first.
+  ipcMain.handle(
+    IPC.viewsDelete,
+    guarded((_e, raw) => views.remove(ViewNameSchema.parse(raw).name)),
   );
   // The views folder and nothing else: the path is ours, never one a renderer sent.
   ipcMain.handle(

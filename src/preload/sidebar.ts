@@ -41,7 +41,10 @@ const api: XPilotApi = {
   openPageConfig: (kind) => ipcRenderer.invoke(IPC.pageConfigOpen, { kind }),
   resetPageConfig: (kind) => ipcRenderer.invoke(IPC.pageConfigReset, { kind }),
   viewsStatus: () => ipcRenderer.invoke(IPC.viewsStatus),
+  listViews: () => ipcRenderer.invoke(IPC.viewsList),
+  activateView: (name) => ipcRenderer.invoke(IPC.viewsActivate, { name }),
   deactivateView: () => ipcRenderer.invoke(IPC.viewsDeactivate),
+  deleteView: (name) => ipcRenderer.invoke(IPC.viewsDelete, { name }),
   openViewsFolder: () => ipcRenderer.invoke(IPC.viewsOpenFolder),
   setProviderBinary: (provider, action) => ipcRenderer.invoke(IPC.settingsProviderBinary, { provider, action }),
   clearHistory: () => ipcRenderer.invoke(IPC.historyClear),
@@ -54,6 +57,7 @@ const api: XPilotApi = {
   onSettings: subscribe(IPC.settingsChanged),
   onSidebarCollapsed: subscribe(IPC.sidebarCollapsed),
   onFocusInput: subscribe(IPC.sidebarFocusInput),
+  onViewsChanged: subscribe(IPC.viewsChanged),
 };
 
 contextBridge.exposeInMainWorld('xpilot', api);

@@ -1,8 +1,8 @@
 import type { AgentEvent, ProviderKind, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
-import type { ViewsStatus } from './views';
-export type { ViewsStatus, ViewSummary } from './views';
+import type { ViewListEntry, ViewsStatus } from './views';
+export type { ViewListEntry, ViewsStatus, ViewSummary } from './views';
 
 export interface ModelInfo {
   id: string;
@@ -142,8 +142,17 @@ export interface XPilotApi {
   resetPageConfig(kind: PageConfigKind): Promise<PageConfigStatus>;
   /** The custom views in the profile and which one is on screen. */
   viewsStatus(): Promise<ViewsStatus>;
+  /** Every view folder, with the one on screen marked. Each switching call answers with it again. */
+  listViews(): Promise<ViewListEntry[]>;
+  /**
+   * Shows a view now. The user asking is the whole decision, so there is no "Keep this view?" card:
+   * it goes on screen and is remembered for the next start. Rejects with why, if it cannot be shown.
+   */
+  activateView(name: string): Promise<ViewListEntry[]>;
   /** Back to X: takes the custom view off the screen and forgets it for the next start. */
-  deactivateView(): Promise<void>;
+  deactivateView(): Promise<ViewListEntry[]>;
+  /** Deletes a view's folder and every file in it; a view on screen is taken off first. */
+  deleteView(name: string): Promise<ViewListEntry[]>;
   /** Opens the views folder in the file manager; only that folder. */
   openViewsFolder(): Promise<void>;
   /** Picks that provider's binary with a file dialog, or clears it; returns the new path. */
@@ -159,5 +168,7 @@ export interface XPilotApi {
   /** Transcript events of a scheduled run, so a run opened from History streams while it runs. */
   onConversationEvent(cb: (m: ConversationEventMessage) => void): () => void;
   onFocus(cb: (ctx: PageContext | null) => void): () => void;
+  /** The views list changed: a file was written, or a view went on or off the screen. */
+  onViewsChanged(cb: (views: ViewListEntry[]) => void): () => void;
   onSettings(cb: (s: Settings) => void): () => void;
 }

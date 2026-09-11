@@ -71,6 +71,7 @@ async function start(): Promise<void> {
         agent: xpilot.agent,
         views: xpilot.views,
         viewCanvas: xpilot.viewCanvas,
+        viewSwitcher: xpilot.viewSwitcher,
       };
     await xpilot.launch();
   } catch (err) {

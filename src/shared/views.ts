@@ -129,6 +129,18 @@ export interface ViewErrorReport {
   column?: number;
 }
 
+/**
+ * One row of the Settings views list and one item of the View menu: enough to offer the view and to
+ * say why it cannot be offered. `bytes` is deliberately absent — nothing in either surface shows it.
+ */
+export interface ViewListEntry {
+  name: string;
+  files: number;
+  hasIndex: boolean;
+  /** True for the view on screen, which the two surfaces mark and offer "Back to X" for instead. */
+  active: boolean;
+}
+
 /** What the sidebar shows in the Views row: which view is up, where they live, and what there is. */
 export interface ViewsStatus {
   active: string | null;

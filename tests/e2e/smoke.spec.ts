@@ -56,6 +56,13 @@ type Harness = {
     contents(): { executeJavaScript(c: string): Promise<unknown>; getURL(): string } | null;
     logs: { get(view?: string, limit?: number): { text: string }[] };
   };
+  /** What Settings and the View menu call: the same functions, with no card in front of them. */
+  viewSwitcher: {
+    list(): { name: string; files: number; hasIndex: boolean; active: boolean }[];
+    activate(name: string): Promise<unknown>;
+    deactivate(): unknown;
+    remove(name: string): unknown;
+  };
   approvals: {
     onEvent(
       cb: (e: {
@@ -451,6 +458,36 @@ test('a view with no index.html falls back to X, and is not remembered for the n
   await expect.poll(() => inMain((t) => t.settings.get().views.active), { timeout: 15_000 }).toBeNull();
   await expect.poll(sidebarText, { timeout: 15_000 }).toContain('Custom view “gone” failed');
   await inMain((t) => t.views.delete('gone'));
+});
+
+/**
+ * The user's own path onto a view: Settings and the View menu go through the switcher, not through
+ * the agent's tool, so a view goes on screen with no card even while views are set to confirm.
+ */
+test('activating from Settings shows the view with no card, and Back to X clears what is remembered', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      (globalThis as { __cards?: Card[] }).__cards!.length = 0;
+      // Confirm mode is what the agent's own activation would raise a card under.
+      t.settings.update({ views: { mode: 'confirm' } });
+      t.views.write('switch-me', 'index.html', files.index);
+      t.views.write('switch-me', 'app.js', files.app);
+      return t.viewSwitcher.activate('switch-me');
+    },
+    { index: VIEW_INDEX, app: WRITER_APP },
+  );
+  expect(await inMain((t) => t.viewCanvas.active())).toBe('switch-me');
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  expect(await inMain((t) => t.settings.get().views.active)).toBe('switch-me');
+  expect(await cards()).toEqual([]);
+  expect(await inMain((t) => t.viewSwitcher.list())).toContainEqual({ name: 'switch-me', files: 2, hasIndex: true, active: true });
+  await inMain((t) => t.viewSwitcher.deactivate());
+  expect(await inMain((t) => t.viewCanvas.active())).toBeNull();
+  await expect.poll(() => inMain((t) => t.settings.get().views.active), { timeout: 15_000 }).toBeNull();
+  await inMain((t) => t.viewSwitcher.remove('switch-me'));
+  expect(await inMain((t) => t.viewSwitcher.list().map((v) => v.name))).not.toContain('switch-me');
+  await inMain((t) => t.settings.update({ views: { mode: 'autonomous' } }));
 });
 
 test('external links are routed to the system browser', async () => {

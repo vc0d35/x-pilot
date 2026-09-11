@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DeepPartial, PostingMode, Settings, StylesMode, ViewsMode } from '../../shared/settings';
 import { confirmPostingMode, confirmStylesMode, confirmViewsMode } from '../posting-mode';
-import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus, ViewsStatus } from '../../shared/sidebar-api';
+import type { HistoryStats, ModelList, PageConfigKind, PageConfigStatus, ViewListEntry, ViewsStatus } from '../../shared/sidebar-api';
 import { LIBRARY_FOLDER_NAME } from '../../shared/constants';
 import { formatBytes } from '../../shared/bytes';
 import { PROVIDER_KINDS, PROVIDER_LABELS, type ProviderKind } from '../../shared/agent';
@@ -9,6 +9,74 @@ import { modelLabel, providerState } from '../provider-ui';
 import { providerFixHint } from '../setup';
 
 const set = (patch: DeepPartial<Settings>) => void window.xpilot.setSettings(patch);
+
+const message = (err: unknown): string => (err instanceof Error ? err.message : String(err));
+
+/**
+ * Every custom view in the profile, so the user can show one they already have without asking the
+ * agent for it. Activating here is the user acting: the view goes straight on screen and is
+ * remembered, with no "Keep this view?" card — that card is for a view the agent decided to show.
+ */
+function ViewsSection(props: { dir: string | null }) {
+  const [views, setViews] = useState<ViewListEntry[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void window.xpilot.listViews().then(setViews, () => setViews([]));
+    // Main pushes the list whenever a file is written or a view goes on or off the screen, so a
+    // view the agent just wrote appears here without the panel being reopened.
+    return window.xpilot.onViewsChanged(setViews);
+  }, []);
+  /** Every switching call answers with the new list, so one round trip both acts and refreshes. */
+  const act = (p: Promise<ViewListEntry[]>) => {
+    setError(null);
+    void p.then(setViews, (err: unknown) => setError(message(err)));
+  };
+
+  return (
+    <fieldset className="settings-group">
+      <legend>Custom views</legend>
+      {views.length === 0 && (
+        <p className="hint">No custom views yet. Ask the agent in the chat for one, e.g. “show my timeline as cards”.</p>
+      )}
+      {views.map((v) => (
+        <div className="row" key={v.name}>
+          <code>{v.name}</code>
+          <span className="badge">
+            {v.files} file{v.files === 1 ? '' : 's'}
+          </span>
+          {v.active && <span className="badge">on screen</span>}
+          {!v.hasIndex && <span className="badge">no index.html</span>}
+          <div className="spacer" />
+          {v.active ? (
+            <button onClick={() => act(window.xpilot.deactivateView())}>Back to X</button>
+          ) : (
+            <button disabled={!v.hasIndex} onClick={() => act(window.xpilot.activateView(v.name))}>
+              Activate
+            </button>
+          )}
+          <button
+            className="danger"
+            onClick={() => {
+              if (confirm(`Delete the view “${v.name}” and every file in it?`)) act(window.xpilot.deleteView(v.name));
+            }}
+          >
+            Delete
+          </button>
+        </div>
+      ))}
+      {error && <p className="hint">{error}</p>}
+      <div className="row">
+        <button onClick={() => void window.xpilot.openViewsFolder()}>Open folder</button>
+      </div>
+      <p className="hint">
+        {dirHint(props.dir)}Custom views are whole UIs the agent writes and XPilot shows in place of the X page. A view has no network and
+        reads the page underneath through XPilot; edit the files here and the view reloads. ⌘⇧X, or Back to X, puts the X page back.
+      </p>
+    </fieldset>
+  );
+}
+
+const dirHint = (dir: string | null): string => (dir ? `In ${dir} · ` : '');
 
 /**
  * Which backend answers, and the settings of the one that does. Both are offered whatever is in
@@ -201,6 +269,7 @@ export function SettingsPanel({
 }) {
   const [stats, setStats] = useState<HistoryStats | null>(null);
   const [pageConfig, setPageConfig] = useState<PageConfigStatus | null>(null);
+  // Only for the folder path, which the views block names; the rows come from listViews().
   const [views, setViews] = useState<ViewsStatus | null>(null);
   useEffect(() => {
     void window.xpilot
@@ -215,12 +284,9 @@ export function SettingsPanel({
       .then(setPageConfig)
       .catch(() => setPageConfig(null));
   }, [settings]);
-  const refreshViews = () =>
-    void window.xpilot
-      .viewsStatus()
-      .then(setViews)
-      .catch(() => setViews(null));
-  useEffect(refreshViews, [settings]);
+  useEffect(() => {
+    void window.xpilot.viewsStatus().then(setViews, () => setViews(null));
+  }, []);
   const reset = (kind: PageConfigKind, question: string) => {
     if (confirm(question)) void window.xpilot.resetPageConfig(kind).then(setPageConfig);
   };
@@ -313,19 +379,6 @@ export function SettingsPanel({
             </button>
           </div>
         </label>
-        <label>
-          Views
-          <div className="row">
-            <code>{views?.active ?? 'none active'}</code>
-            {views?.active && <button onClick={() => void window.xpilot.deactivateView().then(refreshViews)}>Back to X</button>}
-            <button onClick={() => void window.xpilot.openViewsFolder()}>Open folder</button>
-          </div>
-        </label>
-        <p className="hint">
-          {views ? `${views.views.length} in ${views.dir} · ` : ''}
-          Custom views are whole UIs the agent writes and XPilot shows in place of the X page. A view has no network and reads the page
-          underneath through XPilot; edit the files here and the view reloads.
-        </p>
         <p className="hint">
           {pageConfig ? `${pageConfig.selectors.overridden} overridden, ${pageConfig.selectors.stale} stale · ` : ''}
           {pageConfig?.selectors.lastError ? `Not in effect: ${pageConfig.selectors.lastError} · ` : ''}
@@ -334,6 +387,7 @@ export function SettingsPanel({
           here, in the file.
         </p>
       </fieldset>
+      <ViewsSection dir={views?.dir ?? null} />
       <fieldset className="settings-group">
         <legend>History</legend>
         <p className="hint">

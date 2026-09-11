@@ -56,8 +56,13 @@ export const IPC = {
   pageConfigOpen: 'page-config:open',
   pageConfigReset: 'page-config:reset',
   viewsStatus: 'views:status',
+  viewsList: 'views:list',
+  viewsActivate: 'views:activate',
   viewsDeactivate: 'views:deactivate',
+  viewsDelete: 'views:delete',
   viewsOpenFolder: 'views:openFolder',
+  /** main -> sidebar: the list changed, because a file was written or a view went on or off screen. */
+  viewsChanged: 'views:changed',
 } as const;
 
 /**

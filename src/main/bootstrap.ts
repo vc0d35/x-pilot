@@ -16,6 +16,7 @@ import { APP_SCHEME, SIDEBAR_URL, hardenWebContents, resolveSidebarAsset, revive
 import { ViewsStore } from './views/store';
 import { ViewCanvas } from './views/canvas';
 import { registerViewBridgeIpc, type ViewBridge } from './views/bridge';
+import { createViewSwitcher, type ViewSwitcher } from './views/switcher';
 import { LIB_FILES, VIEW_CSP, isServableFile, resolveLibRequest, resolveViewRequest, rewriteBareThreeImports } from './views/serve';
 import { inspectScript, type ViewInspection } from './views/inspect';
 import { VIEW_ENTRY_FILE, isViewName, type ViewErrorPhase, type ViewsStatus } from '../shared/views';
@@ -204,6 +205,8 @@ export interface XPilotApp {
   /** The custom views in the profile, and the window the active one is drawn in. */
   views: ViewsStore;
   viewCanvas: ViewCanvas;
+  /** Showing, leaving and deleting a view as the user does it, behind Settings and the View menu. */
+  viewSwitcher: ViewSwitcher;
   /** In an e2e run, the links that would have gone to the system browser; null otherwise. */
   openExternalCalls: string[] | null;
   /** Loads the first page and, outside e2e, starts the agent and the task ticker. */
@@ -408,6 +411,8 @@ export function createApp(opts: AppOptions): XPilotApp {
       // A canvas that navigated has a new document, and its subscriptions went with the old one.
       viewBridge?.reset();
       sendToSidebar({ type: 'view.active', view });
+      // Settings and the View menu both mark the view on screen, so both are told it moved.
+      viewsChanged();
     },
   });
   /**
@@ -423,12 +428,25 @@ export function createApp(opts: AppOptions): XPilotApp {
     canvas.hide();
     leaveComposer();
   };
-  const deactivateView = (): void => {
-    hideView();
-    if (settings.get().views.active !== null) settings.update({ views: { active: null } });
+  const persistActiveView = (view: string | null): void => {
+    if (settings.get().views.active !== view) settings.update({ views: { active: view } });
   };
-  // A view the user edited in their own editor, or the agent rewrote, reloads on screen.
-  views.onChange((view) => canvas.scheduleReload(view));
+  // Showing, leaving and deleting a view as the user does it, from Settings or the View menu: no
+  // card, because they are the one asking. The agent's own tools keep their confirmation.
+  const switcher = createViewSwitcher({
+    store: views,
+    active: () => canvas.active(),
+    show: (view) => canvas.show(view),
+    hide: hideView,
+    persist: persistActiveView,
+  });
+  const deactivateView = (): void => void switcher.deactivate();
+  // A view the user edited in their own editor, or the agent rewrote, reloads on screen — and the
+  // two surfaces that list views are told, since a file written is a view created or changed.
+  views.onChange((view) => {
+    canvas.scheduleReload(view);
+    viewsChanged();
+  });
   app.on('will-quit', () => {
     views.close();
     canvas.destroy();
@@ -665,7 +683,7 @@ export function createApp(opts: AppOptions): XPilotApp {
         clientVersion: app.getVersion(),
       }),
   });
-  installAppMenu({
+  const appMenu = installAppMenu({
     openExternal,
     toggleSidebar: () => setSidebarCollapsed(!isSidebarCollapsed()),
     focusAgentInput: () => {
@@ -673,7 +691,23 @@ export function createApp(opts: AppOptions): XPilotApp {
       sidebar.webContents.focus();
       sidebar.webContents.send(IPC.sidebarFocusInput);
     },
+    views: {
+      list: () => switcher.list(),
+      // The menu is fire-and-forget: a view that will not load says so through the canvas's own
+      // error path, which is where every other failed activation is reported.
+      activate: (name) => void switcher.activate(name).catch((err) => console.warn(`[xpilot] could not show ${name}`, err)),
+      deactivate: deactivateView,
+    },
   });
+  /**
+   * Both surfaces that list views hold a snapshot, so both are rebuilt whenever the list can have
+   * moved: a file written into the folder, a view put on screen, one taken off. A menu rebuild is
+   * cheap, and a stale menu offers a view that is not there.
+   */
+  const viewsChanged = (): void => {
+    appMenu.refresh();
+    if (!sidebar.webContents.isDestroyed()) sidebar.webContents.send(IPC.viewsChanged, switcher.list());
+  };
   registerSidebarIpc({
     sidebar: sidebar.webContents,
     setSidebarCollapsed,
@@ -693,7 +727,10 @@ export function createApp(opts: AppOptions): XPilotApp {
     openPath: appCtx.openPath,
     views: {
       status: (): ViewsStatus => ({ active: canvas.active(), dir: views.dir, views: views.list() }),
-      deactivate: deactivateView,
+      list: () => switcher.list(),
+      activate: (view) => switcher.activate(view),
+      deactivate: () => switcher.deactivate(),
+      remove: (view) => switcher.remove(view),
       dir: () => views.dir,
       active: () => canvas.active(),
     },
@@ -776,6 +813,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     selectors,
     views,
     viewCanvas: canvas,
+    viewSwitcher: switcher,
     openExternalCalls,
     launch,
     shutdown,
