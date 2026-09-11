@@ -6,6 +6,8 @@ import { SEL } from './selectors';
 export type InViewport = (el: Element) => boolean;
 const VISIBLE_LIMIT = 8;
 const EXCERPT = 160;
+/** `VisiblePostSchema`'s cap on a quote: enough to know what is being quoted, small enough for a hint. */
+const QUOTE_EXCERPT = 280;
 
 export const inViewport: InViewport = (el) => {
   const r = el.getBoundingClientRect();
@@ -19,7 +21,13 @@ export function visiblePosts(doc: Document, isVisible: InViewport): VisiblePost[
     if (!isVisible(article)) continue;
     const p = extractPost(article);
     if (p && !out.some((v) => v.id === p.id))
-      out.push({ id: p.id, url: p.url, authorHandle: p.authorHandle, text: p.text.slice(0, EXCERPT) });
+      out.push({
+        id: p.id,
+        url: p.url,
+        authorHandle: p.authorHandle,
+        text: p.text.slice(0, EXCERPT),
+        ...(p.quoted ? { quoted: { authorHandle: p.quoted.authorHandle, text: p.quoted.text.slice(0, QUOTE_EXCERPT) } } : {}),
+      });
   }
   return out;
 }

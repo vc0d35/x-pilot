@@ -27,7 +27,7 @@ export const readVisiblePostsDef = {
 export const readCurrentPostDef = {
   name: 'x_read_current_post',
   description:
-    "Reads the post the page is currently showing (must be on a post or article page): full text, the author's own thread continuation, and the X Article title/body when present.",
+    "Reads the post the page is currently showing (must be on a post or article page): full text, any post it quotes, its link cards and media, the author's own thread continuation, and the X Article title/body when present.",
   args: z.strictObject({ timeoutMs: z.int().default(10000) }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;

@@ -1,5 +1,22 @@
 import { z } from 'zod';
 
+/** The post a post quotes: another author's post, rendered inside the quoting one. */
+export const QuotedPostSchema = z.object({
+  authorHandle: z.string().max(64),
+  authorName: z.string().max(128),
+  text: z.string().max(20_000),
+  postedAt: z.string().max(64).nullable(),
+});
+export type QuotedPost = z.infer<typeof QuotedPostSchema>;
+
+/** A link preview card attached to a post. */
+export const LinkCardSchema = z.object({ url: z.string().max(512), title: z.string().max(200) });
+export type LinkCard = z.infer<typeof LinkCardSchema>;
+
+/** An image or video attached to a post; `alt` is whatever description X carries, when it is not the generic one. */
+export const MediaSchema = z.object({ kind: z.enum(['image', 'video']), alt: z.string().max(1000).optional() });
+export type Media = z.infer<typeof MediaSchema>;
+
 // Every string here is page-controlled and ends up persisted or in a prompt, so each one is bounded.
 export const PostSchema = z.object({
   id: z.string().max(32),
@@ -12,6 +29,9 @@ export const PostSchema = z.object({
   articleTitle: z.string().max(1000).nullable().optional(),
   articleBody: z.string().max(200_000).nullable().optional(),
   stats: z.object({ replies: z.number(), reposts: z.number(), likes: z.number(), views: z.number() }).nullable().optional(),
+  quoted: QuotedPostSchema.nullable().optional(),
+  cards: z.array(LinkCardSchema).max(8).optional(),
+  media: z.array(MediaSchema).max(8).optional(),
 });
 export type Post = z.infer<typeof PostSchema>;
 
@@ -37,6 +57,8 @@ export const VisiblePostSchema = z.object({
   url: z.string().max(512),
   authorHandle: z.string().max(64),
   text: z.string().max(20_000),
+  /** Only who is quoted and a short excerpt: the hint says a quote is there, the read tools give the rest. */
+  quoted: z.object({ authorHandle: z.string().max(64), text: z.string().max(280) }).optional(),
 });
 export type VisiblePost = z.infer<typeof VisiblePostSchema>;
 

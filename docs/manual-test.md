@@ -29,6 +29,8 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] "Read <post url>" returns the thread text WITHOUT moving the visible window (it runs in the hidden session window).
 - [ ] "Search X for electron and show me" → the visible window navigates to the results (view: visible).
 - [ ] "Roll my timeline until you find a post by @dhh" → the visible window scrolls (x_scroll + x_read_visible_posts).
+- [ ] Open a post that quotes another post; "what does the quoted post say?" is answered from the quote, and "what did the author themselves write?" from the post's own text.
+- [ ] Open a post with a link card; "what is that link?" → the agent knows the URL and the headline without opening it. A post with images: "what is in the picture?" → it reports the alt text, or that there is an image it cannot see.
 - [ ] Open an X Article; "summarise this article" returns title + body.
 - [ ] Open an X Article directly by URL (not from the timeline): "summarise this article" works and the chip shows the article title.
 

@@ -22,7 +22,7 @@ export function normalizePostUrl(input: string): string | null {
 export const readPost = defineTool({
   name: 'x_read_post',
   description:
-    'Reads a post, thread, or X Article by URL and returns the full text, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
+    'Reads a post, thread, or X Article by URL and returns the full text, any quoted post, link cards and media, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
   args: z.strictObject({ url: z.string(), ...VIEW_ARG }),
   annotations: { readOnlyHint: true },
   execute: async (args, ctx: XViewToolCtx, signal) => {

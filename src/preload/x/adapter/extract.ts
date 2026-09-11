@@ -1,5 +1,12 @@
-import type { PageKind, Post } from '../../../shared/page';
+import type { LinkCard, Media, PageKind, Post, QuotedPost } from '../../../shared/page';
 import { RESERVED_TOP_LEVEL, SEL } from './selectors';
+
+/** Same bound as `PostSchema.text`: a quote is a post, and it is rendered the same way. */
+const TEXT_MAX = 20_000;
+const CARD_TITLE_MAX = 200;
+const ALT_MAX = 1000;
+/** X allows four images, and a card or a player is one thing more; the schemas allow eight of each. */
+const ATTACHMENT_LIMIT = 8;
 
 export function pageKindFromUrl(url: string): PageKind {
   let u: URL;
@@ -90,8 +97,18 @@ export function postFromArticleUrl(url: string, title = ''): Post | null {
   };
 }
 
+/**
+ * The article's own first match for `selector`, skipping anything a quoted post brought with it.
+ * A quote carries a full post inside the quoting article — its own text, name box and time — so
+ * without this the quoted author's words are read as the author's.
+ */
+function own(article: Element, selector: string): Element | null {
+  for (const el of article.querySelectorAll(selector)) if (!el.closest(SEL.quotedPost)) return el;
+  return null;
+}
+
 function permalinkOf(article: Element): { handle: string; id: string; postedAt: string | null } | null {
-  const time = article.querySelector<HTMLTimeElement>(SEL.permalinkTime);
+  const time = own(article, SEL.permalinkTime) as HTMLTimeElement | null;
   const href = time?.closest('a')?.getAttribute('href') ?? null;
   const m = href ? PERMALINK.exec(href) : null;
   if (!m) return null;
@@ -100,15 +117,88 @@ function permalinkOf(article: Element): { handle: string; id: string; postedAt: 
 
 /**
  * Display name only. The `@handle` in the name box is page-written text, so it is never read as
- * identity: the handle always comes from the permalink.
+ * identity: the handle always comes from the permalink. Inside a quote the name box holds no
+ * links at all, so the plain text blocks are read instead.
  */
-function displayNameOf(article: Element): string {
-  const box = article.querySelector(SEL.userName);
-  for (const a of box?.querySelectorAll('a[role="link"]') ?? []) {
-    const t = (a.textContent ?? '').trim();
-    if (t && !t.startsWith('@')) return t;
+function displayNameIn(box: Element | null): string {
+  const links = [...(box?.querySelectorAll('a[role="link"]') ?? [])];
+  const nodes = links.length > 0 ? links : [...(box?.querySelectorAll('div[dir]') ?? [])];
+  for (const n of nodes) {
+    const t = (n.textContent ?? '').trim();
+    if (t && !t.startsWith('@') && t !== '·') return t;
   }
   return '';
+}
+
+const AVATAR_PREFIX = 'UserAvatar-Container-';
+const HANDLE = /^[A-Za-z0-9_]{1,15}$/;
+
+/**
+ * A quote has no permalink to take the handle from — X renders no `a[href]` inside it — so the
+ * name box is tried first and the avatar's test id second. Both are page-written, and both are
+ * held to X's handle shape before anything is built out of them.
+ */
+function quotedHandle(quote: Element): string {
+  for (const a of quote.querySelector(SEL.userName)?.querySelectorAll('a[role="link"]') ?? []) {
+    const t = (a.textContent ?? '').trim();
+    if (t.startsWith('@') && HANDLE.test(t.slice(1))) return t.slice(1);
+  }
+  const id = quote.querySelector(`[data-testid^="${AVATAR_PREFIX}"]`)?.getAttribute('data-testid')?.slice(AVATAR_PREFIX.length);
+  return id && HANDLE.test(id) ? id : '';
+}
+
+function extractQuoted(article: Element): QuotedPost | null {
+  const quote = article.querySelector(SEL.quotedPost);
+  if (!quote) return null;
+  return {
+    authorHandle: quotedHandle(quote),
+    authorName: displayNameIn(quote.querySelector(SEL.userName)),
+    text: textWithEmoji(quote.querySelector(SEL.tweetText)).slice(0, TEXT_MAX),
+    postedAt: quote.querySelector('time')?.getAttribute('datetime') ?? null,
+  };
+}
+
+// A card's first line is the site it points at, which the URL already says; the headline is the next one.
+const DOMAIN_LINE = /^(?:from\s+)?[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i;
+
+/** The card's text as the lines it renders: its innermost directional blocks, or the whole card. */
+function cardLines(card: Element): string[] {
+  const lines: string[] = [];
+  for (const el of card.querySelectorAll('[dir]')) {
+    if (el.querySelector('[dir]')) continue;
+    const t = textWithEmoji(el);
+    if (t) lines.push(t);
+  }
+  if (lines.length === 0) {
+    const t = textWithEmoji(card);
+    if (t) lines.push(t);
+  }
+  return lines;
+}
+
+function extractCards(article: Element): LinkCard[] {
+  const out: LinkCard[] = [];
+  for (const card of article.querySelectorAll(SEL.linkCard)) {
+    if (out.length >= ATTACHMENT_LIMIT) break;
+    const a = card.querySelector<HTMLAnchorElement>('a[href]');
+    const url = a?.href || a?.getAttribute('href') || '';
+    if (!url) continue;
+    const lines = cardLines(card);
+    out.push({ url: url.slice(0, 512), title: (lines.find((l) => !DOMAIN_LINE.test(l)) ?? '').slice(0, CARD_TITLE_MAX) });
+  }
+  return out;
+}
+
+function extractMedia(article: Element): Media[] {
+  const out: Media[] = [];
+  for (const img of article.querySelectorAll(SEL.tweetPhoto)) {
+    if (out.length >= ATTACHMENT_LIMIT) break;
+    // X labels an undescribed image "Image", which tells the model nothing the `kind` does not.
+    const alt = (img.getAttribute('alt') ?? '').trim();
+    out.push(alt && alt !== 'Image' ? { kind: 'image', alt: alt.slice(0, ALT_MAX) } : { kind: 'image' });
+  }
+  if (out.length < ATTACHMENT_LIMIT && article.querySelector(SEL.videoPlayer)) out.push({ kind: 'video' });
+  return out;
 }
 
 /**
@@ -146,17 +236,22 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
     id = m[2];
     postedAt = null;
   }
-  const text = textWithEmoji(article.querySelector(SEL.tweetText));
+  const text = textWithEmoji(own(article, SEL.tweetText));
   const statsLabel = article.querySelector(SEL.statsGroup)?.getAttribute('aria-label') ?? '';
+  const cards = extractCards(article);
+  const media = extractMedia(article);
   return {
     id,
     url: `https://x.com/${handle}/status/${id}`,
     authorHandle: handle,
-    authorName: displayNameOf(article),
+    authorName: displayNameIn(own(article, SEL.userName)),
     text,
     postedAt,
     kind: 'post',
     stats: statsLabel ? parseStats(statsLabel) : null,
+    quoted: extractQuoted(article),
+    ...(cards.length > 0 ? { cards } : {}),
+    ...(media.length > 0 ? { media } : {}),
   };
 }
 

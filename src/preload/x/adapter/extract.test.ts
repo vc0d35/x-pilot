@@ -69,7 +69,7 @@ describe('timeline extraction', () => {
 
   it('extracts posts with emoji alt text, author, url, time and stats', () => {
     const posts = extractVisiblePosts(document);
-    expect(posts).toHaveLength(2);
+    expect(posts.map((p) => p.id)).toEqual(['111', '222', '333', '444']);
     expect(posts[0]).toEqual({
       id: '111',
       url: 'https://x.com/alice/status/111',
@@ -79,6 +79,7 @@ describe('timeline extraction', () => {
       postedAt: '2026-09-01T10:00:00.000Z',
       kind: 'post',
       stats: { replies: 3, reposts: 2, likes: 10, views: 1500 },
+      quoted: null,
     });
     expect(posts[1].text).toBe('Second post about rust');
   });
@@ -200,5 +201,103 @@ describe('article extraction', () => {
     expect(a.body).toContain('Heading');
     expect(a.body).not.toContain('Follow');
     expect(a.body).not.toContain('11217');
+  });
+});
+
+describe('quoted posts, cards and media', () => {
+  it('reads the quoted post without letting it stand in for the post that quotes it', () => {
+    document.body.innerHTML = fixture('x-status-quote.html');
+    const url = 'https://x.com/pilvar222/status/2098139345328959887';
+    const post = extractPost(findMainArticle(document, url)!, url)!;
+    expect(post.authorHandle).toBe('pilvar222');
+    expect(post.authorName).toBe('pilvar (Philippe Dourassov)');
+    expect(post.postedAt).toBe('2026-09-10T19:59:36.000Z');
+    expect(post.text).toContain('Why is Google proud of these');
+    expect(post.text).not.toContain('166,000');
+    expect(post.quoted).toEqual({
+      authorHandle: 'GoogleAI',
+      authorName: 'Google AI',
+      text: expect.stringContaining('166,000 of the male fruit fly'),
+      postedAt: '2026-09-10T18:00:26.000Z',
+    });
+  });
+
+  it('takes the quoted handle from the avatar container when the quote carries no link', () => {
+    document.body.innerHTML = fixture('x-status-quote.html');
+    expect(document.querySelector(SEL.quotedPost)!.querySelectorAll('a[href]')).toHaveLength(0);
+    document
+      .querySelector('[data-testid="UserAvatar-Container-GoogleAI"]')!
+      .setAttribute('data-testid', 'UserAvatar-Container-not a handle');
+    expect(extractPost(document.querySelector(SEL.article)!)!.quoted!.authorHandle).toBe('');
+  });
+
+  it('is null when the post quotes nothing, and ignores a role=link block with no post text in it', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    expect(extractVisiblePosts(document)[0].quoted).toBeNull();
+    document.body.innerHTML = fixture('x-status.html');
+    const main = findMainArticle(document, 'https://x.com/alice/status/111')!;
+    main.insertAdjacentHTML('beforeend', '<div role="link" tabindex="0"><span>a badge, not a quote</span></div>');
+    expect(extractPost(main)!.quoted).toBeNull();
+  });
+
+  it('picks the main article by its own permalink when an earlier article quotes that post', () => {
+    const quoting = `
+      <article data-testid="tweet">
+        <div data-testid="User-Name"><a role="link" href="/mallory"><span>Mallory</span></a></div>
+        <a href="/mallory/status/777" role="link"><time datetime="2026-09-01T09:00:00.000Z">Sep 1</time></a>
+        <div role="link" tabindex="0">
+          <div data-testid="UserAvatar-Container-alice"></div>
+          <div data-testid="User-Name"><span>Alice Doe</span><span>@alice</span></div>
+          <a href="/alice/status/111" role="link"><time datetime="2026-09-01T10:00:00.000Z">Sep 1</time></a>
+          <div data-testid="tweetText"><span>Main post text. More text here…</span></div>
+        </div>
+        <div data-testid="tweetText"><span>Mallory's own words</span></div>
+      </article>`;
+    document.body.innerHTML = quoting + fixture('x-status.html');
+    const main = findMainArticle(document, 'https://x.com/alice/status/111')!;
+    const post = extractPost(main, 'https://x.com/alice/status/111')!;
+    expect(post.authorHandle).toBe('alice');
+    expect(post.text).toBe('Main post text. More text here…');
+    // The quoting article is still readable, as itself.
+    expect(extractPost(document.querySelector(SEL.article)!)).toMatchObject({
+      id: '777',
+      authorHandle: 'mallory',
+      text: "Mallory's own words",
+      quoted: { authorHandle: 'alice', text: 'Main post text. More text here…' },
+    });
+  });
+
+  it('reads a link card as its target and its headline, skipping the domain line', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const card = extractVisiblePosts(document).find((p) => p.id === '333')!;
+    expect(card.cards).toEqual([{ url: 'https://t.co/abc123', title: 'Electron 40 ships a new renderer' }]);
+    expect(card.media).toBeUndefined();
+  });
+
+  // The shape X renders for a promoted card: media and a call to action, no domain or headline lines.
+  it('reads a card that carries no detail block from its only text line', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    document.querySelector(SEL.linkCard)!.outerHTML = `
+      <div data-testid="card.wrapper">
+        <div data-testid="card.layoutLarge.media">
+          <a href="https://www.12procent.nl/?twclid=22ilckn5msgpttbssiplkg656b" aria-label="12procent.nl meer informatie" role="link">
+            <div><img alt="" /></div>
+            <div><div dir="ltr"><span>meer informatie</span></div></div>
+          </a>
+        </div>
+      </div>`;
+    expect(extractVisiblePosts(document).find((p) => p.id === '333')!.cards).toEqual([
+      { url: 'https://www.12procent.nl/?twclid=22ilckn5msgpttbssiplkg656b', title: 'meer informatie' },
+    ]);
+  });
+
+  it('reads attached images with their alt text, and a player as one video', () => {
+    document.body.innerHTML = fixture('x-timeline.html');
+    const photos = extractVisiblePosts(document).find((p) => p.id === '444')!;
+    // The second image is labelled "Image", which says nothing the kind does not.
+    expect(photos.media).toEqual([{ kind: 'image', alt: 'A chart of release cadence since 2013' }, { kind: 'image' }]);
+    expect(photos.cards).toBeUndefined();
+    document.querySelectorAll(SEL.article)[4].insertAdjacentHTML('beforeend', '<div data-testid="videoPlayer"><video></video></div>');
+    expect(extractVisiblePosts(document).find((p) => p.id === '444')!.media).toContainEqual({ kind: 'video' });
   });
 });

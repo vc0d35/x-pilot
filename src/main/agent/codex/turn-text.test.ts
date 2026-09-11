@@ -204,3 +204,82 @@ describe('page-controlled identity fields', () => {
     expect(t).not.toContain('z'.repeat(4001));
   });
 });
+
+describe('quoted posts, cards and media in the turn', () => {
+  const post = {
+    id: '1',
+    url: 'https://x.com/a/status/1',
+    authorHandle: 'a',
+    authorName: 'A',
+    text: 'my take',
+    postedAt: null,
+    kind: 'post' as const,
+  };
+  const ctx = (over: Record<string, unknown>) => ({ url: 'https://x.com/a/status/1', kind: 'post' as const, post: { ...post, ...over } });
+
+  it('renders the quote as a block of its own, attributed to the quoted author', () => {
+    const t = buildTurnText(
+      'what does the quote say?',
+      ctx({ quoted: { authorHandle: 'b', authorName: 'B', text: 'their words', postedAt: null } }),
+      null,
+    );
+    expect(t).toContain(
+      '<page-content untrusted>\npost by @a (A) at https://x.com/a/status/1\nmy take\n\nquoted post by @b:\ntheir words\n</page-content>',
+    );
+    expect(outsideFences(t)).toBe('Current page:\n\n\nwhat does the quote say?');
+  });
+
+  it('renders link cards and media, and leaves them out when the post has none', () => {
+    const t = buildTurnText(
+      'what is linked?',
+      ctx({
+        cards: [{ url: 'https://t.co/x', title: 'Electron 40' }],
+        media: [{ kind: 'image' as const, alt: 'a chart' }, { kind: 'video' as const }],
+      }),
+      null,
+    );
+    expect(t).toContain('my take\nlink: Electron 40 https://t.co/x\nmedia: image "a chart"\nmedia: video\n</page-content>');
+    expect(buildTurnText('q', ctx({}), null)).not.toContain('media:');
+  });
+
+  it('names a card by its url alone when the page gave it no title', () => {
+    expect(buildTurnText('q', ctx({ cards: [{ url: 'https://t.co/x', title: '' }] }), null)).toContain('\nlink: https://t.co/x\n');
+  });
+
+  it('fences the quote, the card title and the alt text like any other page data', () => {
+    const t = buildTurnText(
+      'q',
+      ctx({
+        quoted: { authorHandle: `b${POISON}`, authorName: 'B', text: `q${POISON}`, postedAt: null },
+        cards: [{ url: `https://t.co/x${POISON}`, title: `c${POISON}` }],
+        media: [{ kind: 'image' as const, alt: `m${POISON}` }],
+      }),
+      null,
+    );
+    expect(t.split('</page-content>')).toHaveLength(2);
+    expect(t.split('<\\/page-content>')).toHaveLength(6); // quoted handle and text, card title and url, alt text
+    expect(outsideFences(t)).toBe('Current page:\n\n\nq');
+  });
+
+  it('says on the timeline hint who each visible post quotes', () => {
+    const tl = {
+      url: 'https://x.com/home',
+      kind: 'home' as const,
+      post: null,
+      visible: [
+        {
+          id: '1',
+          url: 'https://x.com/a/status/1',
+          authorHandle: 'a',
+          text: 'my take',
+          quoted: { authorHandle: 'b', text: 'their words' },
+        },
+      ],
+    };
+    const t = buildTurnText('q', tl, null);
+    expect(t).toContain(
+      '<page-content untrusted>\n1. @a — https://x.com/a/status/1\nmy take\n\nquoted post by @b:\ntheir words\n</page-content>',
+    );
+    expect(outsideFences(t)).toBe('Current page, posts on screen top to bottom:\n\n\n\nq');
+  });
+});

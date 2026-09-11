@@ -13,6 +13,8 @@ describe('computeFocus', () => {
     expect(f?.visible?.map((v) => [v.authorHandle, v.id])).toEqual([
       ['alice', '111'],
       ['bob', '222'],
+      ['carol', '333'],
+      ['dave', '444'],
     ]);
     expect(f?.visible?.[0].text).toBe('Hello 🌍world');
   });
@@ -37,6 +39,16 @@ describe('computeFocus', () => {
     expect(f?.post?.articleTitle).toBe('On Compilers');
     expect(f?.post?.text).toBe('On Compilers');
     expect(f?.post?.articleBody).toContain('machine code');
+  });
+  it('carries who a visible post quotes, as an excerpt', () => {
+    document.body.innerHTML = fixture('x-status-quote.html');
+    const v = computeFocus(document, 'https://x.com/home', allVisible)?.visible?.[0];
+    expect(v?.authorHandle).toBe('pilvar222');
+    expect(v?.quoted?.authorHandle).toBe('GoogleAI');
+    expect(v?.quoted?.text).toContain('166,000 of the male fruit fly');
+    expect(v?.quoted?.text.length).toBeLessThanOrEqual(280);
+    document.body.innerHTML = fixture('x-timeline.html');
+    expect(computeFocus(document, 'https://x.com/home', allVisible)?.visible?.[0].quoted).toBeUndefined();
   });
   it('is the quoted post when a reply dialog is open on the timeline', () => {
     document.body.innerHTML =
@@ -68,13 +80,13 @@ describe('installFocusTracker', () => {
     document.body.innerHTML = fixture('x-timeline.html');
     vi.advanceTimersByTime(100);
     expect(send).toHaveBeenCalledTimes(2);
-    expect(send.mock.calls[1][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['111', '222']);
+    expect(send.mock.calls[1][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['111', '222', '333', '444']);
     vi.advanceTimersByTime(300);
     expect(send).toHaveBeenCalledTimes(2); // same posts on screen: nothing re-sent
     document.querySelector('article')!.remove(); // scrolled past the first post
     vi.advanceTimersByTime(100);
     expect(send).toHaveBeenCalledTimes(3);
-    expect(send.mock.calls[2][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['222']);
+    expect(send.mock.calls[2][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['222', '333', '444']);
     off();
     vi.advanceTimersByTime(500);
     expect(send).toHaveBeenCalledTimes(3);
@@ -94,7 +106,7 @@ describe('installFocusTracker', () => {
     vi.advanceTimersByTime(100);
     expect(send).toHaveBeenCalledTimes(2);
     expect(send.mock.calls[1][0]?.post).toBeNull();
-    expect(send.mock.calls[1][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['111', '222']);
+    expect(send.mock.calls[1][0]?.visible?.map((v: { id: string }) => v.id)).toEqual(['111', '222', '333', '444']);
     off();
   });
 });

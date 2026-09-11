@@ -1,4 +1,4 @@
-import type { PageContext } from '../../../shared/page';
+import type { LinkCard, Media, PageContext, QuotedPost } from '../../../shared/page';
 import { contextKey } from '../../../shared/page-context';
 import { fenceBlock, fenceLine, pageContentBlock } from '../fence';
 
@@ -7,6 +7,24 @@ const HANDLE_MAX = 64;
 const URL_MAX = 512;
 const TITLE_MAX = 200;
 const TEXT_MAX = 4000;
+const ALT_MAX = 200;
+
+/** The quote is another author's post carried inside this one, so it is labelled and blocked off on its own. */
+function quotedLines(quoted: QuotedPost): string[] {
+  const lines = ['', `quoted post by @${fenceLine(quoted.authorHandle, HANDLE_MAX)}:`];
+  if (quoted.text) lines.push(fenceBlock(quoted.text, TEXT_MAX));
+  return lines;
+}
+
+function attachmentLines(cards: LinkCard[] | undefined, media: Media[] | undefined): string[] {
+  const lines: string[] = [];
+  for (const c of cards ?? []) {
+    const title = fenceLine(c.title, TITLE_MAX);
+    lines.push(`link: ${title ? `${title} ` : ''}${fenceLine(c.url, URL_MAX)}`);
+  }
+  for (const m of media ?? []) lines.push(`media: ${fenceLine(m.kind, 16)}${m.alt ? ` "${fenceLine(m.alt, ALT_MAX)}"` : ''}`);
+  return lines;
+}
 
 /**
  * The page controls every field below, identity included, so all of them go inside the fence:
@@ -25,6 +43,8 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
     const lines = [head];
     if (p.articleTitle) lines.push(`Title: ${fenceLine(p.articleTitle, TITLE_MAX)}`);
     if (p.text) lines.push(fenceBlock(p.text, TEXT_MAX));
+    if (p.quoted) lines.push(...quotedLines(p.quoted));
+    lines.push(...attachmentLines(p.cards, p.media));
     if (p.articleBody) lines.push('', fenceBlock(p.articleBody, TEXT_MAX));
     return `Current page:\n${pageContentBlock(lines)}\n\n${text}`;
   }
@@ -38,6 +58,7 @@ export function buildTurnText(text: string, ctx: PageContext | null | undefined,
       pageContentBlock([
         `${i + 1}. @${fenceLine(v.authorHandle, HANDLE_MAX)} — ${fenceLine(v.url, URL_MAX)}`,
         fenceBlock(v.text, TEXT_MAX),
+        ...(v.quoted ? quotedLines({ ...v.quoted, authorName: '', postedAt: null }) : []),
       ]),
     ),
   );

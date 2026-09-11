@@ -147,6 +147,30 @@ describe('preload tools', () => {
     expect(r.content.article).toBeNull();
   });
 
+  it('x_read_current_post returns the quoted post with the post that quotes it', async () => {
+    window.history.pushState({}, '', '/pilvar222/status/2098139345328959887');
+    document.body.innerHTML = fixture('x-status-quote.html');
+    const r = (await run(readCurrentPost, {})) as {
+      content: { post: { text: string; quoted: { authorHandle: string; text: string } | null } };
+    };
+    expect(r.content.post.text).toContain('Why is Google proud');
+    expect(r.content.post.quoted).toMatchObject({ authorHandle: 'GoogleAI', authorName: 'Google AI' });
+    expect(r.content.post.quoted?.text).toContain('166,000 of the male fruit fly');
+  });
+
+  it('x_read_visible_posts returns link cards and media with the posts', async () => {
+    window.history.pushState({}, '', '/home');
+    document.body.innerHTML = fixture('x-timeline.html');
+    const r = (await run(readVisiblePosts, {})) as { content: { id: string; cards?: unknown[]; media?: unknown[] }[] };
+    expect(r.content.find((p) => p.id === '333')?.cards).toEqual([
+      { url: 'https://t.co/abc123', title: 'Electron 40 ships a new renderer' },
+    ]);
+    expect(r.content.find((p) => p.id === '444')?.media).toEqual([
+      { kind: 'image', alt: 'A chart of release cadence since 2013' },
+      { kind: 'image' },
+    ]);
+  });
+
   it('x_read_current_post reads an X Article page that has no tweet element', async () => {
     window.history.pushState({}, '', '/i/article/555');
     document.body.innerHTML = fixture('x-article.html');
