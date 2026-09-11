@@ -75,6 +75,11 @@ export const SettingsSchema = z.object({
   ui: z.object({ onboarded: z.boolean().default(false) }),
   window: z.object({
     bounds: z.object({ x: z.number(), y: z.number(), width: z.number(), height: z.number() }).nullable().default(null),
+    /**
+     * Where the user dragged the collapsed handle, as offsets from the window's top-left in the
+     * window's own coordinate space; null leaves it in its default spot near the top-right corner.
+     */
+    handle: z.object({ x: z.number(), y: z.number() }).nullable().default(null),
   }),
 });
 export type Settings = z.infer<typeof SettingsSchema>;

@@ -18,6 +18,16 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] New thread clears the list; a settings change (model) restarts and resumes the thread, and the pill follows the new model.
 - [ ] Quit and relaunch; ask "which page am I on?" → the agent still calls a tool (thread resumed with tools).
 
+## Collapsed handle
+
+- [ ] Collapse the sidebar (header chevron or ⌘\) → the XPilot pill floats near the top-right over x.com; clicking it brings the sidebar back.
+- [ ] Collapse again, then press and hold the pill and move the pointer: it lifts and follows the pointer anywhere over the page, x.com still showing through everywhere but the pill, and nothing on the page gets selected. Let go → it stays where you dropped it.
+- [ ] A plain click still expands the sidebar and never moves the pill; a drag never expands it.
+- [ ] Press Escape mid-drag → the pill goes straight back to where it was picked up from and nothing is remembered.
+- [ ] Expand and collapse again → the pill comes back to the spot you dragged it to, not the top-right corner; quit and start again, collapse, and it is still there.
+- [ ] Drag it near an edge, then resize the window smaller than that spot → the pill stays fully inside the window with its margin; widen the window again and it is still inside.
+- [ ] Both themes (System Settings → Appearance): the pill reads the same light and dark, dragging or not.
+
 ## Focus context
 
 - [ ] Open a post; "is this true?" is answered about that post (the focused post is sent with the turn; no chip is shown).

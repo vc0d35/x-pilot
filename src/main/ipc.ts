@@ -1,6 +1,6 @@
 import { dialog, ipcMain, type IpcMainInvokeEvent, type WebContents } from 'electron';
 import { z } from 'zod';
-import { IPC } from '../shared/ipc';
+import { IPC, type HandleDragState } from '../shared/ipc';
 import { PageContextSchema, type PageContext } from '../shared/page';
 import type { PageConfigStatus } from '../shared/sidebar-api';
 import type { ViewListEntry, ViewsStatus } from '../shared/views';
@@ -15,20 +15,35 @@ import type { SelectorOverrides } from './page-config/selectors';
 import type { AppStore } from './history/store';
 import type { TaskManager } from './tasks/manager';
 import { SettingsPatchSchema } from '../shared/settings';
+import { clampHandle, type HandlePosition } from './layout';
 import { PROVIDER_KINDS } from '../shared/agent';
 import { isSafeExecutable } from './agent/binary';
 
 const ProviderSchema = z.object({ provider: z.enum(PROVIDER_KINDS) });
 const ProviderBinaryActionSchema = z.object({ provider: z.enum(PROVIDER_KINDS), action: z.enum(['choose', 'clear']) });
 const PageConfigKindSchema = z.object({ kind: z.enum(['styles', 'selectors']) });
+/** Where in the pill the pointer went down, and where the pointer is, both in window coordinates. */
+const GrabSchema = z.object({ grabX: z.number().finite(), grabY: z.number().finite() });
+const PointerSchema = z.object({ x: z.number().finite(), y: z.number().finite() });
 /** A view name is checked properly by the switcher; this only keeps a wedged renderer's string short. */
 const ViewNameSchema = z.object({ name: z.string().max(100) });
 import type { BridgeIpc } from './adapter/bridge';
+
+/** The window as the collapsed handle's drag needs it: its size, and the view that is the handle. */
+export interface HandleDragWindow {
+  /** Stretches the handle's view over the whole window; answers with where the pill was, or null. */
+  beginDrag: () => { x: number; y: number; width: number; height: number } | null;
+  /** Shrinks it back to a handle at `position`, or at the spot it came from when that is null. */
+  endDrag: (position: HandlePosition | null) => void;
+  contentSize: () => { width: number; height: number };
+}
 
 export interface SidebarIpcDeps {
   sidebar: WebContents;
   setSidebarCollapsed: (collapsed: boolean) => void;
   isSidebarCollapsed: () => boolean;
+  /** Moving the collapsed handle around the window. */
+  handle: HandleDragWindow;
   openLink: (url: string) => void;
   agent: AgentController;
   approvals: ApprovalBroker;
@@ -74,6 +89,55 @@ export function shouldExpandSidebar(event: AgentEvent, collapsed: boolean): bool
   return event.type === 'approval.requested' && collapsed;
 }
 
+/**
+ * The collapsed handle being carried across the window. The renderer decides when a press became a
+ * drag and draws the pill under the pointer; everything that outlives the gesture is here: where in
+ * the pill it was grabbed, where it may be put down, and remembering the spot.
+ */
+export function createHandleDrag(deps: {
+  handle: HandleDragWindow;
+  saveHandle: (position: HandlePosition | null) => void;
+  send: (state: HandleDragState) => void;
+}) {
+  let grab: HandlePosition | null = null;
+  let pointer: HandlePosition | null = null;
+  /**
+   * Puts the handle down where the pointer left it, minus where in the pill it was grabbed, and
+   * remembers that spot. `null` drops the gesture instead: Escape leaves the handle where it was
+   * rather than somewhere nobody chose.
+   */
+  const end = (at: HandlePosition | null): void => {
+    if (!grab) return;
+    const { width, height } = deps.handle.contentSize();
+    const position = at ? clampHandle(width, height, { x: at.x - grab.x, y: at.y - grab.y }) : null;
+    grab = null;
+    pointer = null;
+    if (at) deps.saveHandle(position);
+    deps.handle.endDrag(position);
+    deps.send({ dragging: false });
+  };
+  return {
+    start(grabX: number, grabY: number): void {
+      // A press that was never released — the sidebar came back out under it — is dropped rather
+      // than left standing in the way of the next one.
+      if (grab) end(null);
+      const from = deps.handle.beginDrag();
+      if (!from) return;
+      grab = { x: grabX, y: grabY };
+      pointer = { x: from.x + grabX, y: from.y + grabY };
+      deps.send({ dragging: true, ...from });
+    },
+    move(x: number, y: number): void {
+      if (grab) pointer = { x, y };
+    },
+    end,
+    /** The gesture is over without a release to end it; the pointer's last spot is where it lands. */
+    abandon(): void {
+      end(pointer);
+    },
+  };
+}
+
 export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   const {
     sidebar,
@@ -97,6 +161,13 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   const push = (e: AgentEvent) => {
     if (!sidebar.isDestroyed()) sidebar.send(IPC.agentEvent, e);
   };
+  const drag = createHandleDrag({
+    handle: deps.handle,
+    saveHandle: (handle) => settings.update({ window: { handle } }),
+    send: (state) => {
+      if (!sidebar.isDestroyed()) sidebar.send(IPC.handleDragging, state);
+    },
+  });
   let lastStatus: AgentEvent | null = null;
   let lastThread: AgentEvent | null = null;
   agent.onEvent((e) => {
@@ -110,6 +181,8 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
   });
   userInput.onEvent(push);
   sidebar.on('did-finish-load', () => {
+    // A renderer that reloaded mid-drag has no pointer any more, and its view is still the window.
+    drag.abandon();
     if (lastThread) push(lastThread);
     if (lastStatus) push(lastStatus);
     // A reloaded sidebar has no idea a view is up; the banner comes back with this.
@@ -196,6 +269,28 @@ export function registerSidebarIpc(deps: SidebarIpcDeps): void {
     guarded((_e, raw) => {
       setSidebarCollapsed(z.object({ collapsed: z.boolean() }).parse(raw).collapsed);
     }),
+  );
+  ipcMain.handle(
+    IPC.handleDragStart,
+    guarded((_e, raw) => {
+      const { grabX, grabY } = GrabSchema.parse(raw);
+      drag.start(grabX, grabY);
+    }),
+  );
+  ipcMain.handle(
+    IPC.handleDragMove,
+    guarded((_e, raw) => {
+      const { x, y } = PointerSchema.parse(raw);
+      drag.move(x, y);
+    }),
+  );
+  ipcMain.handle(
+    IPC.handleDragEnd,
+    guarded((_e, raw) => drag.end(PointerSchema.parse(raw))),
+  );
+  ipcMain.handle(
+    IPC.handleDragCancel,
+    guarded(() => drag.end(null)),
   );
   ipcMain.handle(
     IPC.historyClear,

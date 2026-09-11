@@ -1,6 +1,7 @@
 import type { AgentEvent, ProviderKind, UserInputAnswers } from './agent';
 import type { PageContext } from './page';
 import type { DeepPartial, Settings } from './settings';
+import type { HandleDragState } from './ipc';
 import type { ViewListEntry, ViewsStatus } from './views';
 export type { ViewListEntry, ViewsStatus, ViewSummary } from './views';
 
@@ -160,9 +161,21 @@ export interface XPilotApi {
   clearHistory(): Promise<void>;
   historyStats(): Promise<HistoryStats>;
   setSidebarCollapsed(collapsed: boolean): Promise<void>;
+  /**
+   * The collapsed handle was picked up: `grabX`/`grabY` is where in the pill the pointer went down.
+   * Main stretches the pill's view over the whole window and answers on `onHandleDrag`, after which
+   * the moves and the drop carry pointer positions in the window's own coordinates.
+   */
+  startHandleDrag(grabX: number, grabY: number): Promise<void>;
+  moveHandleDrag(x: number, y: number): Promise<void>;
+  endHandleDrag(x: number, y: number): Promise<void>;
+  /** Escape, or a release before main answered: the handle goes back where it was picked up from. */
+  cancelHandleDrag(): Promise<void>;
   /** Opens a link the user clicked in the sidebar: x.com in the main window, anything else in the browser. */
   openLink(url: string): Promise<void>;
   onSidebarCollapsed(cb: (collapsed: boolean) => void): () => void;
+  /** Whether the handle's view is the whole window now, and where to draw the pill in it. */
+  onHandleDrag(cb: (state: HandleDragState) => void): () => void;
   onFocusInput(cb: () => void): () => void;
   onEvent(cb: (e: AgentEvent) => void): () => void;
   /** Transcript events of a scheduled run, so a run opened from History streams while it runs. */

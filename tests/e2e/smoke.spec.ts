@@ -37,9 +37,11 @@ test.afterAll(async () => {
   await app.close();
 });
 
+type Bounds = { x: number; y: number; width: number; height: number };
 type Harness = {
   windowCount(): number;
-  sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
+  sidebar: { webContents: { executeJavaScript(c: string): Promise<unknown> }; getBounds(): Bounds };
+  win: { getContentBounds(): Bounds };
   registry: {
     list(): { name: string }[];
     call(n: string, a: object, o?: { allowInternal?: boolean }): Promise<{ success: boolean; content?: unknown; error?: string }>;
@@ -48,7 +50,10 @@ type Harness = {
   xView: { webContents: { executeJavaScript(c: string): Promise<unknown> } };
   styles: { set(css: string): { ok: boolean }; reset(): void };
   selectors: { set(key: string, selector: string): { ok: boolean }; resetAll(): void };
-  settings: { update(patch: object): unknown; get(): { views: { active: string | null } } };
+  settings: {
+    update(patch: object): unknown;
+    get(): { views: { active: string | null }; window: { handle: { x: number; y: number } | null } };
+  };
   views: { dir: string; write(view: string, path: string, content: string): { bytes: number }; delete(view: string): boolean };
   agent: { onEvent(cb: (e: { type: string; name?: string }) => void): () => void };
   viewCanvas: {
@@ -79,6 +84,12 @@ type Harness = {
     resolve(id: string, decision: string): boolean;
   };
 };
+/** Runs a snippet in the sidebar renderer, i.e. as the sender main's guarded IPC handlers accept. */
+const inSidebar = (script: string) =>
+  app.evaluate(async (_electron, js: string) => {
+    const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+    return t.sidebar.webContents.executeJavaScript(js);
+  }, script);
 const inMain = <T>(fn: (t: Harness) => T | Promise<T>) =>
   app.evaluate(async (_electron, fnSrc: string) => {
     const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
@@ -561,6 +572,43 @@ test('the sidebar is served from the app scheme, with its stylesheet and fonts p
       t.sidebar.webContents.executeJavaScript("fetch('xpilot://sidebar/../../package.json').then((r) => r.status).catch(() => 'blocked')"),
     ),
   ).not.toBe(200);
+});
+
+test('the collapsed handle is dragged to a new spot, and every later collapse lands there', async () => {
+  const bounds = () => inMain((t) => t.sidebar.getBounds());
+  const collapsed = (c: boolean) => inSidebar(`window.xpilot.setSidebarCollapsed(${c ? 'true' : 'false'})`);
+  const drag = (call: string) => inSidebar(`window.xpilot.${call}`);
+  await expect.poll(() => inSidebar('typeof window.xpilot'), { timeout: 15_000 }).toBe('object');
+
+  await collapsed(true);
+  const handle = await bounds();
+  expect(handle).toMatchObject({ width: 104, height: 32 });
+
+  // Picked up 20/16 into the pill: the view becomes the whole window so the pointer cannot leave it.
+  await drag('startHandleDrag(20, 16)');
+  const content = await inMain((t) => t.win.getContentBounds());
+  expect(await bounds()).toEqual({ x: 0, y: 0, width: content.width, height: content.height });
+
+  await drag('moveHandleDrag(400, 300)');
+  await drag('endHandleDrag(520, 416)');
+  expect(await bounds()).toEqual({ x: 500, y: 400, width: 104, height: 32 });
+  expect(await inMain((t) => t.settings.get().window.handle)).toEqual({ x: 500, y: 400 });
+
+  // The spot is the handle's, not the sidebar's: expanded it is the full sidebar again, and the
+  // next collapse puts the pill back where the user left it rather than in the default corner.
+  await collapsed(false);
+  expect((await bounds()).width).toBe(420);
+  await collapsed(true);
+  expect(await bounds()).toEqual({ x: 500, y: 400, width: 104, height: 32 });
+
+  // A drag that is let go where it started leaves it there; Escape puts it back where it was.
+  await drag('startHandleDrag(10, 10)');
+  await drag('cancelHandleDrag()');
+  expect(await bounds()).toEqual({ x: 500, y: 400, width: 104, height: 32 });
+
+  await collapsed(false);
+  await inMain((t) => t.settings.update({ window: { handle: null } }));
+  expect(await bounds()).not.toMatchObject({ width: 104 });
 });
 
 // Network-dependent (set XPILOT_E2E_NETWORK=1 to run): loads x.com search (logged out) in the hidden session window.

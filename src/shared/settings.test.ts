@@ -54,6 +54,15 @@ describe('SettingsSchema', () => {
     expect(() => parse({ styles: { mode: 'auto' } })).toThrow();
   });
 
+  it('remembers where the collapsed handle was dragged to, and nothing there by default', () => {
+    expect(DEFAULT_SETTINGS.window).toEqual({ bounds: null, handle: null });
+    expect(normalizeSettings({ window: { handle: { x: 300, y: 220 } } }).window.handle).toEqual({ x: 300, y: 220 });
+    expect(parse({ window: { handle: { x: 300, y: 220 } } })).toEqual({ window: { handle: { x: 300, y: 220 } } });
+    // Back to the default spot, and the window's bounds are left alone by a patch that omits them.
+    expect(parse({ window: { handle: null } })).toEqual({ window: { handle: null } });
+    expect(() => parse({ window: { handle: { x: 300 } } })).toThrow();
+  });
+
   it('holds a stored settings file to the same rules as a patch', () => {
     expect(() => SettingsSchema.parse({ ...DEFAULT_SETTINGS, navigation: { allowHosts: ['*.com'] } })).toThrow();
     expect(() => normalizeSettings({ agent: { codex: { binPath: 'codex' } } })).toThrow(/absolute path/);

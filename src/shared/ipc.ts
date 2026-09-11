@@ -42,6 +42,13 @@ export const IPC = {
   focusUpdate: 'focus:update',
   sidebarSetCollapsed: 'sidebar:setCollapsed',
   sidebarCollapsed: 'sidebar:collapsed',
+  /** The collapsed handle being picked up, moved over the window and put down (or the drag dropped). */
+  handleDragStart: 'handle:dragStart',
+  handleDragMove: 'handle:dragMove',
+  handleDragEnd: 'handle:dragEnd',
+  handleDragCancel: 'handle:dragCancel',
+  /** main -> sidebar: the handle's view is the whole window now, or is a handle again. */
+  handleDragging: 'handle:dragging',
   linkOpen: 'link:open',
   sidebarFocusInput: 'sidebar:focusInput',
   conversationsList: 'conversations:list',
@@ -64,6 +71,13 @@ export const IPC = {
   /** main -> sidebar: the list changed, because a file was written or a view went on or off screen. */
   viewsChanged: 'views:changed',
 } as const;
+
+/**
+ * What the collapsed handle's renderer is told while a drag is on. Dragging, its view covers the
+ * whole window on a transparent background and it draws the pill itself, starting at `x`/`y` (the
+ * spot it was picked up from) and following the pointer from there.
+ */
+export type HandleDragState = { dragging: false } | { dragging: true; x: number; y: number; width: number; height: number };
 
 /**
  * What an X view is given at startup and on every change. Anything restricted to the view the user

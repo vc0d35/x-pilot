@@ -321,16 +321,19 @@ export function createApp(opts: AppOptions): XPilotApp {
   );
 
   const preloadX = join(opts.outDir, 'preload/x.js');
-  const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed, setOverlayView } = createMainWindow({
-    bounds: pickInitialBounds(
-      settings.get().window.bounds,
-      screen.getAllDisplays().map((d) => d.workArea),
-    ),
-    onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
-    preloadX,
-    preloadSidebar: join(opts.outDir, 'preload/sidebar.js'),
-    sidebarUrl: opts.sidebarUrl,
-  });
+  const { win, xView, sidebar, setSidebarCollapsed, isSidebarCollapsed, setOverlayView, beginHandleDrag, endHandleDrag } = createMainWindow(
+    {
+      bounds: pickInitialBounds(
+        settings.get().window.bounds,
+        screen.getAllDisplays().map((d) => d.workArea),
+      ),
+      handle: settings.get().window.handle,
+      onBoundsChanged: (bounds) => settings.update({ window: { bounds } }),
+      preloadX,
+      preloadSidebar: join(opts.outDir, 'preload/sidebar.js'),
+      sidebarUrl: opts.sidebarUrl,
+    },
+  );
   app.on('second-instance', () => {
     if (win.isMinimized()) win.restore();
     win.focus();
@@ -712,6 +715,14 @@ export function createApp(opts: AppOptions): XPilotApp {
     sidebar: sidebar.webContents,
     setSidebarCollapsed,
     isSidebarCollapsed,
+    handle: {
+      beginDrag: beginHandleDrag,
+      endDrag: endHandleDrag,
+      contentSize: () => {
+        const { width, height } = win.getContentBounds();
+        return { width, height };
+      },
+    },
     openLink: links.openLink,
     tasks,
     stopTaskRun: () => taskRunner.stop(),

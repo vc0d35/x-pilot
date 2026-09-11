@@ -139,10 +139,13 @@ code { font: inherit; }
 .hint { color: var(--muted); font-size: 12px; }
 
 /* The collapsed-sidebar handle: the whole (36×36) view is one button. */
-.handle { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); padding: 0 8px; font-size: 12px; }
+.handle { position: fixed; inset: 0; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); color: var(--muted); padding: 0 8px; font-size: 12px; cursor: grab; user-select: none; touch-action: none; }
 .handle-brand { font-weight: 700; color: var(--fg); letter-spacing: .02em; }
 .handle:hover { color: var(--fg); background: var(--raised); }
 .handle .status-dot { width: 6px; height: 6px; }
+/* Being carried: the view is the whole window, so the pill is placed in it and the page shows through everywhere else. */
+body.handle-dragging { background: transparent; user-select: none; }
+.handle-floating { right: auto; bottom: auto; cursor: grabbing; background: var(--raised); box-shadow: 0 3px 12px rgb(0 0 0 / .28); }
 
 .activity { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; padding: 2px 4px; }
 .activity .status-dot { background: var(--muted); animation: breathe 1.4s ease-in-out infinite; }

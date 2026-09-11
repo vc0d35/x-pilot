@@ -1,4 +1,7 @@
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { AgentStatus } from '../../shared/agent';
+import type { HandleDragState } from '../../shared/ipc';
+import { CLICK_HOLD_MS, decideGesture } from '../handle-drag';
 import logo from '../assets/logo.png';
 
 export type Panel = 'chat' | 'library' | 'settings' | 'history';
@@ -108,13 +111,160 @@ export function Header(props: { onNewThread: () => void; panel: Panel; onPanel: 
   );
 }
 
-/** Fills the small floating view shown over x.com while the sidebar is collapsed. */
+/** A press being tracked on the handle, until it turns out to be the click or a drag. */
+interface Press {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  /** Where in the pill the pointer went down; the drop lands the pill's top-left that far back. */
+  grabX: number;
+  grabY: number;
+  at: number;
+  dragging: boolean;
+}
+
+/**
+ * Fills the small floating view shown over x.com while the sidebar is collapsed. Clicking it opens
+ * the sidebar; holding it picks it up, and then the view is the whole window (transparent but for
+ * this pill) so the pointer cannot leave it and the pill follows it to wherever it is let go.
+ */
 export function ExpandHandle(props: { status: AgentStatus; onExpand: () => void }) {
+  const [drag, setDrag] = useState<HandleDragState>({ dragging: false });
+  // The press lives in a ref, not in state: the pill re-renders while it is held — the status dot
+  // changes, main answers the drag — and a re-render must never drop a gesture half-way through and
+  // leave a click looking like the start of a drag.
+  const press = useRef<Press | null>(null);
+  const hold = useRef(0);
+  const frame = useRef(0);
+  const at = useRef<{ x: number; y: number } | null>(null);
+  const dragged = useRef(false);
+  const pill = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => window.xpilot.onHandleDrag(setDrag), []);
+  // Dragging, this view covers the window: everything that is not the pill has to let the page through.
+  useEffect(() => {
+    document.body.classList.toggle('handle-dragging', drag.dragging);
+    return () => document.body.classList.remove('handle-dragging');
+  }, [drag.dragging]);
+
+  const stop = useCallback(() => {
+    press.current = null;
+    at.current = null;
+    window.clearTimeout(hold.current);
+    if (frame.current) cancelAnimationFrame(frame.current);
+    frame.current = 0;
+  }, []);
+
+  // Once main has stretched the view, the window is the surface the drag happens on, and the moves
+  // and the release are followed there: resizing the view takes the pill's pointer capture away with
+  // it, and the whole window is the pill's view now anyway.
+  useEffect(() => {
+    if (!drag.dragging) return;
+    const held = press.current;
+    if (!held) return;
+    // The resize dropped the pill's pointer capture; taking it back keeps a release that happens
+    // outside the window coming here rather than leaving the drag with no end.
+    try {
+      pill.current?.setPointerCapture(held.pointerId);
+    } catch {
+      /* the pointer is already gone; the listeners below are what end the drag */
+    }
+    const move = (e: PointerEvent) => {
+      if (e.pointerId !== held.pointerId) return;
+      at.current = { x: e.clientX, y: e.clientY };
+      if (frame.current) return;
+      frame.current = requestAnimationFrame(() => {
+        frame.current = 0;
+        const now = at.current;
+        if (!now) return;
+        setDrag((d) => (d.dragging ? { ...d, x: now.x - held.grabX, y: now.y - held.grabY } : d));
+        void window.xpilot.moveHandleDrag(now.x, now.y);
+      });
+    };
+    const drop = (e: PointerEvent) => {
+      if (e.pointerId !== held.pointerId) return;
+      stop();
+      void window.xpilot.endHandleDrag(e.clientX, e.clientY);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      stop();
+      void window.xpilot.cancelHandleDrag();
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', drop);
+    window.addEventListener('pointercancel', drop);
+    window.addEventListener('keydown', escape);
+    return () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', drop);
+      window.removeEventListener('pointercancel', drop);
+      window.removeEventListener('keydown', escape);
+    };
+  }, [drag.dragging, stop]);
+
+  const begin = (p: Press) => {
+    p.dragging = true;
+    dragged.current = true;
+    void window.xpilot.startHandleDrag(p.grabX, p.grabY);
+  };
+
+  const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    if (e.button !== 0) return;
+    const box = e.currentTarget.getBoundingClientRect();
+    const p: Press = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      grabX: e.clientX - box.left,
+      grabY: e.clientY - box.top,
+      at: performance.now(),
+      dragging: false,
+    };
+    press.current = p;
+    dragged.current = false;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    // A hold that never moves is a drag too, so the pill lifts under a still pointer as well.
+    hold.current = window.setTimeout(() => {
+      if (press.current === p && !p.dragging) begin(p);
+    }, CLICK_HOLD_MS);
+  };
+
+  // The pill has the pointer until main answers, so a press can be carried past its own edges and
+  // still be recognised as the start of a drag rather than a click that missed.
+  const onPointerMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const p = press.current;
+    if (!p || p.dragging || e.pointerId !== p.pointerId) return;
+    if (decideGesture({ dx: e.clientX - p.startX, dy: e.clientY - p.startY, elapsedMs: performance.now() - p.at }) === 'drag') begin(p);
+  };
+
+  const onRelease = (e: ReactPointerEvent<HTMLButtonElement>) => {
+    const p = press.current;
+    if (!p || e.pointerId !== p.pointerId) return;
+    if (drag.dragging) return; // the drag is being followed on the window, which ends it there
+    const dragging = p.dragging;
+    stop();
+    // A press that became a drag main has not answered yet: these coordinates are the pill's own,
+    // not the window's, so there is nowhere to put it down and it goes back where it came from.
+    if (dragging) void window.xpilot.cancelHandleDrag();
+  };
+
+  const style = drag.dragging ? { left: drag.x, top: drag.y, width: drag.width, height: drag.height } : undefined;
   return (
     <button
-      className={`handle status-${props.status}`}
-      onClick={props.onExpand}
-      title="Show XPilot sidebar (⌘\\)"
+      ref={pill}
+      className={`handle status-${props.status}${drag.dragging ? ' handle-floating' : ''}`}
+      style={style}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onRelease}
+      onPointerCancel={onRelease}
+      onClick={() => {
+        // The release that ends a drag still raises a click; only a real click opens the sidebar.
+        if (dragged.current) dragged.current = false;
+        else props.onExpand();
+      }}
+      title="Show XPilot sidebar (⌘\\) — hold to move it"
       aria-label="Show sidebar"
     >
       <span className="status-dot" />

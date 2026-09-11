@@ -13,13 +13,43 @@ export interface Bounds {
   height: number;
 }
 
-export function computeLayout(width: number, height: number, collapsed: boolean): { xView: Bounds; sidebar: Bounds } {
+/** Where the user dropped the handle, as offsets from the window's top-left. */
+export interface HandlePosition {
+  x: number;
+  y: number;
+}
+
+const clamp = (v: number, lo: number, hi: number): number => Math.round(Math.min(hi, Math.max(lo, v)));
+
+/**
+ * A saved handle position as it applies to a window this size, or null when it does not apply at
+ * all and the default top-right spot should be used: the window is too small to hold the handle
+ * inside its inset, or the saved spot is off the window entirely (a smaller display since, or a
+ * window moved between screens). A position that only hangs over an edge is pulled back in.
+ */
+export function clampHandle(width: number, height: number, handle: HandlePosition | null | undefined): HandlePosition | null {
+  if (!handle) return null;
+  const maxX = width - HANDLE_WIDTH - HANDLE_INSET;
+  const maxY = height - HANDLE_HEIGHT - HANDLE_INSET;
+  if (maxX < HANDLE_INSET || maxY < HANDLE_INSET) return null;
+  const offWindow = handle.x >= width || handle.y >= height || handle.x + HANDLE_WIDTH <= 0 || handle.y + HANDLE_HEIGHT <= 0;
+  if (offWindow) return null;
+  return { x: clamp(handle.x, HANDLE_INSET, maxX), y: clamp(handle.y, HANDLE_INSET, maxY) };
+}
+
+export function computeLayout(
+  width: number,
+  height: number,
+  collapsed: boolean,
+  handle?: HandlePosition | null,
+): { xView: Bounds; sidebar: Bounds } {
   if (collapsed) {
+    const spot = clampHandle(width, height, handle);
     return {
       xView: { x: 0, y: 0, width: Math.max(0, width), height },
       sidebar: {
-        x: Math.max(0, width - HANDLE_WIDTH - HANDLE_INSET - HANDLE_RIGHT_OFFSET),
-        y: HANDLE_INSET,
+        x: spot ? spot.x : Math.max(0, width - HANDLE_WIDTH - HANDLE_INSET - HANDLE_RIGHT_OFFSET),
+        y: spot ? spot.y : HANDLE_INSET,
         width: HANDLE_WIDTH,
         height: HANDLE_HEIGHT,
       },
