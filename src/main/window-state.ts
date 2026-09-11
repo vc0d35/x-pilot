@@ -12,7 +12,7 @@ export interface DisplayArea {
 }
 
 export const DEFAULT_BOUNDS: WindowBounds = { x: 0, y: 0, width: 1500, height: 950 };
-const MIN_WIDTH = 1000;
+const MIN_WIDTH = 640;
 const MIN_HEIGHT = 600;
 const MIN_VISIBLE = 200; // px of the window that must overlap a display in each axis
 

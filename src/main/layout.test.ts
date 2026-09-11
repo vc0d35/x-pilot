@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { clampHandle, computeLayout, HANDLE_HEIGHT, HANDLE_INSET, HANDLE_RIGHT_OFFSET, HANDLE_WIDTH, SIDEBAR_WIDTH } from './layout';
+import {
+  clampHandle,
+  computeLayout,
+  HANDLE_HEIGHT,
+  HANDLE_INSET,
+  HANDLE_RIGHT_OFFSET,
+  HANDLE_WIDTH,
+  minimumSize,
+  SIDEBAR_WIDTH,
+  widenedBounds,
+} from './layout';
 
 describe('computeLayout', () => {
   it('gives the sidebar its full width when open', () => {
@@ -50,5 +60,25 @@ describe('computeLayout', () => {
     const l = computeLayout(10, 100, false);
     expect(l.xView.width).toBe(0);
     expect(l.sidebar.width).toBe(10);
+  });
+});
+
+describe('minimum size and widening', () => {
+  it('lets the window go narrower only while the sidebar is collapsed', () => {
+    expect(minimumSize(false)).toEqual({ width: 1000, height: 600 });
+    expect(minimumSize(true)).toEqual({ width: 640, height: 600 });
+  });
+  it('widens a narrow window to the open minimum and keeps it on screen', () => {
+    const area = { x: 0, y: 0, width: 1440, height: 900 };
+    expect(widenedBounds({ x: 100, y: 50, width: 700, height: 800 }, 1000, area)).toEqual({ x: 100, y: 50, width: 1000, height: 800 });
+    expect(widenedBounds({ x: 900, y: 50, width: 700, height: 800 }, 1000, area)).toEqual({ x: 440, y: 50, width: 1000, height: 800 });
+    const wide = { x: 0, y: 0, width: 1200, height: 800 };
+    expect(widenedBounds(wide, 1000, area)).toBe(wide);
+    expect(widenedBounds({ x: 0, y: 0, width: 500, height: 600 }, 1000, { x: 0, y: 0, width: 800, height: 600 })).toEqual({
+      x: 0,
+      y: 0,
+      width: 800,
+      height: 600,
+    });
   });
 });

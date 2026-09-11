@@ -177,3 +177,4 @@ Start with `XPILOT_CDP_PORT=9222 npm run dev`, then `node scripts/inspect.mjs --
 - [ ] Settings → Models → the active backend's binary → a bogus path, then reconnect: the setup card names that backend, with its install and login commands and a Try again button; clearing the path and Try again removes the card.
 - [ ] `codex logout` in a terminal, then send a message: the card says you are logged out and shows `codex login`; log in, Try again, card disappears.
 - [ ] Packaged build (`npm run dist`, open `dist/mac-arm64/XPilot.app`) from Finder: Codex is found without a terminal PATH.
+- [ ] Collapse the sidebar and drag the window narrower than 1000 px: it goes down to 640. Expand: the window grows back to 1000 first, staying on screen.

@@ -1,5 +1,14 @@
-import { BaseWindow, WebContentsView } from 'electron';
-import { computeLayout, HANDLE_HEIGHT, HANDLE_WIDTH, type HandlePosition } from './layout';
+import { BaseWindow, WebContentsView, screen } from 'electron';
+import {
+  computeLayout,
+  HANDLE_HEIGHT,
+  HANDLE_WIDTH,
+  MIN_HEIGHT,
+  MIN_WIDTH_OPEN,
+  minimumSize,
+  widenedBounds,
+  type HandlePosition,
+} from './layout';
 import { IPC } from '../shared/ipc';
 import type { WindowBounds } from './window-state';
 
@@ -38,7 +47,7 @@ export interface MainWindow {
 }
 
 export function createMainWindow(opts: MainWindowOptions): MainWindow {
-  const win = new BaseWindow({ ...opts.bounds, minWidth: 1000, minHeight: 600, title: 'XPilot' });
+  const win = new BaseWindow({ ...opts.bounds, minWidth: MIN_WIDTH_OPEN, minHeight: MIN_HEIGHT, title: 'XPilot' });
   let saveTimer: NodeJS.Timeout | null = null;
   const scheduleSave = () => {
     if (saveTimer) clearTimeout(saveTimer);
@@ -96,6 +105,15 @@ export function createMainWindow(opts: MainWindowOptions): MainWindow {
     sidebar,
     setSidebarCollapsed: (c) => {
       collapsed = c;
+      if (!win.isDestroyed()) {
+        const min = minimumSize(c);
+        win.setMinimumSize(min.width, min.height);
+        if (!c) {
+          const bounds = win.getBounds();
+          const widened = widenedBounds(bounds, min.width, screen.getDisplayMatching(bounds).workArea);
+          if (widened !== bounds) win.setBounds(widened);
+        }
+      }
       // A sidebar that came back out mid-drag (⌘\\, or a card that needs answering) is not a pill
       // being carried any more; the drag's own end is ignored once the press it belonged to is gone.
       dragging = false;

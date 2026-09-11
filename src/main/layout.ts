@@ -5,6 +5,22 @@ export const HANDLE_HEIGHT = 32;
 export const HANDLE_INSET = 8;
 /** Horizontal offset from the right edge, keeping the handle clear of x.com's own top-right controls. */
 export const HANDLE_RIGHT_OFFSET = 15;
+export const MIN_HEIGHT = 600;
+/** The X page keeps its full layout beside an open sidebar; collapsed, only the page sets the floor. */
+export const MIN_WIDTH_OPEN = 1000;
+export const MIN_WIDTH_COLLAPSED = 640;
+
+export function minimumSize(collapsed: boolean): { width: number; height: number } {
+  return { width: collapsed ? MIN_WIDTH_COLLAPSED : MIN_WIDTH_OPEN, height: MIN_HEIGHT };
+}
+
+/** Bounds for a window that must grow to `minWidth`, kept inside the work area by sliding left. */
+export function widenedBounds(bounds: Bounds, minWidth: number, workArea: Bounds): Bounds {
+  if (bounds.width >= minWidth) return bounds;
+  const width = Math.min(minWidth, workArea.width);
+  const maxX = workArea.x + workArea.width - width;
+  return { ...bounds, width, x: Math.max(workArea.x, Math.min(bounds.x, maxX)) };
+}
 
 export interface Bounds {
   x: number;
