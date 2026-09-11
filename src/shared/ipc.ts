@@ -19,6 +19,8 @@ export const IPC = {
   viewFeed: 'view:feed',
   viewBack: 'view:back',
   viewError: 'view:error',
+  /** A view publishing what it is showing, for the turn hint and xpilot_view_state. */
+  viewSetState: 'view:setState',
   // sidebar <-> main
   agentSend: 'agent:send',
   agentInterrupt: 'agent:interrupt',

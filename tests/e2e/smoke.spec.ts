@@ -299,6 +299,113 @@ test('a custom view renders over X, reaches the bridge, and goes away again', as
 });
 
 /**
+ * The state a view publishes about itself, and the messages the agent sends it back. This is the
+ * whole of what the agent knows about a view: what it says it is showing, and what it agrees to be
+ * told. Nothing here touches the X page underneath.
+ */
+const STATE_INDEX = [
+  '<!doctype html><meta charset="utf-8" /><title>state view</title>',
+  '<div id="out">waiting</div>',
+  '<script type="module" src="app.js"></script>',
+].join('\n');
+
+const STATE_APP = [
+  'window.__messages = [];',
+  "window.xpilotView.subscribe('message', (message) => window.__messages.push(message));",
+  'window.__publish = (state) => window.xpilotView.setState(state);',
+  'window.__published = window.__publish({',
+  "  summary: 'three posts, j/k moves the highlight',",
+  "  focus: { url: 'https://x.com/alice/status/2', authorHandle: 'alice', text: 'the highlighted one' },",
+  "  items: [{ url: 'https://x.com/alice/status/2', authorHandle: 'alice', text: 'the highlighted one' }],",
+  "  extra: { mode: 'reader' },",
+  '});',
+  "document.getElementById('out').textContent = 'rendered';",
+].join('\n');
+
+const PUBLISHED_STATE = {
+  summary: 'three posts, j/k moves the highlight',
+  focus: { url: 'https://x.com/alice/status/2', authorHandle: 'alice', text: 'the highlighted one' },
+  items: [{ url: 'https://x.com/alice/status/2', authorHandle: 'alice', text: 'the highlighted one' }],
+  extra: { mode: 'reader' },
+};
+
+test('a view publishes what it is showing, and the agent reads it and messages it back', async () => {
+  await app.evaluate(
+    async (_electron, files: { index: string; app: string }) => {
+      const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
+      t.settings.update({ views: { mode: 'autonomous' } });
+      t.views.write('state-check', 'index.html', files.index);
+      t.views.write('state-check', 'app.js', files.app);
+      return t.registry.call('xpilot_activate_view', { view: 'state-check' });
+    },
+    { index: STATE_INDEX, app: STATE_APP },
+  );
+  await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
+  // What the view published on load is what the agent's read tool answers with.
+  await expect
+    .poll(
+      async () => {
+        const r = await inMain((t) => t.registry.call('xpilot_view_state', {}));
+        return (r.content as { state: unknown }).state;
+      },
+      { timeout: 15_000 },
+    )
+    .toEqual(PUBLISHED_STATE);
+  expect(await inMain((t) => t.registry.call('xpilot_view_state', {}))).toMatchObject({
+    success: true,
+    content: { view: 'state-check', updatedAt: expect.stringContaining('T') },
+  });
+  expect(await inCanvas('window.__published')).toMatchObject({ success: true, content: { status: 'published' } });
+  // A state main refused comes back to the view as a result it can draw, not as an exception.
+  expect(await inCanvas("window.__publish({ focus: 'the first post' })")).toMatchObject({
+    success: false,
+    error: expect.stringContaining('focus'),
+  });
+  // And the other direction: one message, delivered to the subscriber inside the canvas.
+  expect(
+    await inMain((t) => t.registry.call('xpilot_view_message', { data: { type: 'focus', url: 'https://x.com/alice/status/3' } })),
+  ).toMatchObject({ success: true, content: { delivered: true, view: 'state-check' } });
+  await expect
+    .poll(() => inCanvas('window.__messages'), { timeout: 15_000 })
+    .toEqual([{ type: 'focus', url: 'https://x.com/alice/status/3' }]);
+  // Off the screen, there is no state to read and nothing to message.
+  await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
+  expect(await inMain((t) => t.registry.call('xpilot_view_state', {}))).toEqual({ success: true, content: { view: null } });
+  expect(await inMain((t) => t.registry.call('xpilot_view_message', { data: { type: 'focus' } }))).toMatchObject({
+    success: false,
+    error: expect.stringContaining('No custom view is on screen'),
+  });
+  await inMain((t) => t.views.delete('state-check'));
+});
+
+test('the starter view from the contract publishes a summary as soon as it loads', async () => {
+  const starter = await inMain(async (t) => {
+    const api = await t.registry.call('xpilot_view_api', {});
+    const files = (api.content as { starters: Record<string, Record<string, string>> }).starters.posts;
+    t.settings.update({ views: { mode: 'autonomous' } });
+    for (const [path, content] of Object.entries(files)) t.views.write('starter-check', path, content);
+    return Object.keys(files);
+  });
+  expect(starter).toContain('index.html');
+  expect(await inMain((t) => t.registry.call('xpilot_activate_view', { view: 'starter-check' }))).toMatchObject({
+    success: true,
+    content: { status: 'kept' },
+  });
+  // The fixture page has no posts, so this is the starter publishing before it has anything to draw.
+  await expect
+    .poll(
+      async () => {
+        const r = await inMain((t) => t.registry.call('xpilot_view_state', {}));
+        return ((r.content as { state: { summary?: string } | null }).state ?? {}).summary ?? null;
+      },
+      { timeout: 15_000 },
+    )
+    .toContain('posts from the timeline underneath');
+  await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
+  await inMain((t) => t.views.delete('starter-check'));
+});
+
+/**
  * What a kept view may do to the account, and what the user is shown while it does it. A view is
  * agent-written code with no turn around it, so its calls are rows in the transcript and its cards
  * say whose they are — and the autonomous settings, which the user gave the agent, do not apply.

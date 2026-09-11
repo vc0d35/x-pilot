@@ -9,6 +9,7 @@ import {
   VIEW_CONSOLE_TEXT_MAX,
   VIEW_ENTRY_FILE,
   VIEW_FILE_EXTENSIONS,
+  VIEW_MESSAGE_BYTES_MAX,
   VIEW_NAME_PATTERN,
   VIEW_PREVIEW_MAX_MS,
 } from '../../../shared/views';
@@ -229,6 +230,34 @@ export const viewApi = defineTool({
   execute: async (_args, _ctx: AppToolCtx) => ok({ contract: VIEW_API_CONTRACT, starters: VIEW_STARTERS }),
 });
 
+/**
+ * What the view on screen says it is showing. It is also led with in the turn hint, so this tool is
+ * the way to ask again mid-turn — after a message, or after the user moved around in the view.
+ */
+export const viewState = defineTool({
+  name: 'xpilot_view_state',
+  description: `Returns what the custom view on screen has published about itself: a summary of what it is showing, the item it considers focused, the items it is listing, and anything else it chose to say. While a view is up, its focus is what the user means by "this post" unless they say otherwise. Answers { view: null } when the user is looking at x.com itself, and state: null when a view is up but has published nothing. ${WHAT_IT_IS}`,
+  args: z.strictObject({}),
+  annotations: { readOnlyHint: true },
+  execute: async (_args, ctx: AppToolCtx) => ok(ctx.views.state() ?? { view: null }),
+});
+
+export const viewMessage = defineTool({
+  name: 'xpilot_view_message',
+  description: `Sends one object to the custom view on screen, which receives it on window.xpilotView.subscribe('message', cb). This is how you drive a view you wrote — focus an item, filter, scroll it — without moving the X page underneath, and it only does something if the view handles that message: they are your own protocol, e.g. { type: 'focus', url }. Read the view's code, or xpilot_view_state, to know what it understands. At most ${VIEW_MESSAGE_BYTES_MAX / 1024} KB.`,
+  args: z.strictObject({
+    data: z
+      .record(z.string(), z.unknown())
+      .describe("The message, as the view's own code expects it, e.g. { type: 'focus', url: 'https://x.com/…' }"),
+  }),
+  execute: async (args, ctx: AppToolCtx) => {
+    const bytes = Buffer.byteLength(JSON.stringify(args.data));
+    if (bytes > VIEW_MESSAGE_BYTES_MAX) return fail(`That message is ${bytes} bytes; at most ${VIEW_MESSAGE_BYTES_MAX / 1024} KB.`);
+    if (!ctx.views.message(args.data)) return fail('No custom view is on screen; activate one first.');
+    return ok({ delivered: true, view: ctx.views.active() });
+  },
+});
+
 export const viewTools = [
   listViews,
   readViewFile,
@@ -239,4 +268,6 @@ export const viewTools = [
   viewConsole,
   viewInspect,
   viewApi,
+  viewState,
+  viewMessage,
 ];

@@ -5,9 +5,11 @@ import {
   VIEW_LOG_TEXT_MAX,
   VIEW_STORM_MESSAGE,
   VIEW_UNRESPONSIVE_MS,
+  type ActiveViewState,
   type ViewErrorPhase,
   type ViewErrorReport,
   type ViewLogEntry,
+  type ViewState,
 } from '../../shared/views';
 import { ViewErrorCounters, formatWhere } from './errors';
 import { viewOrigin, viewUrl } from './serve';
@@ -119,12 +121,14 @@ export class ViewCanvas {
   private loading = false;
   /** Running while a wedged renderer is being given its ten seconds to come back. */
   private unresponsiveTimer: NodeJS.Timeout | null = null;
+  /** What the view on screen last published about itself; nothing survives that view going away. */
+  private published: { view: string; state: ViewState; updatedAt: string } | null = null;
   readonly logs = new ViewLogs();
   private readonly errors: ViewErrorCounters;
 
   constructor(
     private readonly deps: ViewCanvasDeps,
-    now: () => number = Date.now,
+    private readonly now: () => number = Date.now,
   ) {
     this.errors = new ViewErrorCounters(now);
   }
@@ -145,6 +149,29 @@ export class ViewCanvas {
     this.previewingView = previewing;
   }
 
+  /**
+   * One `setState` from the view on screen. It replaces whatever it published before — a state is
+   * what the view is showing now, not a log of what it showed — and it is dropped if it arrives
+   * after the view went away, which is the same rule the relayed errors follow.
+   */
+  publishState(state: ViewState): void {
+    const name = this.activeView;
+    if (!name) return;
+    this.published = { view: name, state, updatedAt: new Date(this.now()).toISOString() };
+  }
+
+  /**
+   * The view on screen and what it has said about itself, or null when the user is looking at X.
+   * `state` is null while the view is up but has published nothing, which is a different answer
+   * from there being no view at all.
+   */
+  publishedState(): ActiveViewState | null {
+    const name = this.activeView;
+    if (!name) return null;
+    const published = this.published?.view === name ? this.published : null;
+    return { view: name, state: published?.state ?? null, updatedAt: published?.updatedAt ?? null };
+  }
+
   contents(): WebContents | null {
     return this.view && !this.view.webContents.isDestroyed() ? this.view.webContents : null;
   }
@@ -160,6 +187,8 @@ export class ViewCanvas {
     const was = this.activeView;
     this.activeView = name;
     this.previewingView = false;
+    // A fresh document has published nothing yet, even when the same view was up a moment ago.
+    this.published = null;
     this.errors.activated(name);
     if (!was) this.deps.mount(view);
     view.setBounds(this.deps.bounds());
@@ -189,6 +218,7 @@ export class ViewCanvas {
     const wasActive = this.activeView !== null;
     this.activeView = null;
     this.previewingView = false;
+    this.published = null;
     if (this.view && !this.view.webContents.isDestroyed()) {
       this.deps.unmount(this.view);
       // No navigation on hide: a blank-page load racing the next activation's load on a view whose
@@ -218,6 +248,9 @@ export class ViewCanvas {
       this.reloadTimer = null;
       const contents = this.contents();
       if (!contents || this.activeView !== name) return;
+      // The files changed under it, so whatever it published describes a UI that may not exist any
+      // more; the document about to load publishes its own.
+      this.published = null;
       // The canvas can be taken off the screen between the timer being set and it firing.
       try {
         // Ignoring the cache as well as answering no-store: a reload exists to show what changed.
@@ -269,6 +302,7 @@ export class ViewCanvas {
     this.view = null;
     this.activeView = null;
     this.previewingView = false;
+    this.published = null;
     if (!view || view.webContents.isDestroyed()) return;
     this.deps.unmount(view);
     // Every listener goes before the contents do: a console message, a navigation event or a

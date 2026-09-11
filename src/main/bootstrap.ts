@@ -87,6 +87,7 @@ const VIEW_WRITE_TOOLS = [
   'xpilot_activate_view',
   'xpilot_deactivate_view',
   'xpilot_view_inspect',
+  'xpilot_view_message',
 ];
 
 const NOT_FOR_SCHEDULED_RUNS = new Set([...TASK_MANAGEMENT_TOOLS, ...CONFIG_WRITE_TOOLS, ...VIEW_WRITE_TOOLS]);
@@ -484,6 +485,9 @@ export function createApp(opts: AppOptions): XPilotApp {
     pageContext: () => lastPageContext,
     deactivate: deactivateView,
     reportError: (report) => canvas.noteRuntimeError(report),
+    // What the view says it is showing, kept against the view on screen: the agent's turn hint
+    // leads with it, because it is what the user is actually looking at.
+    publishState: (state) => canvas.publishState(state),
   });
   const trackXContents = (contents: WebContents): void => {
     xContents.set(contents.id, contents);
@@ -602,6 +606,13 @@ export function createApp(opts: AppOptions): XPilotApp {
       },
       mode: () => settings.get().views.mode,
       logs: (view?: string, limit?: number) => canvas.logs.get(view, limit),
+      state: () => canvas.publishedState(),
+      /** The agent's half of the view's message feed; a view that never subscribed simply misses it. */
+      message: (data: Record<string, unknown>) => {
+        if (!canvas.active()) return false;
+        viewBridge?.pushMessage(data);
+        return true;
+      },
       inspect: async (selector?: string, limit?: number) => {
         const contents = canvas.active() ? canvas.contents() : null;
         if (!contents) return null;
@@ -685,6 +696,8 @@ export function createApp(opts: AppOptions): XPilotApp {
         userInput,
         clientVersion: app.getVersion(),
       }),
+    // A view on screen is what the user is looking at, so every turn leads with what it published.
+    activeViewState: () => canvas.publishedState(),
   });
   const appMenu = installAppMenu({
     openExternal,

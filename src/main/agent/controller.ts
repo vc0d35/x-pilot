@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { AgentEvent, ProviderKind } from '../../shared/agent';
 import { PROVIDER_LABELS } from '../../shared/agent';
 import type { PageContext } from '../../shared/page';
+import type { ActiveViewState } from '../../shared/views';
 import type { SettingsStore } from '../settings';
 import type { ToolSpec } from '../../shared/tools';
 import type { ToolRegistry } from '../tools/registry';
@@ -51,6 +52,11 @@ export interface AgentControllerDeps {
   store?: AppStore;
   /** Where the live thread id and its tool fingerprint are kept; defaults to a file beside settings.json. */
   threadState?: ThreadState;
+  /**
+   * The custom view on the user's screen and what it has published about itself, for the turn hint.
+   * Optional: a controller with no canvas behind it simply sends the X page.
+   */
+  activeViewState?: () => ActiveViewState | null;
 }
 
 export class AgentController {
@@ -252,7 +258,7 @@ export class AgentController {
 
   async send(text: string, ctx: PageContext | null): Promise<void> {
     if (!this.provider) throw new Error('Agent is not running');
-    await this.provider.send(text, ctx);
+    await this.provider.send(text, ctx, this.deps.activeViewState?.() ?? null);
   }
 
   async interrupt(): Promise<void> {

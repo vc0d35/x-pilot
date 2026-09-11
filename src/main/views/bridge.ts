@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { IPC } from '../../shared/ipc';
-import { fail, type CallOrigin, type ToolResult } from '../../shared/tools';
+import { fail, ok, type CallOrigin, type ToolResult } from '../../shared/tools';
 import {
   VIEW_CALLS_PER_WINDOW,
   VIEW_CALL_WINDOW_MS,
@@ -13,9 +13,22 @@ import {
   VIEW_POSTS_POLL_MS,
   VIEW_PREVIEW_REFUSAL,
   VIEW_PREVIEW_TOOL_ALLOWLIST,
+  VIEW_STATE_BYTES_MAX,
+  VIEW_STATE_EXTRA_KEYS_MAX,
+  VIEW_STATE_EXTRA_KEY_MAX,
+  VIEW_STATE_EXTRA_VALUE_MAX,
+  VIEW_STATE_FOCUS_TEXT_MAX,
+  VIEW_STATE_HANDLE_MAX,
+  VIEW_STATE_ITEMS_MAX,
+  VIEW_STATE_ITEM_TEXT_MAX,
+  VIEW_STATE_SUMMARY_MAX,
+  VIEW_STATE_UPDATES_PER_WINDOW,
+  VIEW_STATE_URL_MAX,
+  VIEW_STATE_WINDOW_MS,
   VIEW_TOOL_ALLOWLIST,
   type ViewErrorReport,
   type ViewFeed,
+  type ViewState,
 } from '../../shared/views';
 import type { AgentEvent } from '../../shared/agent';
 import type { PageContext, VisiblePost } from '../../shared/page';
@@ -41,6 +54,51 @@ const ErrorSchema = z.object({
   line: z.number().int().nonnegative().max(10_000_000).optional(),
   column: z.number().int().nonnegative().max(10_000_000).optional(),
 });
+
+/**
+ * One untrusted line of a published state: cut to its cap rather than refused, because a view
+ * showing a long post should still publish it, and refused outright past twice that, because at
+ * that point the view is not publishing a state.
+ */
+const cutTo = (max: number) =>
+  z
+    .string()
+    .max(max * 2)
+    .transform((s) => s.slice(0, max));
+
+const FocusSchema = z.strictObject({
+  url: cutTo(VIEW_STATE_URL_MAX).optional(),
+  authorHandle: cutTo(VIEW_STATE_HANDLE_MAX).optional(),
+  text: cutTo(VIEW_STATE_FOCUS_TEXT_MAX).optional(),
+});
+
+/**
+ * What a view may say about itself. Unknown keys are refused rather than dropped: a view is written
+ * by a model against the contract, and a typo it never hears about is a focus that silently never
+ * arrives. Sizes are the other way round — cut, so a long post costs the model tokens rather than
+ * costing the user their hint.
+ */
+const ViewStateSchema = z.strictObject({
+  summary: cutTo(VIEW_STATE_SUMMARY_MAX).optional(),
+  focus: FocusSchema.nullable().optional(),
+  items: z
+    .array(
+      z.strictObject({
+        url: cutTo(VIEW_STATE_URL_MAX).optional(),
+        authorHandle: cutTo(VIEW_STATE_HANDLE_MAX).optional(),
+        text: cutTo(VIEW_STATE_ITEM_TEXT_MAX).optional(),
+      }),
+    )
+    .max(VIEW_STATE_ITEMS_MAX * 10)
+    .transform((items) => items.slice(0, VIEW_STATE_ITEMS_MAX))
+    .optional(),
+  extra: z
+    .record(z.string().max(VIEW_STATE_EXTRA_KEY_MAX), z.union([cutTo(VIEW_STATE_EXTRA_VALUE_MAX), z.number().finite(), z.boolean()]))
+    .transform((extra) => Object.fromEntries(Object.entries(extra).slice(0, VIEW_STATE_EXTRA_KEYS_MAX)))
+    .optional(),
+});
+
+const SetStateSchema = z.object({ state: ViewStateSchema });
 
 /** The slice of ipcMain this module drives, so the wiring can be tested without Electron. */
 export interface ViewBridgeIpc {
@@ -75,6 +133,12 @@ export interface ViewBridgeDeps {
   deactivate(): void;
   /** An error the view's own scripts threw, relayed by its preload. */
   reportError(report: ViewErrorReport): void;
+  /**
+   * What the view has just published about what it is showing. It is kept against the view on
+   * screen, read by `xpilot_view_state` and led with in the turn hint: while a view is up, what it
+   * says is focused is what the user means by "this post".
+   */
+  publishState(state: ViewState): void;
   now?: () => number;
   setInterval?: (fn: () => void, ms: number) => NodeJS.Timeout;
   clearInterval?: (timer: NodeJS.Timeout) => void;
@@ -96,6 +160,8 @@ export function refuseToolCall(name: string, opts: { previewing?: boolean } = {}
 export interface ViewBridge {
   /** A new PageContext from the X view: pushed to whichever feeds are subscribed. */
   pushPage(context: PageContext | null): void;
+  /** One `xpilot_view_message` on its way to the view; it is dropped if the view never subscribed. */
+  pushMessage(data: Record<string, unknown>): void;
   /** The canvas navigated, or went away: its subscriptions died with its document. */
   reset(): void;
 }
@@ -170,9 +236,10 @@ export function registerViewBridgeIpc(deps: ViewBridgeDeps): ViewBridge {
     const feed = parsed.data.feed;
     subscribed.add(feed);
     syncPoller();
-    // Whatever is known right now, so a view renders on its first frame rather than on the next change.
+    // Whatever is known right now, so a view renders on its first frame rather than on the next
+    // change. `message` has no current value: nothing has been said to this view yet.
     if (feed === 'page') deps.send({ feed, data: deps.pageContext() });
-    else {
+    else if (feed === 'posts') {
       deps.send({ feed, data: visiblePostsOf(deps.pageContext()) });
       pollPosts();
     }
@@ -210,6 +277,31 @@ export function registerViewBridgeIpc(deps: ViewBridgeDeps): ViewBridge {
     deps.reportError(parsed.data);
   });
 
+  // What the view says it is showing. It is budgeted like everything else a view drives, but the
+  // preload coalesces first — a view that redraws at frame rate publishes the newest state four
+  // times a second rather than being told off — so reaching this refusal means something is looping.
+  const stateBudget = createBudget({ max: VIEW_STATE_UPDATES_PER_WINDOW, windowMs: VIEW_STATE_WINDOW_MS, now: deps.now });
+  deps.ipc.handle(IPC.viewSetState, (event, raw): ToolResult => {
+    if (!fromCanvas(event)) return fail('unauthorized');
+    const parsed = SetStateSchema.safeParse(raw);
+    if (!parsed.success)
+      return fail(
+        `That is not a view state: ${parsed.error.issues.map((i) => (i.path.length ? `${i.path.join('.')}: ${i.message}` : i.message)).join('; ')}`,
+      );
+    const state = parsed.data.state;
+    const bytes = Buffer.byteLength(JSON.stringify(state));
+    if (bytes > VIEW_STATE_BYTES_MAX)
+      return fail(
+        `That state is ${bytes} bytes; at most ${VIEW_STATE_BYTES_MAX / 1024} KB. Publish what is on screen, not everything you have.`,
+      );
+    if (!stateBudget.take())
+      return fail(
+        `Too many state updates: at most ${VIEW_STATE_UPDATES_PER_WINDOW} per ${VIEW_STATE_WINDOW_MS / 1000} s. Publish when what you are showing changes, not on every frame.`,
+      );
+    deps.publishState(state);
+    return ok({ status: 'published', bytes });
+  });
+
   deps.ipc.handle(IPC.viewBack, (event) => {
     if (!fromCanvas(event)) throw new Error('unauthorized');
     deps.deactivate();
@@ -219,6 +311,9 @@ export function registerViewBridgeIpc(deps: ViewBridgeDeps): ViewBridge {
     pushPage(context) {
       if (subscribed.has('page')) deps.send({ feed: 'page', data: context });
       if (subscribed.has('posts')) deps.send({ feed: 'posts', data: visiblePostsOf(context) });
+    },
+    pushMessage(data) {
+      deps.send({ feed: 'message', data });
     },
     reset() {
       subscribed.clear();

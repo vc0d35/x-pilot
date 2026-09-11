@@ -10,7 +10,13 @@ import {
   VIEW_ERROR_SOURCE_MAX,
   VIEW_ACCOUNT_WRITE_TOOLS,
   VIEW_READ_TOOLS,
+  VIEW_STATE_BYTES_MAX,
+  VIEW_STATE_ITEMS_MAX,
+  VIEW_STATE_SUMMARY_MAX,
+  VIEW_STATE_UPDATES_PER_WINDOW,
+  VIEW_STATE_WINDOW_MS,
   VIEW_TOOL_ALLOWLIST,
+  type ViewState,
 } from '../../shared/views';
 import type { AgentEvent } from '../../shared/agent';
 import type { PageContext } from '../../shared/page';
@@ -36,6 +42,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
   const callTool = vi.fn(async (name: string) => ok({ called: name }));
   const deactivate = vi.fn();
   const reportError = vi.fn();
+  const published: ViewState[] = [];
   const traced: AgentEvent[] = [];
   const timers: (() => void)[] = [];
   const bridge = registerViewBridgeIpc({
@@ -49,6 +56,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
     pageContext: () => opts.context ?? null,
     deactivate,
     reportError,
+    publishState: (state) => published.push(state),
     now: opts.now,
     setInterval: (fn) => {
       timers.push(fn);
@@ -62,6 +70,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
     callTool,
     deactivate,
     reportError,
+    published,
     traced,
     timers,
     call: (payload: unknown, from = CANVAS_ID) => handlers.get(IPC.viewCall)!({ sender: { id: from } }, payload),
@@ -69,6 +78,7 @@ function harness(opts: { canvasId?: number | null; context?: PageContext | null;
     subscribe: (feed: string, from = CANVAS_ID) => listeners.get(IPC.viewSubscribe)!({ sender: { id: from } }, { feed }),
     unsubscribe: (feed: string, from = CANVAS_ID) => listeners.get(IPC.viewUnsubscribe)!({ sender: { id: from } }, { feed }),
     reportedError: (payload: unknown, from = CANVAS_ID) => listeners.get(IPC.viewError)!({ sender: { id: from } }, payload),
+    setState: (state: unknown, from = CANVAS_ID) => handlers.get(IPC.viewSetState)!({ sender: { id: from } }, { state }),
   };
 }
 
@@ -270,5 +280,89 @@ describe('the errors a view relays about itself', () => {
     at += VIEW_ERROR_REPORT_WINDOW_MS;
     h.reportedError({ kind: 'error', message: 'later' });
     expect(h.reportError).toHaveBeenCalledTimes(VIEW_ERROR_REPORTS_PER_WINDOW + 1);
+  });
+});
+
+describe('the state a view publishes about itself', () => {
+  it('keeps what the view says it is showing, and says how big it was', async () => {
+    const h = harness();
+    const state = {
+      summary: '42 posts, j/k moves the highlight',
+      focus: { url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'hello' },
+      items: [{ url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'hello' }],
+      extra: { filter: 'from:a', unread: 3, live: true },
+    };
+    expect(await h.setState(state)).toMatchObject({ success: true, content: { status: 'published' } });
+    expect(h.published).toEqual([state]);
+  });
+
+  it('answers nobody but the canvas', async () => {
+    const h = harness();
+    expect(await h.setState({ summary: 'from elsewhere' }, CANVAS_ID + 1)).toEqual({ success: false, error: 'unauthorized' });
+    expect(h.published).toEqual([]);
+  });
+
+  it('refuses a shape that is not a view state, naming the field', async () => {
+    const h = harness();
+    expect(await h.setState({ focus: 'the first post' })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('focus'),
+    });
+    // A key the contract does not have is refused rather than dropped: a typo is a focus that
+    // silently never arrives.
+    expect(await h.setState({ summary: 'ok', focussed: { url: 'https://x.com/a/status/1' } })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('focussed'),
+    });
+    expect(await h.setState('not an object')).toMatchObject({ success: false });
+    expect(h.published).toEqual([]);
+  });
+
+  it('cuts what is merely too long, and keeps the first items', async () => {
+    const h = harness();
+    expect(
+      await h.setState({
+        summary: 's'.repeat(VIEW_STATE_SUMMARY_MAX + 40),
+        items: Array.from({ length: VIEW_STATE_ITEMS_MAX + 5 }, (_, i) => ({ text: `post ${i}` })),
+      }),
+    ).toMatchObject({ success: true });
+    const state = h.published[0];
+    expect(state.summary).toHaveLength(VIEW_STATE_SUMMARY_MAX);
+    expect(state.items).toHaveLength(VIEW_STATE_ITEMS_MAX);
+    expect(state.items![0]).toEqual({ text: 'post 0' });
+  });
+
+  it('refuses a state that is padded out past the whole cap', async () => {
+    const h = harness();
+    const filler = { authorHandle: 'a', text: 'x'.repeat(200), url: `https://x.com/a/status/${'1'.repeat(400)}` };
+    const r = await h.setState({ items: Array.from({ length: VIEW_STATE_ITEMS_MAX }, () => filler) });
+    expect(r).toMatchObject({ success: false, error: expect.stringContaining(`${VIEW_STATE_BYTES_MAX / 1024} KB`) });
+    expect(h.published).toEqual([]);
+  });
+
+  it('takes four a second and refuses the rest, then starts again in the next window', async () => {
+    let now = 0;
+    const h = harness({ now: () => now });
+    for (let i = 0; i < VIEW_STATE_UPDATES_PER_WINDOW; i++)
+      expect(await h.setState({ summary: `state ${i}` })).toMatchObject({ success: true });
+    expect(await h.setState({ summary: 'one too many' })).toMatchObject({
+      success: false,
+      error: expect.stringContaining('not on every frame'),
+    });
+    expect(h.published).toHaveLength(VIEW_STATE_UPDATES_PER_WINDOW);
+    now += VIEW_STATE_WINDOW_MS;
+    expect(await h.setState({ summary: 'later' })).toMatchObject({ success: true });
+    expect(h.published.at(-1)).toEqual({ summary: 'later' });
+  });
+});
+
+describe('the messages the agent sends a view', () => {
+  it('pushes one onto the message feed', () => {
+    const h = harness();
+    h.subscribe('message');
+    // Unlike page and posts, a new subscriber is answered with nothing: nothing has been said yet.
+    expect(h.sent).toEqual([]);
+    h.bridge.pushMessage({ type: 'focus', url: 'https://x.com/a/status/1' });
+    expect(h.sent).toEqual([{ feed: 'message', data: { type: 'focus', url: 'https://x.com/a/status/1' } }]);
   });
 });

@@ -100,6 +100,9 @@ Run `npm run dev`, logged into x.com in the X view.
 - [ ] Have a view compose a post and then click "Back to X" without posting → x.com is on the home timeline, not on a composer with the view's text in it.
 - [ ] A view that offers a "download" (an `<a download>` of a blob it built) → nothing is saved and no Save dialog appears.
 - [ ] A view drawn with three.js (the second starter from xpilot_view_api) renders: `xpilot://lib/three.module.js` and OrbitControls load, and dragging orbits the scene.
+- [ ] "Build me a reader for my timeline where j and k move a highlight, and tell me which post is highlighted" → the view goes up; press j a couple of times and ask "is this true?" → the answer is about the highlighted post, not about whatever the X page underneath has focused, and the transcript shows either no tool row at all (the hint carried it) or an `xpilot_view_state` one.
+- [ ] With the same view up, "focus the next post" → the highlight moves in the view without the X page underneath moving, and the transcript shows `xpilot_view_message`. Ask "what is on my screen?" → the summary the view published, not x.com.
+- [ ] Take the view off (⌘⇧X) and ask "what post is highlighted?" → the agent says no view is on screen rather than answering from a stale state; activate it again and the answer is right from the first turn.
 
 ## Selectors
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { ApprovalBroker } from '../../approvals';
 import type { ApprovalRequest } from '../../../shared/agent';
 import type { AppToolCtx } from './context';
-import { VIEW_TOOL_ALLOWLIST } from '../../../shared/views';
+import { VIEW_MESSAGE_BYTES_MAX, VIEW_TOOL_ALLOWLIST, type ActiveViewState } from '../../../shared/views';
 import { VIEW_API_CONTRACT, VIEW_STARTERS } from '../../views/api';
 import {
   activateView,
@@ -13,6 +13,8 @@ import {
   viewApi,
   viewConsole,
   viewInspect,
+  viewMessage,
+  viewState,
   writeViewFile,
 } from './views';
 
@@ -52,6 +54,7 @@ function ctx(
     active?: string | null;
     showFailure?: string | null;
     inspect?: unknown;
+    published?: ActiveViewState | null;
   } = {},
 ) {
   const store = fakeStore(opts.files ?? {});
@@ -74,6 +77,7 @@ function ctx(
     previewing = false;
   });
   const failed = vi.fn();
+  const messages: Record<string, unknown>[] = [];
   let previewing = false;
   const preview = vi.fn((on: boolean) => {
     previewing = on;
@@ -86,6 +90,7 @@ function ctx(
     hide,
     preview,
     failed,
+    messages,
     previewing: () => previewing,
     persisted,
     value: {
@@ -100,6 +105,12 @@ function ctx(
         persist: (view: string | null) => persisted.push(view),
         mode: () => opts.mode ?? 'autonomous',
         logs: () => [{ at: '2026-01-01T00:00:00.000Z', source: 'console' as const, level: 'error', text: 'boom' }],
+        state: () => opts.published ?? null,
+        message: (data: Record<string, unknown>) => {
+          if (!active) return false;
+          messages.push(data);
+          return true;
+        },
         inspect: async () => (opts.inspect === undefined ? null : opts.inspect),
       },
     } as unknown as AppToolCtx,
@@ -263,6 +274,45 @@ describe('xpilot_view_console, xpilot_view_inspect and xpilot_view_api', () => {
       expect(starter['index.html']).not.toMatch(/<script(?![^>]*\ssrc=)/);
       expect(starter['index.html']).toContain('src="app.js"');
       expect(starter['app.js']).toContain('window.xpilotView');
+      // Both halves of the agent's side of a view: what it publishes, and what it can be told.
+      expect(starter['app.js']).toContain('window.xpilotView.setState');
+      expect(starter['app.js']).toContain("subscribe('message'");
     }
+    for (const mentioned of ['setState', 'focus', 'items', 'summary', 'message']) expect(VIEW_API_CONTRACT).toContain(mentioned);
+  });
+});
+
+describe('xpilot_view_state and xpilot_view_message', () => {
+  const published = {
+    view: 'reader',
+    state: { summary: '42 posts', focus: { url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'hello' } },
+    updatedAt: '2026-09-11T10:00:00.000Z',
+  };
+
+  it('returns what the view on screen published, and says when there is no view at all', async () => {
+    expect(await viewState.execute({}, ctx({ active: 'reader', published }).value)).toEqual({ success: true, content: published });
+    expect(await viewState.execute({}, ctx().value)).toEqual({ success: true, content: { view: null } });
+  });
+
+  it('delivers a message to the view on screen, and fails when there is none', async () => {
+    const c = ctx({ files: { reader: { 'index.html': 'x' } }, active: 'reader' });
+    expect(await viewMessage.execute({ data: { type: 'focus', url: 'https://x.com/a/status/1' } }, c.value)).toEqual({
+      success: true,
+      content: { delivered: true, view: 'reader' },
+    });
+    expect(c.messages).toEqual([{ type: 'focus', url: 'https://x.com/a/status/1' }]);
+    expect(await viewMessage.execute({ data: { type: 'focus' } }, ctx().value)).toMatchObject({
+      success: false,
+      error: expect.stringContaining('No custom view is on screen'),
+    });
+  });
+
+  it('refuses a message bigger than the cap rather than handing it over', async () => {
+    const c = ctx({ active: 'reader' });
+    expect(await viewMessage.execute({ data: { blob: 'x'.repeat(VIEW_MESSAGE_BYTES_MAX) } }, c.value)).toMatchObject({
+      success: false,
+      error: expect.stringContaining(`${VIEW_MESSAGE_BYTES_MAX / 1024} KB`),
+    });
+    expect(c.messages).toEqual([]);
   });
 });

@@ -1,6 +1,7 @@
 import { spawn as nodeSpawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import type { AgentEvent } from '../../../shared/agent';
 import type { PageContext } from '../../../shared/page';
+import type { ActiveViewState } from '../../../shared/views';
 import { contextKey } from '../../../shared/page-context';
 import type { ToolResult } from '../../../shared/tools';
 import type { ApprovalBroker } from '../../approvals';
@@ -207,9 +208,9 @@ export class CodexProvider implements AgentProvider {
     throw new Error(message);
   }
 
-  async send(text: string, pageContext?: PageContext | null): Promise<void> {
+  async send(text: string, pageContext?: PageContext | null, activeView?: ActiveViewState | null): Promise<void> {
     if (!this.rpc || !this.threadId) throw new Error('provider not started');
-    const full = buildTurnText(text, pageContext, this.lastContextKey);
+    const full = buildTurnText(text, pageContext, this.lastContextKey, activeView);
     this.lastContextKey = contextKey(pageContext) ?? this.lastContextKey;
     this.emit({ type: 'user.message', text });
     this.running = true;

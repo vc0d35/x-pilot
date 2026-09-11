@@ -234,6 +234,42 @@ describe('ViewCanvas failure handling', () => {
     expect(c.failures).toEqual([{ view: 'other', phase: 'load', message: 'there is no index.html to load', fatal: true }]);
   });
 
+  it('keeps what the view on screen published, and forgets it when the view goes', async () => {
+    const c = await canvasFor();
+    expect(c.canvas.publishedState()).toEqual({ view: 'feed', state: null, updatedAt: null });
+    c.canvas.publishState({ summary: 'ten posts', focus: { url: 'https://x.com/a/status/1' } });
+    expect(c.canvas.publishedState()).toEqual({
+      view: 'feed',
+      state: { summary: 'ten posts', focus: { url: 'https://x.com/a/status/1' } },
+      updatedAt: expect.stringContaining('T'),
+    });
+    // A state replaces the one before it: it is what the view is showing, not a log of what it showed.
+    c.canvas.publishState({ summary: 'nine posts' });
+    expect(c.canvas.publishedState()!.state).toEqual({ summary: 'nine posts' });
+    c.canvas.hide();
+    expect(c.canvas.publishedState()).toBeNull();
+    // And nothing published with no view on screen is kept at all.
+    c.canvas.publishState({ summary: 'late' });
+    expect(c.canvas.publishedState()).toBeNull();
+  });
+
+  it('starts a new activation, and a reload, with nothing published', async () => {
+    vi.useFakeTimers();
+    try {
+      const c = await canvasFor();
+      c.canvas.publishState({ summary: 'ten posts' });
+      await c.canvas.show('feed');
+      expect(c.canvas.publishedState()).toEqual({ view: 'feed', state: null, updatedAt: null });
+      c.canvas.publishState({ summary: 'ten posts' });
+      // The files changed under it: what it published may describe a UI that is not there any more.
+      c.canvas.scheduleReload('feed');
+      vi.advanceTimersByTime(500);
+      expect(c.canvas.publishedState()!.state).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reloads the view that changed, once, and nothing once it is off the screen', async () => {
     vi.useFakeTimers();
     try {

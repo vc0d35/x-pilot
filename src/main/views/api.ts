@@ -5,6 +5,12 @@ import {
   VIEW_CALL_WINDOW_MS,
   VIEW_FILE_EXTENSIONS,
   VIEW_RUNTIME_ERRORS_PER_WINDOW,
+  VIEW_STATE_BYTES_MAX,
+  VIEW_STATE_FOCUS_TEXT_MAX,
+  VIEW_STATE_ITEMS_MAX,
+  VIEW_STATE_ITEM_TEXT_MAX,
+  VIEW_STATE_SUMMARY_MAX,
+  VIEW_STATE_UPDATES_PER_WINDOW,
   VIEW_UNRESPONSIVE_MS,
 } from '../../shared/views';
 
@@ -22,7 +28,20 @@ window.xpilotView
     'page'   the page the user is on: { url, kind, post, visible } (the same context the sidebar gets)
     'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s — the
              re-read carries the whole post object, pictures and all
-    Both call back immediately with what is known now, then on every change.
+    'message' what the agent sent with xpilot_view_message: a plain object whose meaning is yours,
+             e.g. { type: 'focus', url }. Handle the shapes you defined and ignore the rest.
+    'page' and 'posts' call back immediately with what is known now, then on every change;
+    'message' only when something is sent.
+  setState(state) -> Promise<{ success: true } | { success: false, error }>
+    Tells the agent what your view is showing, so it can answer about the view instead of about the
+    X page hidden underneath it:
+      { summary?: string (${VIEW_STATE_SUMMARY_MAX}), focus?: { url?, authorHandle?, text? (${VIEW_STATE_FOCUS_TEXT_MAX}) } | null,
+        items?: [{ url?, authorHandle?, text? (${VIEW_STATE_ITEM_TEXT_MAX}) }] (${VIEW_STATE_ITEMS_MAX}), extra?: { key: string | number | boolean } }
+    Publish the focused item every time it changes — while your view is on screen that focus is what
+    the user means by "this post" — and a summary once, when the view loads, saying what it shows and
+    how it is driven. focus: null says nothing is focused. Unknown keys are refused, long strings are
+    cut, and it replaces the whole state each time rather than merging. ${VIEW_STATE_BYTES_MAX / 1024} KB in all, ${VIEW_STATE_UPDATES_PER_WINDOW} updates a
+    second (publish freely: past that the newest one wins rather than failing).
   call(tool, args) -> Promise<{ success: true, content } | { success: false, error }>
     reads:   x_get_page_state, x_read_visible_posts, x_read_current_post, x_read_post, x_search,
              x_read_timeline, x_read_news_and_trends, x_read_bookmarks, xpilot_search_history,
@@ -71,6 +90,7 @@ const MINIMAL_HTML = `<!doctype html>
   button { background: #1d9bf0; border: 0; border-radius: 999px; color: #fff; padding: 6px 14px; cursor: pointer; }
   ol { list-style: none; margin: 0; padding: 8px 16px; }
   li { padding: 12px 0; border-bottom: 1px solid #1a1a21; cursor: pointer; }
+  li.focused { box-shadow: inset 3px 0 0 #1d9bf0; padding-left: 12px; }
   b { color: #8b98a5; font-weight: 600; }
   .who { display: flex; align-items: center; gap: 8px; }
   .avatar { width: 32px; height: 32px; border-radius: 50%; }
@@ -89,6 +109,8 @@ const MINIMAL_HTML = `<!doctype html>
 
 const MINIMAL_JS = `const list = document.getElementById('posts');
 const problem = document.getElementById('error');
+let posts = [];
+let focusedUrl = null;
 
 /** A view has no console the user can open, so anything that goes wrong is a line on the page. */
 function show(text) {
@@ -116,8 +138,36 @@ function picture(url, alt, className) {
   return img;
 }
 
+/**
+ * What the agent knows about this view. The focused post is the point: while the view is on screen
+ * it is what the user means by "this post", so it is published every time it moves, with a summary
+ * saying what the view is and how it is driven.
+ */
+function publish() {
+  const focused = posts.find((p) => p.url === focusedUrl) || null;
+  const item = (p) => ({ url: p.url, authorHandle: p.authorHandle, text: p.text });
+  window.xpilotView.setState({
+    summary: posts.length + ' posts from the timeline underneath, newest first. Hover one to focus it; clicking one opens it in X.',
+    focus: focused ? item(focused) : null,
+    items: posts.slice(0, 20).map(item),
+  });
+}
+
+/** Moves the highlight, whether the user hovered a row or the agent asked for a post by URL. */
+function focus(url) {
+  focusedUrl = url;
+  for (const li of list.children) {
+    const isIt = li.dataset.url === url;
+    li.classList.toggle('focused', isIt);
+    if (isIt) li.scrollIntoView({ block: 'nearest' });
+  }
+  publish();
+}
+
 function render(post) {
   const li = document.createElement('li');
+  li.dataset.url = post.url;
+  li.onmouseenter = () => focus(post.url);
   const head = document.createElement('div');
   head.className = 'who';
   const who = document.createElement('b');
@@ -134,18 +184,37 @@ function render(post) {
   return li;
 }
 
-window.xpilotView.subscribe('posts', (posts) => {
+/** The posts are re-read every 3 s, and rebuilding rows under a still pointer would fire mouseenter
+ * and move the focus by itself, so the same posts are left on screen as they are. */
+const key = (some) => some.map((p) => p.url).join(' ');
+let drawn = null;
+
+window.xpilotView.subscribe('posts', (visible) => {
   try {
-    list.replaceChildren(...posts.map(render));
+    posts = visible;
+    if (key(visible) !== drawn) {
+      drawn = key(visible);
+      list.replaceChildren(...posts.map(render));
+    }
     show('');
+    // The post that was focused may have scrolled away; the top one is the sensible fallback.
+    focus(posts.some((p) => p.url === focusedUrl) ? focusedUrl : (posts[0] && posts[0].url) || null);
   } catch (err) {
     // A post that is not shaped the way this expects should cost one render, not the whole view.
     show('could not draw the posts: ' + (err && err.message ? err.message : err));
   }
 });
 
+// What the agent can ask this view to do. Anything else is ignored: these shapes are our own.
+window.xpilotView.subscribe('message', (message) => {
+  if (message && message.type === 'focus' && message.url) focus(message.url);
+});
+
 document.getElementById('more').onclick = () => call('x_scroll', { direction: 'down' });
 document.getElementById('back').onclick = () => window.xpilotView.back();
+
+// Said once, before any post has arrived, so the agent knows what is on screen from the first turn.
+publish();
 `;
 
 const THREE_HTML = `<!doctype html>
@@ -157,6 +226,7 @@ const THREE_HTML = `<!doctype html>
   button { position: fixed; top: 12px; right: 12px; background: #1d9bf0; border: 0; border-radius: 999px; color: #fff; padding: 6px 14px; cursor: pointer; }
   #flat { margin: 0; padding: 56px 16px 16px; list-style: none; overflow: auto; height: 100vh; box-sizing: border-box; }
   #flat li { padding: 12px 0; border-bottom: 1px solid #1a1a21; }
+  #flat li.focused { box-shadow: inset 3px 0 0 #1d9bf0; padding-left: 12px; }
   #flat img.avatar { width: 28px; height: 28px; border-radius: 50%; vertical-align: middle; margin-right: 8px; }
   #flat img.photo { display: block; max-width: 100%; margin-top: 8px; border-radius: 12px; }
   #error { position: fixed; left: 0; right: 0; top: 0; margin: 0; padding: 8px 16px; background: #2a1414; color: #ffb4a9; font-size: 13px; }
@@ -178,6 +248,43 @@ const show = (text) => {
 };
 
 document.getElementById('back').onclick = () => window.xpilotView.back();
+
+let posts = [];
+let focusedUrl = null;
+/** Set by whichever renderer is in use below: the ring lifts a card, the list marks a row. */
+let highlight = () => {};
+
+/**
+ * What the agent knows about this view. The focused post is the point: while the view is on screen
+ * it is what the user means by "this post", so it is published every time it moves, with a summary
+ * saying what the view is.
+ */
+function publish() {
+  const focused = posts.find((p) => p.url === focusedUrl) || null;
+  const item = (p) => ({ url: p.url, authorHandle: p.authorHandle, text: p.text });
+  window.xpilotView.setState({
+    summary: posts.length + ' posts from the timeline underneath, drawn on a ring you can orbit. The highlighted card is the focused post.',
+    focus: focused ? item(focused) : null,
+    items: posts.slice(0, 20).map(item),
+  });
+}
+
+function focus(url) {
+  focusedUrl = url;
+  highlight(url);
+  publish();
+}
+
+/** Whatever drew the posts, the focus follows them: the one that was focused, or the first. */
+function drew(visible) {
+  posts = visible;
+  focus(posts.some((p) => p.url === focusedUrl) ? focusedUrl : (posts[0] && posts[0].url) || null);
+}
+
+// What the agent can ask this view to do. Anything else is ignored: these shapes are our own.
+window.xpilotView.subscribe('message', (message) => {
+  if (message && message.type === 'focus' && message.url) focus(message.url);
+});
 
 /**
  * WebGL is not always there — a machine with no GPU process, a driver Chromium has blocklisted — and
@@ -209,10 +316,21 @@ const picture = (url, alt, className) => {
 
 if (!renderer) {
   flat.hidden = false;
-  window.xpilotView.subscribe('posts', (posts) => {
+  highlight = (url) => {
+    for (const li of flat.children) li.classList.toggle('focused', li.dataset.url === url);
+  };
+  // Rebuilding rows under a still pointer would fire mouseenter and move the focus by itself, so
+  // the same posts are left on screen as they are.
+  let drawn = null;
+  window.xpilotView.subscribe('posts', (visible) => {
+    const key = visible.map((p) => p.url).join(' ');
+    if (key === drawn) return drew(visible);
+    drawn = key;
     flat.replaceChildren(
-      ...posts.map((post) => {
+      ...visible.map((post) => {
         const li = document.createElement('li');
+        li.dataset.url = post.url;
+        li.onmouseenter = () => focus(post.url);
         const text = document.createElement('span');
         text.textContent = '@' + post.authorHandle + ' — ' + post.text;
         const media = (post.media || []).find((m) => m.url || m.preview);
@@ -225,6 +343,7 @@ if (!renderer) {
         return li;
       }),
     );
+    drew(visible);
   });
 } else {
   renderer.setSize(innerWidth, innerHeight);
@@ -259,12 +378,17 @@ if (!renderer) {
   };
 
   let cards = [];
-  window.xpilotView.subscribe('posts', (posts) => {
+  // The focused card is the one standing out of the ring, which is also what the agent is told.
+  highlight = (url) => {
+    for (const c of cards) c.mesh.scale.setScalar(c.url === url ? 1.3 : 1);
+  };
+  window.xpilotView.subscribe('posts', (visible) => {
     try {
-      for (const mesh of cards) scene.remove(mesh);
-      cards = posts.slice(0, 12).map((post, i, all) => card(post, i, all.length));
-      for (const mesh of cards) scene.add(mesh);
+      for (const c of cards) scene.remove(c.mesh);
+      cards = visible.slice(0, 12).map((post, i, all) => ({ url: post.url, mesh: card(post, i, all.length) }));
+      for (const c of cards) scene.add(c.mesh);
       show('');
+      drew(visible);
     } catch (err) {
       show('could not build the cards: ' + (err && err.message ? err.message : err));
     }
@@ -280,6 +404,9 @@ if (!renderer) {
     renderer.render(scene, camera);
   });
 }
+
+// Said once, before any post has arrived, so the agent knows what is on screen from the first turn.
+publish();
 `;
 
 /**

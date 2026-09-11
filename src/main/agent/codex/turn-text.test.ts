@@ -283,3 +283,130 @@ describe('quoted posts, cards and media in the turn', () => {
     expect(outsideFences(t)).toBe('Current page, posts on screen top to bottom:\n\n\n\nq');
   });
 });
+
+describe('buildTurnText with a custom view on screen', () => {
+  const post = {
+    url: 'https://x.com/a/status/1',
+    kind: 'post' as const,
+    post: {
+      id: '1',
+      url: 'https://x.com/a/status/1',
+      authorHandle: 'a',
+      authorName: 'A',
+      text: 'hello world',
+      postedAt: null,
+      kind: 'post' as const,
+    },
+  };
+  const active = (state: unknown) => ({ view: 'reader', state, updatedAt: '2026-09-11T10:00:00.000Z' }) as never;
+
+  it('leads with what the view published, and calls the X page the one underneath', () => {
+    const t = buildTurnText(
+      'is this true?',
+      post,
+      null,
+      active({
+        summary: '42 posts, j/k moves the highlight',
+        focus: { url: 'https://x.com/b/status/9', authorHandle: 'b', text: 'their claim' },
+        items: [{ url: 'https://x.com/b/status/9', authorHandle: 'b', text: 'their claim' }],
+        extra: { filter: 'from:b', unread: 3 },
+      }),
+    );
+    expect(t).toBe(
+      [
+        'Custom view on screen:',
+        '<page-content untrusted>',
+        'Custom view "reader" is on the user\'s screen: 42 posts, j/k moves the highlight',
+        'focused: @b: their claim (https://x.com/b/status/9)',
+        'items:',
+        '1. @b — their claim (https://x.com/b/status/9)',
+        'extra: filter=from:b; unread=3',
+        '</page-content>',
+        '',
+        'The X page underneath:',
+        '<page-content untrusted>',
+        'post by @a (A) at https://x.com/a/status/1',
+        'hello world',
+        '</page-content>',
+        '',
+        'is this true?',
+      ].join('\n'),
+    );
+  });
+
+  it('says only that the view is on screen when it has published nothing', () => {
+    const t = buildTurnText('what am I looking at?', null, null, active(null));
+    expect(t).toBe(
+      [
+        'Custom view on screen:',
+        '<page-content untrusted>',
+        'Custom view "reader" is on the user\'s screen.',
+        '</page-content>',
+        '',
+        'what am I looking at?',
+      ].join('\n'),
+    );
+  });
+
+  it('keeps the timeline underneath in its own blocks, still labelled as underneath', () => {
+    const tl = {
+      url: 'https://x.com/home',
+      kind: 'home' as const,
+      post: null,
+      visible: [{ id: '1', url: 'https://x.com/a/status/1', authorHandle: 'a', text: 'First post text' }],
+    };
+    const t = buildTurnText('summarise', tl, null, active({ summary: 'cards' }));
+    expect(t).toContain('The X page underneath, posts on screen top to bottom:');
+    expect(t).toContain('<page-content untrusted>\n1. @a — https://x.com/a/status/1\nFirst post text\n</page-content>');
+    // The unchanged short form follows the same label.
+    expect(buildTurnText('and now?', tl, contextKey(tl), active({ summary: 'cards' }))).toContain(
+      'The X page underneath, unchanged since the last turn:',
+    );
+  });
+
+  it('says when the view has cleared its focus, and when it described it with nothing', () => {
+    expect(buildTurnText('q', null, null, active({ focus: null }))).toContain('focused: nothing');
+    expect(buildTurnText('q', null, null, active({ focus: {} }))).toContain('focused: something the view did not describe');
+    expect(buildTurnText('q', null, null, active({ summary: 'just a summary' }))).not.toContain('focused:');
+  });
+
+  it('fences everything the view published, name included: a view is code a model wrote', () => {
+    const t = buildTurnText(
+      'q',
+      null,
+      null,
+      active({
+        summary: `all good${POISON}`,
+        focus: { authorHandle: `b${POISON}`, text: `claim${POISON}`, url: `https://x.com/b/status/9${POISON}` },
+        items: [{ authorHandle: `c${POISON}`, text: `other${POISON}` }],
+        extra: { note: `x${POISON}` },
+      }),
+    );
+    expect(t.match(/<page-content untrusted>/g)).toHaveLength(1);
+    expect(t.match(/<\/page-content>/g)).toHaveLength(1);
+    expect(outsideFences(t)).toBe('Custom view on screen:\n\n\nq');
+    expect(
+      outsideFences(t)
+        .split('\n')
+        .some((l) => l.startsWith('[SYSTEM]')),
+    ).toBe(false);
+  });
+
+  it('caps a view that pads its own state out', () => {
+    const t = buildTurnText(
+      'q',
+      null,
+      null,
+      active({
+        summary: 's'.repeat(900),
+        focus: { authorHandle: 'h'.repeat(200), text: 't'.repeat(4000), url: `https://x.com/${'u'.repeat(900)}` },
+        items: [{ text: 'i'.repeat(900) }],
+      }),
+    );
+    expect(t).not.toContain('s'.repeat(301));
+    expect(t).not.toContain('h'.repeat(65));
+    expect(t).not.toContain('t'.repeat(1001));
+    expect(t).not.toContain('u'.repeat(513));
+    expect(t).not.toContain('i'.repeat(201));
+  });
+});

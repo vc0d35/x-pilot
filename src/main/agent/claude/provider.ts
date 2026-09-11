@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { AgentEvent } from '../../../shared/agent';
 import type { PageContext } from '../../../shared/page';
+import type { ActiveViewState } from '../../../shared/views';
 import { contextKey } from '../../../shared/page-context';
 import type { Settings } from '../../../shared/settings';
 import type { ToolResult, ToolSpec } from '../../../shared/tools';
@@ -126,9 +127,9 @@ export class ClaudeProvider implements AgentProvider {
     return { threadId: this.threadId };
   }
 
-  async send(text: string, pageContext?: PageContext | null): Promise<void> {
+  async send(text: string, pageContext?: PageContext | null, activeView?: ActiveViewState | null): Promise<void> {
     if (!this.threadId || !this.binaryPath || !this.settings) throw new Error('provider not started');
-    const full = buildTurnText(text, pageContext, this.lastContextKey);
+    const full = buildTurnText(text, pageContext, this.lastContextKey, activeView);
     this.lastContextKey = contextKey(pageContext) ?? this.lastContextKey;
     this.emit({ type: 'user.message', text });
     this.running = true;

@@ -66,8 +66,67 @@ export const VIEW_POSTS_POLL_MS = 3_000;
 /** How long a view the user is being shown stays up with nobody answering the card. */
 export const VIEW_PREVIEW_MAX_MS = 10 * 60 * 1000;
 
-export const VIEW_FEEDS = ['page', 'posts'] as const;
+export const VIEW_FEEDS = ['page', 'posts', 'message'] as const;
 export type ViewFeed = (typeof VIEW_FEEDS)[number];
+
+/**
+ * What a view may publish about what it is showing, so the agent can answer about the view rather
+ * than about the X page hidden under it. Every field is page data written by agent-written code, so
+ * each one is capped here, capped again in main, and fenced before it reaches the model.
+ */
+export const VIEW_STATE_SUMMARY_MAX = 300;
+export const VIEW_STATE_FOCUS_TEXT_MAX = 1000;
+export const VIEW_STATE_ITEM_TEXT_MAX = 200;
+export const VIEW_STATE_ITEMS_MAX = 20;
+export const VIEW_STATE_HANDLE_MAX = 64;
+export const VIEW_STATE_URL_MAX = 512;
+export const VIEW_STATE_EXTRA_KEYS_MAX = 20;
+export const VIEW_STATE_EXTRA_KEY_MAX = 64;
+export const VIEW_STATE_EXTRA_VALUE_MAX = 200;
+/** The whole state, serialised: a view that publishes more than this is publishing a page, not a state. */
+export const VIEW_STATE_BYTES_MAX = 8 * 1024;
+/** A view redraws at frame rate; what the agent needs is the newest state, four times a second. */
+export const VIEW_STATE_UPDATES_PER_WINDOW = 4;
+export const VIEW_STATE_WINDOW_MS = 1000;
+/** One message the agent sends a view, serialised. */
+export const VIEW_MESSAGE_BYTES_MAX = 4 * 1024;
+
+/** The one item a view says the user is looking at: what "this post" means while the view is up. */
+export interface ViewFocus {
+  url?: string;
+  authorHandle?: string;
+  text?: string;
+}
+
+/** One of the things a view is showing, as a line the agent can refer to. */
+export interface ViewStateItem {
+  url?: string;
+  authorHandle?: string;
+  text?: string;
+}
+
+/**
+ * What `window.xpilotView.setState` publishes. `focus` is the item the view considers current —
+ * `null` says nothing is — and `extra` is whatever else the view wants the agent to know about
+ * itself: a filter, a mode, a count.
+ */
+export interface ViewState {
+  summary?: string;
+  focus?: ViewFocus | null;
+  items?: ViewStateItem[];
+  extra?: Record<string, string | number | boolean>;
+}
+
+/**
+ * The view on screen as the agent sees it: which one, what it last published (null while it has
+ * published nothing), and when. `xpilot_view_state` answers with this, and the turn hint is built
+ * from it.
+ */
+export interface ActiveViewState {
+  view: string;
+  state: ViewState | null;
+  updatedAt: string | null;
+}
 
 /**
  * The registry tools a view may call. Reads and drivers, because the X page underneath is the data
@@ -152,20 +211,31 @@ export function isViewName(name: string): boolean {
   return VIEW_NAME_RE.test(name);
 }
 
-/** What each feed delivers. `page` is the same PageContext the sidebar gets; `posts` is its visible posts. */
+/**
+ * What each feed delivers. `page` is the same PageContext the sidebar gets, `posts` its visible
+ * posts, and `message` whatever the agent sent with `xpilot_view_message` — a plain object the view
+ * defined the meaning of itself.
+ */
 export interface ViewFeedPayload {
   page: PageContext | null;
   posts: VisiblePost[];
+  message: Record<string, unknown>;
 }
 
 /**
- * `window.xpilotView` inside a custom view: two live feeds off the X page underneath, the allowlisted
- * tools, and the two shortcuts a view always needs. There is nothing else — no network, no storage
- * of the X session, no way to reach the app's configuration.
+ * `window.xpilotView` inside a custom view: the live feeds off the X page underneath, the allowlisted
+ * tools, the way back to the agent, and the two shortcuts a view always needs. There is nothing else
+ * — no network, no storage of the X session, no way to reach the app's configuration.
  */
 export interface XPilotViewApi {
   /** Calls back with the current value straight away, then on every change. Returns an unsubscribe. */
   subscribe<F extends ViewFeed>(feed: F, cb: (data: ViewFeedPayload[F]) => void): () => void;
+  /**
+   * Publishes what the view is showing, so the agent's turn hint and `xpilot_view_state` describe
+   * the view rather than the X page under it. Never rejects: a state main refused comes back as
+   * `{ success: false, error }`. Four updates a second, the newest winning.
+   */
+  setState(state: ViewState): Promise<ToolResult>;
   /**
    * Runs one allowlisted registry tool. Nothing here ever throws or rejects: a refusal, a budget,
    * a dead bridge and a tool that failed all come back the same way, as `{ success: false, error }`.

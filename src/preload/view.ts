@@ -8,9 +8,12 @@ import {
   VIEW_ERROR_REPORTS_PER_WINDOW,
   VIEW_ERROR_REPORT_WINDOW_MS,
   VIEW_ERROR_SOURCE_MAX,
+  VIEW_STATE_UPDATES_PER_WINDOW,
+  VIEW_STATE_WINDOW_MS,
   type ViewErrorReport,
   type ViewFeed,
   type ViewFeedPayload,
+  type ViewState,
   type XPilotViewApi,
 } from '../shared/views';
 import type { ToolResult } from '../shared/tools';
@@ -216,6 +219,47 @@ const bridgeFailed = (err: unknown): ToolResult => ({
   error: err instanceof Error ? err.message : String(err),
 });
 
+/**
+ * `setState` at the rate main accepts it. A view publishes from wherever it draws — a keypress, a
+ * feed, an animation frame — and the agent only ever needs the newest one, so a call over the
+ * budget is not refused but held: the last state published in the window is the one that goes, and
+ * every caller coalesced into it is answered with what main said about it.
+ */
+const publishedAt: number[] = [];
+let pendingState: { state: ViewState; resolve: (result: ToolResult) => void; promise: Promise<ToolResult> } | null = null;
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+const sendState = (state: ViewState): Promise<ToolResult> => ipcRenderer.invoke(IPC.viewSetState, { state }).catch(bridgeFailed);
+
+function flushState(): void {
+  flushTimer = null;
+  const pending = pendingState;
+  pendingState = null;
+  if (!pending) return;
+  publishedAt.push(Date.now());
+  void sendState(pending.state).then(pending.resolve);
+}
+
+function publishState(state: ViewState): Promise<ToolResult> {
+  const now = Date.now();
+  while (publishedAt.length && now - publishedAt[0] >= VIEW_STATE_WINDOW_MS) publishedAt.shift();
+  if (!pendingState && publishedAt.length < VIEW_STATE_UPDATES_PER_WINDOW) {
+    publishedAt.push(now);
+    return sendState(state);
+  }
+  if (pendingState) {
+    pendingState.state = state;
+    return pendingState.promise;
+  }
+  let resolve!: (result: ToolResult) => void;
+  const promise = new Promise<ToolResult>((r) => {
+    resolve = r;
+  });
+  pendingState = { state, resolve, promise };
+  if (!flushTimer) flushTimer = setTimeout(flushState, Math.max(0, VIEW_STATE_WINDOW_MS - (now - publishedAt[0])));
+  return promise;
+}
+
 const api: XPilotViewApi = {
   subscribe<F extends ViewFeed>(feed: F, cb: (data: ViewFeedPayload[F]) => void): () => void {
     const set = listeners.get(feed) ?? new Set<Listener>();
@@ -228,6 +272,7 @@ const api: XPilotViewApi = {
       if (set.size === 0) ipcRenderer.send(IPC.viewUnsubscribe, { feed });
     };
   },
+  setState: (state: ViewState): Promise<ToolResult> => publishState(state),
   call: (tool: string, args?: Record<string, unknown>): Promise<ToolResult> =>
     ipcRenderer.invoke(IPC.viewCall, { tool, args: args ?? {} }).catch(bridgeFailed),
   openInX: (url: string): Promise<ToolResult> =>

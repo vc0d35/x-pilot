@@ -6,7 +6,7 @@ import type { SelectorOverrides } from '../../page-config/selectors';
 import type { TaskManager } from '../../tasks/manager';
 import type { SelectorKey } from '../../../shared/selectors';
 import type { ViewsStore } from '../../views/store';
-import type { ViewErrorPhase, ViewLogEntry } from '../../../shared/views';
+import type { ActiveViewState, ViewErrorPhase, ViewLogEntry } from '../../../shared/views';
 import type { ViewInspection } from '../../views/inspect';
 
 /** The custom views the agent writes, and the one window they are shown in. */
@@ -32,6 +32,13 @@ export interface ViewsCtx {
   /** Whether activating a view is previewed and confirmed, or just done. */
   mode(): 'confirm' | 'autonomous';
   logs(view?: string, limit?: number): ViewLogEntry[];
+  /**
+   * The view on screen and what it last published about itself, or null when the user is on x.com.
+   * A view that publishes is saying what "this post" means while it is up.
+   */
+  state(): ActiveViewState | null;
+  /** Hands one message to the view on screen; false when there is none to hand it to. */
+  message(data: Record<string, unknown>): boolean;
   /** Looks at the DOM the view rendered; null when no view is on screen. */
   inspect(selector?: string, limit?: number): Promise<ViewInspection | { error: string } | null>;
 }
