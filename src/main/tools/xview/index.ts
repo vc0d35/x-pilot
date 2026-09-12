@@ -6,6 +6,7 @@ import { readPost } from './read-post';
 import { bookmarkPost, likePost, readBookmarks, readTimeline } from './engage';
 import { composePost, submitPost } from './compose';
 import { readNewsAndTrends } from './widgets';
+import { openNotification, readNotifications } from './notifications';
 
 export const xviewTools: ToolModule<XViewToolCtx>[] = [
   navigate,
@@ -17,5 +18,7 @@ export const xviewTools: ToolModule<XViewToolCtx>[] = [
   bookmarkPost,
   readTimeline,
   readBookmarks,
+  readNotifications,
+  openNotification,
   readNewsAndTrends,
 ];

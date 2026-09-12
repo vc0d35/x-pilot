@@ -1,6 +1,6 @@
 import type { PageContext, VisiblePost } from '../../../shared/page';
 import { contextKey } from '../../../shared/page-context';
-import { extractArticle, extractPost, findMainArticle, pageKindFromUrl, postFromArticleUrl } from './extract';
+import { extractArticle, extractPost, findMainArticle, pageKindFromUrl, postFromArticleUrl, unreadNotificationCount } from './extract';
 import { SEL } from './selectors';
 
 export type InViewport = (el: Element) => boolean;
@@ -33,6 +33,13 @@ export function visiblePosts(doc: Document, isVisible: InViewport): VisiblePost[
 }
 
 export function computeFocus(doc: Document, url: string, isVisible: InViewport = inViewport): PageContext | null {
+  const focus = computeFocusOf(doc, url, isVisible);
+  if (!focus) return null;
+  const unread = unreadNotificationCount(doc);
+  return unread === null ? focus : { ...focus, unreadNotifications: unread };
+}
+
+function computeFocusOf(doc: Document, url: string, isVisible: InViewport): PageContext | null {
   const kind = pageKindFromUrl(url);
   if (kind === 'post' || kind === 'article') {
     const main = findMainArticle(doc, url);

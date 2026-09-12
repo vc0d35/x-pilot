@@ -58,7 +58,18 @@ export const PostSchema = z.object({
 });
 export type Post = z.infer<typeof PostSchema>;
 
-export const PageKindSchema = z.enum(['home', 'post', 'article', 'profile', 'search', 'likes', 'bookmarks', 'compose', 'other']);
+export const PageKindSchema = z.enum([
+  'home',
+  'post',
+  'article',
+  'profile',
+  'search',
+  'likes',
+  'bookmarks',
+  'notifications',
+  'compose',
+  'other',
+]);
 export type PageKind = z.infer<typeof PageKindSchema>;
 
 export const PageStateSchema = z.object({
@@ -71,6 +82,8 @@ export const PageStateSchema = z.object({
   health: z.object({ layout: z.boolean(), posts: z.boolean().optional(), article: z.boolean().optional() }),
   /** Count announced by the "Show N posts" pill, when one is on screen. */
   newPostsAvailable: z.number().optional(),
+  /** The unread count on the navigation bar's Notifications entry; absent when the page has no navigation bar. */
+  unreadNotifications: z.number().optional(),
 });
 export type PageState = z.infer<typeof PageStateSchema>;
 
@@ -91,5 +104,28 @@ export const PageContextSchema = z.object({
   kind: PageKindSchema,
   post: PostSchema.nullable(),
   visible: z.array(VisiblePostSchema).optional(),
+  unreadNotifications: z.number().optional(),
 });
 export type PageContext = z.infer<typeof PageContextSchema>;
+
+export const NotificationKindSchema = z.enum(['post', 'like', 'repost', 'follow', 'new_posts', 'other']);
+export type NotificationKind = z.infer<typeof NotificationKindSchema>;
+
+/**
+ * One entry of the Notifications page. A reply or a mention is a post and carries it; a like, a
+ * repost, a follow or "new posts from" is X's own line about who did what, and the post it is about
+ * is reached only by opening the entry, which is what `x_open_notification` does with the id.
+ */
+export const NotificationSchema = z.object({
+  /** Stable across re-renders: a hash of what the entry says, since X gives it no id. */
+  id: z.string().max(16),
+  kind: NotificationKindSchema,
+  /** The line X wrote, such as "Alex liked your reply", names included. */
+  headline: z.string().max(500),
+  actors: z.array(z.object({ handle: z.string().max(64), name: z.string().max(128) })).max(20),
+  /** The excerpt of the post the entry is about, or the post's own text. */
+  text: z.string().max(2000),
+  at: z.string().max(64).nullable(),
+  post: PostSchema.nullable(),
+});
+export type Notification = z.infer<typeof NotificationSchema>;

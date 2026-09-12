@@ -25,7 +25,8 @@ The view's window has no network. fetch, XHR, WebSocket and any foreign URL are 
 
 window.xpilotView
   subscribe(feed, cb) -> unsubscribe()
-    'page'   the page the user is on: { url, kind, post, visible } (the same context the sidebar gets)
+    'page'   the page the user is on: { url, kind, post, visible, unreadNotifications } (the same
+             context the sidebar gets; unreadNotifications is the badge on X's navigation bar)
     'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s — the
              re-read carries the whole post object: pictures, stats { replies, reposts, likes,
              bookmarks, views }, and liked / bookmarked, read from the post's own buttons, so a
@@ -46,10 +47,12 @@ window.xpilotView
     second (publish freely: past that the newest one wins rather than failing).
   call(tool, args) -> Promise<{ success: true, content } | { success: false, error }>
     reads:   x_get_page_state, x_read_visible_posts, x_read_current_post, x_read_post, x_search,
-             x_read_timeline, x_read_news_and_trends, x_read_bookmarks, xpilot_search_history,
-             xpilot_list_library
+             x_read_timeline, x_read_news_and_trends, x_read_bookmarks, x_read_notifications,
+             xpilot_search_history, xpilot_list_library
     drivers: x_scroll, x_show_new_posts, x_navigate — the X page underneath is the data source, so
-             moving it is how a view loads more
+             moving it is how a view loads more — and x_open_notification { id }, which reaches
+             the post a like or repost notification is about (X puts no link to it in the entry):
+             hidden by default, so use the post it returns; view: 'visible' takes the user there
     writes:  x_like_post { url, action: 'like' | 'unlike' }, x_bookmark_post { url, action:
              'bookmark' | 'unbookmark' } — each answers { liked | bookmarked, changed, and the
              likes | bookmarks count the page shows after the click }, so update your own count

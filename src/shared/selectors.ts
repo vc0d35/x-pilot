@@ -33,6 +33,8 @@ export const SELECTOR_DEFAULTS = {
   newsArticle: '[data-testid^="news_sidebar_article_"]',
   timelineCell: '[data-testid="cellInnerDiv"]',
   newPostsButton: '[data-testid="primaryColumn"] [data-testid="cellInnerDiv"] button',
+  notificationCell: 'article[data-testid="notification"]',
+  notificationsLink: 'a[data-testid="AppTabBar_Notifications_Link"]',
 } satisfies Record<string, string>;
 
 export type SelectorKey = keyof typeof SELECTOR_DEFAULTS;
@@ -94,4 +96,6 @@ export const SELECTOR_DESCRIPTIONS: Record<SelectorKey, string> = {
   newsArticle: 'One headline entry in the "Today\'s News" widget',
   timelineCell: 'One cell of a timeline list, the wrapper X puts around posts and inline widgets',
   newPostsButton: 'The "Show N posts" pill X inserts at the top of a timeline when new posts have arrived',
+  notificationCell: 'One entry of the Notifications page that is not a post: a like, a repost, a follow, or new posts from someone',
+  notificationsLink: "The Notifications entry of X's navigation bar, whose label carries the unread count",
 };

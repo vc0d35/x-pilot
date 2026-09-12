@@ -11,6 +11,8 @@ import {
   parseStats,
   postFromArticleUrl,
   extractArticle,
+  extractNotifications,
+  unreadNotificationCount,
 } from './extract';
 import { SEL } from './selectors';
 
@@ -24,6 +26,8 @@ describe('pageKindFromUrl', () => {
     ['https://x.com/search?q=rust', 'search'],
     ['https://x.com/alice/likes', 'likes'],
     ['https://x.com/i/bookmarks', 'bookmarks'],
+    ['https://x.com/notifications', 'notifications'],
+    ['https://x.com/notifications/mentions', 'notifications'],
     ['https://x.com/alice', 'profile'],
     ['https://x.com/compose/post', 'compose'],
     ['https://x.com/intent/post?text=hi', 'compose'],
@@ -438,5 +442,51 @@ describe('quoted posts, cards and media', () => {
     const media = extractVisiblePosts(document).find((p) => p.id === '444')!.media!;
     expect(media).toHaveLength(4);
     expect(media.map((m) => m.kind)).toEqual(['image', 'image', 'image', 'image']);
+  });
+});
+
+describe('notifications', () => {
+  beforeEach(() => {
+    document.body.innerHTML = fixture('x-notifications.html');
+  });
+
+  it('reads the unread count off the navigation bar, 0 without a badge, null without the bar', () => {
+    expect(unreadNotificationCount(document)).toBe(2);
+    document.querySelector(SEL.notificationsLink)!.setAttribute('aria-label', 'Notifications');
+    expect(unreadNotificationCount(document)).toBe(0);
+    document.querySelector(SEL.notificationsLink)!.remove();
+    expect(unreadNotificationCount(document)).toBeNull();
+  });
+
+  it('reads every entry in order: replies as posts, the rest as who did what', () => {
+    const entries = extractNotifications(document);
+    expect(entries.map((e) => [e.kind, e.headline])).toEqual([
+      ['post', '@serros404 replied to you'],
+      ['like', 'Alex Van de Sande (avsa.eth) liked your reply'],
+      ['new_posts', 'New post notifications for Tibo and Immunefi'],
+      ['repost', 'Carol reposted your post'],
+      ['follow', 'Dave followed you'],
+    ]);
+    expect(entries[0].post).toMatchObject({ id: '2098773361820065897', url: 'https://x.com/serros404/status/2098773361820065897' });
+    expect(entries[0].text).toBe('foram pra triagem');
+    expect(entries[1]).toMatchObject({
+      actors: [{ handle: 'avsa', name: 'Alex Van de Sande (avsa.eth)' }],
+      text: 'This looks very cool, thanks for sharing.',
+      at: '2026-09-11T21:10:18.149Z',
+      post: null,
+    });
+    expect(entries[2].actors).toEqual([
+      { handle: 'thsottiaux', name: 'Tibo' },
+      { handle: 'immunefi', name: 'Immunefi' },
+    ]);
+    expect(entries[4]).toMatchObject({ text: '', actors: [{ handle: 'dave', name: 'Dave' }] });
+  });
+
+  it('gives each entry an id that survives a re-render and differs between entries', () => {
+    const ids = extractNotifications(document).map((e) => e.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    for (const id of ids) expect(id).toMatch(/^[0-9a-f]{8}$/);
+    document.body.innerHTML = fixture('x-notifications.html');
+    expect(extractNotifications(document).map((e) => e.id)).toEqual(ids);
   });
 });

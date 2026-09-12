@@ -143,11 +143,12 @@ export const VIEW_READ_TOOLS: readonly string[] = [
   'x_read_timeline',
   'x_read_news_and_trends',
   'x_read_bookmarks',
+  'x_read_notifications',
   'xpilot_search_history',
   'xpilot_list_library',
 ];
-/** Moving the X page underneath, which is how a view loads more of it. */
-export const VIEW_DRIVER_TOOLS: readonly string[] = ['x_scroll', 'x_show_new_posts', 'x_navigate'];
+/** Moving the X page underneath, which is how a view loads more of it — and opening a notification, which can. */
+export const VIEW_DRIVER_TOOLS: readonly string[] = ['x_scroll', 'x_show_new_posts', 'x_navigate', 'x_open_notification'];
 /** The four account writes. From a view every one of them asks the user, whatever the mode says. */
 export const VIEW_ACCOUNT_WRITE_TOOLS: readonly string[] = ['x_like_post', 'x_bookmark_post', 'x_compose_post', 'x_submit_post'];
 

@@ -1,7 +1,7 @@
 import { defineTool, ok } from '../../../../shared/tools';
 import type { PageKind, PageState } from '../../../../shared/page';
 import type { PreloadCtx } from '../../context';
-import { extractArticle, extractVisiblePosts, pageKindFromUrl } from '../extract';
+import { extractArticle, extractVisiblePosts, pageKindFromUrl, unreadNotificationCount } from '../extract';
 import { waitFor } from '../dom';
 import { SEL } from '../selectors';
 import { findNewPostsButton } from '../widgets';
@@ -32,6 +32,8 @@ export function currentPageState(): PageState {
   };
   const pill = findNewPostsButton(document);
   if (pill) state.newPostsAvailable = pill.count;
+  const unread = unreadNotificationCount(document);
+  if (unread !== null) state.unreadNotifications = unread;
   return state;
 }
 
@@ -61,6 +63,7 @@ export async function settledPageState(timeoutMs: number): Promise<PageState> {
     if (needsLayout(kind)) await settle(() => document.querySelector(SEL.primaryColumn));
     if (TIMELINE_KINDS.has(kind)) await settle(() => document.querySelector(SEL.article));
     if (kind === 'article') await settle(() => document.querySelector(SEL.articleView));
+    if (kind === 'notifications') await settle(() => document.querySelector(`${SEL.article}, ${SEL.notificationCell}`));
   }
   return currentPageState();
 }

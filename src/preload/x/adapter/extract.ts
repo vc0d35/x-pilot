@@ -1,5 +1,5 @@
 import { mediaUrl } from '../../../shared/media-url';
-import type { LinkCard, Media, PageKind, Post, QuotedPost } from '../../../shared/page';
+import type { Notification, NotificationKind, LinkCard, Media, PageKind, Post, QuotedPost } from '../../../shared/page';
 import { RESERVED_TOP_LEVEL, SEL } from './selectors';
 
 /** Same bound as `PostSchema.text`: a quote is a post, and it is rendered the same way. */
@@ -24,6 +24,7 @@ export function pageKindFromUrl(url: string): PageKind {
   if (parts[0] === 'compose' || parts[0] === 'intent') return 'compose';
   if (parts[0] === 'i' && parts[1] === 'article') return 'article';
   if (parts[0] === 'i' && parts[1] === 'bookmarks') return 'bookmarks';
+  if (parts[0] === 'notifications') return 'notifications';
   if (parts.length >= 3 && parts[1] === 'article') return 'article';
   if (parts.length >= 3 && parts[1] === 'status') return 'post';
   if (parts.length === 2 && parts[1] === 'likes') return 'likes';
@@ -360,3 +361,101 @@ export function extractComposer(root: ParentNode): { present: boolean; text: str
   const disabled = !btn || btn.hasAttribute('disabled') || btn.getAttribute('aria-disabled') === 'true';
   return { present: true, text: textWithEmoji(ta), canSubmit: !disabled };
 }
+
+/** The unread count X puts on its Notifications entry, 0 when there is none, null when there is no entry to read. */
+export function unreadNotificationCount(root: ParentNode): number | null {
+  const link = root.querySelector(SEL.notificationsLink);
+  if (!link) return null;
+  const m = /\((\d[\d,]*)\s+unread/i.exec(link.getAttribute('aria-label') ?? '');
+  return m ? toNumber(m[1]) : 0;
+}
+
+/** FNV-1a over the text, as eight hex digits: enough to tell notifications apart, and stable across renders. */
+function shortHash(text: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+const NOTIFICATION_HEADLINE_MAX = 500;
+const NOTIFICATION_TEXT_MAX = 2000;
+const HANDLE_PATH = /^\/([A-Za-z0-9_]{1,15})$/;
+
+function notificationKindOf(headline: string): NotificationKind {
+  if (/\bliked\b/i.test(headline)) return 'like';
+  if (/\breposted\b/i.test(headline)) return 'repost';
+  if (/\bfollowed you\b/i.test(headline)) return 'follow';
+  if (/\bnew post notifications\b|\brecent post/i.test(headline)) return 'new_posts';
+  return 'other';
+}
+
+/** The header line without its "· 22h" tail: names, verb and object, as X wrote them. */
+function notificationHeadline(header: Element): string {
+  const copy = header.cloneNode(true) as Element;
+  for (const t of copy.querySelectorAll('time')) (t.closest('span[aria-label]') ?? t).remove();
+  for (const span of copy.querySelectorAll('span')) if (span.textContent?.trim() === '·') span.remove();
+  return (copy.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, NOTIFICATION_HEADLINE_MAX);
+}
+
+function notificationActors(cell: Element): Notification['actors'] {
+  const names = new Map<string, string>();
+  for (const a of cell.querySelectorAll('a[href]')) {
+    const m = HANDLE_PATH.exec(a.getAttribute('href') ?? '');
+    if (!m) continue;
+    const name = (a.textContent ?? '').replace(/\s+/g, ' ').trim();
+    if (!names.has(m[1]) || (name && !names.get(m[1]))) names.set(m[1], name);
+  }
+  return [...names].slice(0, 20).map(([handle, name]) => ({ handle, name: name.slice(0, 128) }));
+}
+
+/** Every entry of the Notifications page in order, each with the element to click for it. */
+export function notificationEntries(root: ParentNode): Array<{ entry: Notification; element: Element }> {
+  const out: Array<{ entry: Notification; element: Element }> = [];
+  for (const el of root.querySelectorAll(`${SEL.article}, ${SEL.notificationCell}`)) {
+    if (el.matches(SEL.article)) {
+      // A reply or a mention is shown as the post itself; nothing else on this page renders as one.
+      const post = extractPost(el);
+      if (!post) continue;
+      const replied = /\bReplying to\b/.test(el.textContent ?? '');
+      const headline = `@${post.authorHandle} ${replied ? 'replied to you' : 'mentioned you'}`;
+      out.push({
+        element: el,
+        entry: {
+          id: shortHash(`post|${post.id}`),
+          kind: 'post',
+          headline,
+          actors: [{ handle: post.authorHandle, name: post.authorName }],
+          text: post.text.slice(0, NOTIFICATION_TEXT_MAX),
+          at: post.postedAt,
+          post,
+        },
+      });
+      continue;
+    }
+    const header = el.querySelector('div[dir="ltr"]');
+    if (!header) continue;
+    const headline = notificationHeadline(header);
+    if (!headline) continue;
+    const text = textWithEmoji(el.querySelector(SEL.tweetText)).slice(0, NOTIFICATION_TEXT_MAX);
+    const at = header.querySelector('time')?.getAttribute('datetime') ?? null;
+    const kind = notificationKindOf(headline);
+    out.push({
+      element: el,
+      entry: {
+        id: shortHash(`${kind}|${headline}|${text}|${at ?? ''}`),
+        kind,
+        headline,
+        actors: notificationActors(el),
+        text,
+        at,
+        post: null,
+      },
+    });
+  }
+  return out;
+}
+
+export const extractNotifications = (root: ParentNode): Notification[] => notificationEntries(root).map((e) => e.entry);

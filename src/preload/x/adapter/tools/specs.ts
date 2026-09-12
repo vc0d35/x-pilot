@@ -9,7 +9,7 @@ import { toolSpec, type ToolDef, type ToolSpec, clampedInt } from '../../../../s
 export const pageStateDef = {
   name: 'x_get_page_state',
   description:
-    'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, bookmarks, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, and newPostsAvailable when a "Show N posts" pill is on screen.',
+    'Returns the current x.com URL, page kind (home, post, article, profile, search, likes, bookmarks, notifications, compose, other), title, whether the page adapter recognises the layout, per-extractor health signals, newPostsAvailable when a "Show N posts" pill is on screen, and unreadNotifications, the count on the navigation bar\'s Notifications entry.',
   args: z.strictObject({
     timeoutMs: z.int().min(0).default(8000).describe('How long to wait for the page layout to render before reporting'),
   }),
@@ -66,6 +66,21 @@ export const likeInPageDef = {
   description: 'Internal: like or unlike a post rendered in this window by post URL or id.',
   args: z.strictObject({ url: z.string(), action: z.enum(['like', 'unlike']).optional(), timeoutMs: z.int().default(8000) }),
   annotations: { destructiveHint: true, internal: true },
+} satisfies ToolDef;
+
+export const readNotificationsInPageDef = {
+  name: 'x_read_notifications_in_page',
+  description: 'Internal: reads the entries of the Notifications page rendered in this window.',
+  args: z.strictObject({ limit: clampedInt(1, 100, 'How many entries to return', 50) }),
+  annotations: { readOnlyHint: true, internal: true },
+} satisfies ToolDef;
+
+export const openNotificationInPageDef = {
+  name: 'x_open_notification_in_page',
+  description:
+    'Internal: opens one entry of the Notifications page rendered in this window, by the id a read gave it, and reports where it went.',
+  args: z.strictObject({ id: z.string().max(16), timeoutMs: z.int().default(8000) }),
+  annotations: { internal: true },
 } satisfies ToolDef;
 
 export const bookmarkInPageDef = {
@@ -126,6 +141,8 @@ export const adapterToolSpecs: ToolSpec[] = [
   clickPostButtonDef,
   likeInPageDef,
   bookmarkInPageDef,
+  readNotificationsInPageDef,
+  openNotificationInPageDef,
   selectHomeTabDef,
   readWidgetsDef,
   showNewPostsDef,
