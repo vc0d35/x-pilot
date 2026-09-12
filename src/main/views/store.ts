@@ -118,6 +118,26 @@ export class ViewsStore {
     return walk(dir);
   }
 
+  /**
+   * What is on disk for a view, as one string that changes when any file does. The watcher says a
+   * view changed some time after it did, so whoever loaded the view compares this to decide whether
+   * the change is news or the files it is already showing.
+   */
+  signature(view: string): string {
+    const dir = resolveViewFolder(this.dir, view);
+    if (!dir || !isDir(dir)) return '';
+    return walk(dir)
+      .map((rel) => {
+        try {
+          const stat = lstatSync(join(dir, rel));
+          return `${rel}:${stat.size}:${stat.mtimeMs}`;
+        } catch {
+          return `${rel}:gone`;
+        }
+      })
+      .join('\n');
+  }
+
   read(view: string, path: string): string {
     const file = resolveViewFile(this.dir, view, path);
     if (!file) return refuse(view, path);

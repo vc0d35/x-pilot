@@ -401,6 +401,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     mount: (view) => setOverlayView(view),
     unmount: () => setOverlayView(null),
     bounds: () => xView.getBounds(),
+    signature: (view) => views.signature(view),
     // A view that will not load, whose renderer died or that is erroring in a loop is not something
     // to retry into: the app falls back to the X page underneath, forgets the view so the next start
     // is on x.com, and tells the user in the sidebar why it went and offers to have it fixed.

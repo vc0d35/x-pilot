@@ -131,6 +131,7 @@ describe('ViewCanvas failure handling', () => {
     const failures: ViewFailure[] = [];
     const active: (string | null)[] = [];
     let at = 1_000_000;
+    let revision = 0;
     const canvas = new ViewCanvas(
       {
         preload: '/preload/view.js',
@@ -140,12 +141,13 @@ describe('ViewCanvas failure handling', () => {
         bounds: () => ({ x: 0, y: 0, width: 100, height: 100 }),
         onError: (failure) => failures.push(failure),
         onActive: (view) => active.push(view),
+        signature: (view) => `${view}@${revision}`,
       },
       () => at,
     );
     expect(await canvas.show(name)).toBeNull();
     const contents = builtContents();
-    return { canvas, failures, active, contents, advance: (ms: number) => (at += ms) };
+    return { canvas, failures, active, contents, advance: (ms: number) => (at += ms), touch: () => void revision++ };
   };
 
   it('takes a view off the screen when its renderer dies, and says which of the phases it was', async () => {
@@ -262,6 +264,7 @@ describe('ViewCanvas failure handling', () => {
       expect(c.canvas.publishedState()).toEqual({ view: 'feed', state: null, updatedAt: null });
       c.canvas.publishState({ summary: 'ten posts' });
       // The files changed under it: what it published may describe a UI that is not there any more.
+      c.touch();
       c.canvas.scheduleReload('feed');
       vi.advanceTimersByTime(500);
       expect(c.canvas.publishedState()!.state).toBeNull();
@@ -274,12 +277,35 @@ describe('ViewCanvas failure handling', () => {
     vi.useFakeTimers();
     try {
       const c = await canvasFor();
+      c.touch();
       c.canvas.scheduleReload('feed');
       c.canvas.scheduleReload('feed');
       vi.advanceTimersByTime(500);
       expect(c.contents.reloads).toBe(1);
+      c.touch();
       c.canvas.scheduleReload('other');
       c.canvas.hide();
+      c.canvas.scheduleReload('feed');
+      vi.advanceTimersByTime(500);
+      expect(c.contents.reloads).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reload for the files it was shown from, only for a change made since', async () => {
+    vi.useFakeTimers();
+    try {
+      const c = await canvasFor();
+      // The watcher reporting the writes that happened before the view went on screen.
+      c.canvas.scheduleReload('feed');
+      vi.advanceTimersByTime(500);
+      expect(c.contents.reloads).toBe(0);
+      c.touch();
+      c.canvas.scheduleReload('feed');
+      vi.advanceTimersByTime(500);
+      expect(c.contents.reloads).toBe(1);
+      // Reloaded from the files as they are now: the same event again is not a change.
       c.canvas.scheduleReload('feed');
       vi.advanceTimersByTime(500);
       expect(c.contents.reloads).toBe(1);

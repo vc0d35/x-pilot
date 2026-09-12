@@ -97,6 +97,8 @@ export interface ViewCanvasDeps {
   onError(failure: ViewFailure): void;
   /** Which view is on screen now, for the sidebar banner. */
   onActive(view: string | null): void;
+  /** What a view's files are on disk right now; see `ViewsStore.signature`. */
+  signature(view: string): string;
 }
 
 /** One thing that went wrong in a view, as the sidebar and the settings need to hear it. */
@@ -119,6 +121,8 @@ export class ViewCanvas {
   private previewingView = false;
   private reloadTimer: NodeJS.Timeout | null = null;
   private loading = false;
+  /** The files the view on screen was loaded from, so a watcher event for those same files is not a reload. */
+  private loaded = '';
   /** Running while a wedged renderer is being given its ten seconds to come back. */
   private unresponsiveTimer: NodeJS.Timeout | null = null;
   /** What the view on screen last published about itself; nothing survives that view going away. */
@@ -197,6 +201,7 @@ export class ViewCanvas {
     // are the old document's and have to go before the new one makes its own, and anything the page
     // says on its way up — an error thrown out of a module — has to arrive after the view it is about.
     this.deps.onActive(name);
+    this.loaded = this.deps.signature(name);
     this.loading = true;
     try {
       await view.webContents.loadURL(viewUrl(name));
@@ -234,9 +239,15 @@ export class ViewCanvas {
     if (this.view && this.activeView) this.view.setBounds(bounds);
   }
 
-  /** A view changed on disk: reload it, debounced, so a file-at-a-time write is one reload. */
+  /**
+   * A view changed on disk: reload it, debounced, so a file-at-a-time write is one reload. The
+   * watcher reports a write some time after it happened, and a view is usually written and then
+   * shown: files that are the ones already on screen are no reason to reload, and a reload is not
+   * free — a call the view has in flight to main is lost with the document that made it.
+   */
   scheduleReload(name: string): void {
     if (this.activeView !== name || this.loading) return;
+    if (this.deps.signature(name) === this.loaded) return;
     // A view that has failed to load twice running is not reloaded a third time at the speed a
     // watcher can fire; the refusal clears the count, so the next file change tries again.
     if (!this.errors.shouldReload(name)) {
@@ -251,6 +262,7 @@ export class ViewCanvas {
       // The files changed under it, so whatever it published describes a UI that may not exist any
       // more; the document about to load publishes its own.
       this.published = null;
+      this.loaded = this.deps.signature(name);
       // The canvas can be taken off the screen between the timer being set and it firing.
       try {
         // Ignoring the cache as well as answering no-store: a reload exists to show what changed.

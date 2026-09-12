@@ -118,6 +118,17 @@ describe('ViewsStore', () => {
     expect(s.delete('feed')).toBe(false);
   });
 
+  it('has a signature that changes with any file, and not without one', () => {
+    const s = store();
+    expect(s.signature('feed')).toBe('');
+    s.write('feed', 'index.html', 'first');
+    const first = s.signature('feed');
+    expect(first).toContain('index.html');
+    expect(s.signature('feed')).toBe(first);
+    s.write('feed', 'app.js', 'console.log(1)');
+    expect(s.signature('feed')).not.toBe(first);
+  });
+
   it('reports which view changed on disk, once per burst', async () => {
     const s = store();
     s.write('feed', 'index.html', 'first');
