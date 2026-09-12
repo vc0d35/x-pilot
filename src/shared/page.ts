@@ -43,7 +43,13 @@ export const PostSchema = z.object({
   kind: z.enum(['post', 'article']),
   articleTitle: z.string().max(1000).nullable().optional(),
   articleBody: z.string().max(200_000).nullable().optional(),
-  stats: z.object({ replies: z.number(), reposts: z.number(), likes: z.number(), views: z.number() }).nullable().optional(),
+  stats: z
+    .object({ replies: z.number(), reposts: z.number(), likes: z.number(), bookmarks: z.number(), views: z.number() })
+    .nullable()
+    .optional(),
+  /** Read from the state of the post's own buttons; absent where the page renders none. */
+  liked: z.boolean().optional(),
+  bookmarked: z.boolean().optional(),
   quoted: QuotedPostSchema.nullable().optional(),
   /** The author's profile picture, on one of X's own hosts. */
   authorAvatar: z.string().max(MEDIA_URL_MAX).optional(),

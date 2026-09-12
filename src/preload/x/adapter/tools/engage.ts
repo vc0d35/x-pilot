@@ -7,6 +7,9 @@ import { bookmarkInPageDef, likeInPageDef, selectHomeTabDef } from './specs';
 
 const POST_ID = /\/status\/(\d+)/;
 
+/** The count the page shows for a post after a click, so a caller can update its own without a re-read. */
+const countOf = (article: Element, key: 'likes' | 'bookmarks'): number | null => extractPost(article)?.stats?.[key] ?? null;
+
 export function findArticleByPostId(root: ParentNode, postId: string): Element | null {
   for (const a of root.querySelectorAll(SEL.article)) if (extractPost(a)?.id === postId) return a;
   return null;
@@ -27,12 +30,14 @@ export const likeInPage = defineTool({
     const wanted = article!.querySelector<HTMLElement>(action === 'like' ? SEL.likeButton : SEL.unlikeButton);
     if (!wanted) {
       const already = article!.querySelector(action === 'like' ? SEL.unlikeButton : SEL.likeButton);
-      return already ? ok({ postId: id, liked: action === 'like', changed: false }) : fail(`No ${action} button found for post ${id}`);
+      return already
+        ? ok({ postId: id, liked: action === 'like', changed: false, likes: countOf(article!, 'likes') })
+        : fail(`No ${action} button found for post ${id}`);
     }
     wanted.click();
     await sleep(300);
     const nowLiked = !!article!.querySelector(SEL.unlikeButton);
-    return ok({ postId: id, liked: nowLiked, changed: nowLiked === (action === 'like') });
+    return ok({ postId: id, liked: nowLiked, changed: nowLiked === (action === 'like'), likes: countOf(article!, 'likes') });
   },
 });
 
@@ -52,13 +57,18 @@ export const bookmarkInPage = defineTool({
     if (!wanted) {
       const already = article!.querySelector(action === 'bookmark' ? SEL.removeBookmarkButton : SEL.bookmarkButton);
       return already
-        ? ok({ postId: id, bookmarked: action === 'bookmark', changed: false })
+        ? ok({ postId: id, bookmarked: action === 'bookmark', changed: false, bookmarks: countOf(article!, 'bookmarks') })
         : fail(`No ${action} button found for post ${id}`);
     }
     wanted.click();
     await sleep(300);
     const nowBookmarked = !!article!.querySelector(SEL.removeBookmarkButton);
-    return ok({ postId: id, bookmarked: nowBookmarked, changed: nowBookmarked === (action === 'bookmark') });
+    return ok({
+      postId: id,
+      bookmarked: nowBookmarked,
+      changed: nowBookmarked === (action === 'bookmark'),
+      bookmarks: countOf(article!, 'bookmarks'),
+    });
   },
 });
 

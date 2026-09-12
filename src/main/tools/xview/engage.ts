@@ -96,7 +96,7 @@ async function postInView(view: XViewLike, signal?: AbortSignal): Promise<ReadRo
 export const likePost = defineTool({
   name: 'x_like_post',
   description:
-    'Likes (or unlikes) a post by URL on the user\'s behalf. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "agent likes" setting (autonomous or confirm).',
+    'Likes (or unlikes) a post by URL on the user\'s behalf. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "agent likes" setting (autonomous or confirm). Answers with whether the post is liked now and the like count the page shows; a read post carries `liked` already, so use action "unlike" for one that is.',
   args: z.strictObject({ url: z.string(), action: z.enum(['like', 'unlike']).optional() }),
   annotations: { destructiveHint: true },
   execute: async (args, ctx: XViewToolCtx, signal) => {
@@ -149,7 +149,7 @@ export const likePost = defineTool({
 export const bookmarkPost = defineTool({
   name: 'x_bookmark_post',
   description:
-    'Bookmarks (or removes a bookmark from) a post by URL on the user\'s behalf. Bookmarks are private to the user, so this is a good way to save something for later without a public signal. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "bookmarks" setting (autonomous or confirm).',
+    'Bookmarks (or removes a bookmark from) a post by URL on the user\'s behalf. Bookmarks are private to the user, so this is a good way to save something for later without a public signal. Uses the visible window when the post is already on screen, otherwise a hidden window. Follows the user\'s "bookmarks" setting (autonomous or confirm). Answers with whether the post is bookmarked now and the bookmark count the page shows; a read post carries `bookmarked` already, so use action "unbookmark" for one that is.',
   args: z.strictObject({ url: z.string(), action: z.enum(['bookmark', 'unbookmark']).optional() }),
   annotations: { destructiveHint: true },
   execute: async (args, ctx: XViewToolCtx, signal) => {

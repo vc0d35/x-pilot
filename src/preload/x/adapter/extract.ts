@@ -58,13 +58,15 @@ export function textWithEmoji(el: Element | null): string {
 const toNumber = (s: string) => Number(s.replace(/,/g, '')) || 0;
 
 export function parseStats(label: string): NonNullable<Post['stats']> {
-  const stats = { replies: 0, reposts: 0, likes: 0, views: 0 };
-  for (const m of label.matchAll(/([\d,]+)\s+(repl|repost|like|view)/gi)) {
+  const stats = { replies: 0, reposts: 0, likes: 0, bookmarks: 0, views: 0 };
+  // A digit first: a liked post's label carries ", Liked", and a comma read as a number made that 0 likes.
+  for (const m of label.matchAll(/(\d[\d,]*)\s+(repl|repost|like|bookmark|view)/gi)) {
     const n = toNumber(m[1]);
     const k = m[2].toLowerCase();
     if (k === 'repl') stats.replies = n;
     else if (k === 'repost') stats.reposts = n;
     else if (k === 'like') stats.likes = n;
+    else if (k === 'bookmark') stats.bookmarks = n;
     else stats.views = n;
   }
   return stats;
@@ -285,6 +287,8 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
   const cards = extractCards(article);
   const media = extractMedia(article);
   const avatar = mediaUrl(own(article, SEL.authorAvatar)?.getAttribute('src'));
+  const liked = own(article, SEL.unlikeButton) ? true : own(article, SEL.likeButton) ? false : undefined;
+  const bookmarked = own(article, SEL.removeBookmarkButton) ? true : own(article, SEL.bookmarkButton) ? false : undefined;
   return {
     id,
     url: `https://x.com/${handle}/status/${id}`,
@@ -295,6 +299,8 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
     kind: 'post',
     stats: statsLabel ? parseStats(statsLabel) : null,
     quoted: extractQuoted(article),
+    ...(liked !== undefined ? { liked } : {}),
+    ...(bookmarked !== undefined ? { bookmarked } : {}),
     ...(avatar ? { authorAvatar: avatar } : {}),
     ...(cards.length > 0 ? { cards } : {}),
     ...(media.length > 0 ? { media } : {}),

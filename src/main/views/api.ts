@@ -27,7 +27,9 @@ window.xpilotView
   subscribe(feed, cb) -> unsubscribe()
     'page'   the page the user is on: { url, kind, post, visible } (the same context the sidebar gets)
     'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s — the
-             re-read carries the whole post object, pictures and all
+             re-read carries the whole post object: pictures, stats { replies, reposts, likes,
+             bookmarks, views }, and liked / bookmarked, read from the post's own buttons, so a
+             toggle draws from the page's state rather than from what you last did
     'message' what the agent sent with xpilot_view_message: a plain object whose meaning is yours,
              e.g. { type: 'focus', url }. Handle the shapes you defined and ignore the rest.
     'page' and 'posts' call back immediately with what is known now, then on every change;
@@ -48,8 +50,12 @@ window.xpilotView
              xpilot_list_library
     drivers: x_scroll, x_show_new_posts, x_navigate — the X page underneath is the data source, so
              moving it is how a view loads more
-    writes:  x_like_post, x_bookmark_post, x_compose_post, x_submit_post — these keep their
-             confirmation cards in the sidebar exactly as when you call them yourself
+    writes:  x_like_post { url, action: 'like' | 'unlike' }, x_bookmark_post { url, action:
+             'bookmark' | 'unbookmark' } — each answers { liked | bookmarked, changed, and the
+             likes | bookmarks count the page shows after the click }, so update your own count
+             from the answer rather than waiting for the next re-read — x_compose_post,
+             x_submit_post. These follow the user's likes, bookmarks and posting settings exactly
+             as when you call them yourself
     Every other tool is refused, including all xpilot_* configuration, task and view tools.
     At most ${VIEW_CALLS_PER_WINDOW} calls per ${VIEW_CALL_WINDOW_MS / 1000} s: subscribe to a feed rather than polling one.
   openInX(url) -> the same as call('x_navigate', { url })

@@ -20,14 +20,17 @@ describe('x_like_in_page', () => {
   it('likes a post rendered on the page and reports the change', async () => {
     expect(await run(likeInPage, { url: 'https://x.com/alice/status/111' })).toEqual({
       success: true,
-      content: { postId: '111', liked: true, changed: true },
+      content: { postId: '111', liked: true, changed: true, likes: 10 },
     });
   });
   it('is idempotent when the post is already liked, and can unlike', async () => {
-    expect(await run(likeInPage, { url: '222' })).toEqual({ success: true, content: { postId: '222', liked: true, changed: false } });
+    expect(await run(likeInPage, { url: '222' })).toEqual({
+      success: true,
+      content: { postId: '222', liked: true, changed: false, likes: 1 },
+    });
     expect(await run(likeInPage, { url: '222', action: 'unlike' })).toEqual({
       success: true,
-      content: { postId: '222', liked: false, changed: true },
+      content: { postId: '222', liked: false, changed: true, likes: 1 },
     });
   });
   it('fails when the post is not on the page', async () => {
@@ -52,17 +55,17 @@ describe('x_bookmark_in_page', () => {
   it('bookmarks a post rendered on the page and reports the change', async () => {
     expect(await run(bookmarkInPage, { url: 'https://x.com/alice/status/111' })).toEqual({
       success: true,
-      content: { postId: '111', bookmarked: true, changed: true },
+      content: { postId: '111', bookmarked: true, changed: true, bookmarks: 0 },
     });
   });
   it('is idempotent when the post is already bookmarked, and can unbookmark', async () => {
     expect(await run(bookmarkInPage, { url: '222' })).toEqual({
       success: true,
-      content: { postId: '222', bookmarked: true, changed: false },
+      content: { postId: '222', bookmarked: true, changed: false, bookmarks: 0 },
     });
     expect(await run(bookmarkInPage, { url: '222', action: 'unbookmark' })).toEqual({
       success: true,
-      content: { postId: '222', bookmarked: false, changed: true },
+      content: { postId: '222', bookmarked: false, changed: true, bookmarks: 0 },
     });
   });
   it('fails when the post is not on the page', async () => {

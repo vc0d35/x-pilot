@@ -34,8 +34,22 @@ describe('pageKindFromUrl', () => {
 
 describe('parseStats', () => {
   it('parses the aria-label group', () => {
-    expect(parseStats('3 replies, 2 reposts, 10 likes, 1,500 views')).toEqual({ replies: 3, reposts: 2, likes: 10, views: 1500 });
-    expect(parseStats('1 like')).toEqual({ replies: 0, reposts: 0, likes: 1, views: 0 });
+    expect(parseStats('3 replies, 2 reposts, 10 likes, 1,500 views')).toEqual({
+      replies: 3,
+      reposts: 2,
+      likes: 10,
+      bookmarks: 0,
+      views: 1500,
+    });
+    expect(parseStats('1 like')).toEqual({ replies: 0, reposts: 0, likes: 1, bookmarks: 0, views: 0 });
+    // A liked post's label says so with ", Liked": the comma is not a count of likes.
+    expect(parseStats('24 replies, 52 reposts, 331 likes, Liked, 3 bookmarks, 10214 views')).toEqual({
+      replies: 24,
+      reposts: 52,
+      likes: 331,
+      bookmarks: 3,
+      views: 10214,
+    });
   });
 });
 
@@ -78,10 +92,20 @@ describe('timeline extraction', () => {
       text: 'Hello 🌍world',
       postedAt: '2026-09-01T10:00:00.000Z',
       kind: 'post',
-      stats: { replies: 3, reposts: 2, likes: 10, views: 1500 },
+      stats: { replies: 3, reposts: 2, likes: 10, bookmarks: 0, views: 1500 },
       quoted: null,
+      liked: false,
+      bookmarked: false,
     });
     expect(posts[1].text).toBe('Second post about rust');
+  });
+
+  it('says whether the user has liked or bookmarked a post, from the state of its buttons', () => {
+    const posts = extractVisiblePosts(document);
+    expect(posts[1]).toMatchObject({ id: '222', liked: true, bookmarked: true });
+    // A post rendered without the buttons says nothing either way.
+    for (const b of document.querySelectorAll('article:nth-of-type(1) button')) b.remove();
+    expect(extractVisiblePosts(document)[0]).not.toHaveProperty('liked');
   });
 
   it('returns null for an article without a permalink and no fallback', () => {
