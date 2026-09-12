@@ -151,17 +151,48 @@ describe('x_search', () => {
 describe('x_read_post', () => {
   it('reads in the background even when the visible window claims to be on that post', async () => {
     const c = ctx('https://x.com/alice/status/111');
-    await readPost.execute({ url: 'https://x.com/alice/status/111?s=1' }, c);
+    await readPost.execute({ pages: 1, url: 'https://x.com/alice/status/111?s=1' }, c);
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(c.xview.callPreload).not.toHaveBeenCalled();
     expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/alice/status/111', undefined);
-    await readPost.execute({ url: 'https://x.com/bob/status/2' }, c);
+    await readPost.execute({ pages: 1, url: 'https://x.com/bob/status/2' }, c);
     expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
     expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
+  it('scrolls for more replies when asked, keeping one entry per id and never re-reading the post', async () => {
+    const c = ctx();
+    const screens = [
+      [{ id: 'r2' }, { id: 'r3' }],
+      [{ id: 'r3' }, { id: '1' }, { id: 'r4' }],
+    ];
+    let scrolls = 0;
+    c.bg.callPreload = vi.fn(async (name: string) => {
+      if (name === 'x_read_current_post')
+        return ok({
+          post: { id: '1' },
+          ancestors: [{ id: 'p0' }],
+          thread: [{ id: 't1' }],
+          replies: [{ id: 'r1' }, { id: 'r2' }],
+          article: null,
+        });
+      if (name === 'x_scroll') return ok({ scrolled: ++scrolls });
+      if (name === 'x_read_replies_in_page') return ok(screens[Math.min(scrolls - 1, screens.length - 1)]);
+      return fail('unexpected ' + name);
+    });
+    const r = (await readPost.execute({ pages: 3, url: 'https://x.com/alice/status/1' }, c)) as {
+      content: { ancestors: { id: string }[]; thread: { id: string }[]; replies: { id: string }[]; pages: number };
+    };
+    expect(scrolls).toBe(2);
+    expect(r.content.pages).toBe(3);
+    expect(r.content.ancestors.map((p) => p.id)).toEqual(['p0']);
+    expect(r.content.thread.map((p) => p.id)).toEqual(['t1']);
+    expect(r.content.replies.map((p) => p.id)).toEqual(['r1', 'r2', 'r3', 'r4']);
+  });
   it('rejects non-post urls', async () => {
-    expect(await readPost.execute({ url: 'https://x.com/alice' }, ctx())).toEqual(fail('Not a post or article URL: https://x.com/alice'));
+    expect(await readPost.execute({ pages: 1, url: 'https://x.com/alice' }, ctx())).toEqual(
+      fail('Not a post or article URL: https://x.com/alice'),
+    );
   });
 });
 
@@ -178,7 +209,7 @@ describe('background vs visible routing', () => {
 
   it('x_read_post reads a different post in the background and never moves the visible window', async () => {
     const c = ctx('https://x.com/alice/status/111');
-    await readPost.execute({ url: 'https://x.com/bob/status/2' }, c);
+    await readPost.execute({ pages: 1, url: 'https://x.com/bob/status/2' }, c);
     expect(c.bg.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
     expect(c.bg.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
@@ -186,11 +217,11 @@ describe('background vs visible routing', () => {
 
   it('x_read_post uses the visible window only when asked, and stays put when it is already there', async () => {
     const c = ctx('https://x.com/alice/status/111');
-    await readPost.execute({ url: 'https://x.com/alice/status/111', view: 'visible' }, c);
+    await readPost.execute({ pages: 1, url: 'https://x.com/alice/status/111', view: 'visible' }, c);
     expect(c.xview.callPreload).toHaveBeenLastCalledWith('x_read_current_post', {}, undefined);
     expect(c.xview.navigate).not.toHaveBeenCalled();
     expect(c.bg.navigate).not.toHaveBeenCalled();
-    await readPost.execute({ url: 'https://x.com/bob/status/2', view: 'visible' }, c);
+    await readPost.execute({ pages: 1, url: 'https://x.com/bob/status/2', view: 'visible' }, c);
     expect(c.xview.navigate).toHaveBeenCalledWith('https://x.com/bob/status/2', undefined);
   });
 

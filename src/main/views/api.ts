@@ -29,8 +29,9 @@ window.xpilotView
              context the sidebar gets; unreadNotifications is the badge on X's navigation bar)
     'posts'  the posts on screen: [{ id, url, authorHandle, text }], re-read every 3 s — the
              re-read carries the whole post object: pictures, stats { replies, reposts, likes,
-             bookmarks, views }, and liked / bookmarked, read from the post's own buttons, so a
-             toggle draws from the page's state rather than from what you last did
+             bookmarks, views }, liked / bookmarked, read from the post's own buttons, so a
+             toggle draws from the page's state rather than from what you last did, and
+             inReplyTo: [handles] wherever X shows a "Replying to" line
     'message' what the agent sent with xpilot_view_message: a plain object whose meaning is yours,
              e.g. { type: 'focus', url }. Handle the shapes you defined and ignore the rest.
     'page' and 'posts' call back immediately with what is known now, then on every change;
@@ -46,7 +47,9 @@ window.xpilotView
     cut, and it replaces the whole state each time rather than merging. ${VIEW_STATE_BYTES_MAX / 1024} KB in all, ${VIEW_STATE_UPDATES_PER_WINDOW} updates a
     second (publish freely: past that the newest one wins rather than failing).
   call(tool, args) -> Promise<{ success: true, content } | { success: false, error }>
-    reads:   x_get_page_state, x_read_visible_posts, x_read_current_post, x_read_post, x_search,
+    reads:   x_get_page_state, x_read_visible_posts, x_read_current_post, x_read_post { url, pages? }
+             — answers { post, ancestors (what it replies to, oldest first), thread (the author's
+             continuation), replies (everyone else's; pages scrolls for more), article } — x_search,
              x_read_timeline, x_read_news_and_trends, x_read_bookmarks, x_read_notifications,
              xpilot_search_history, xpilot_list_library
     drivers: x_scroll, x_show_new_posts, x_navigate — the X page underneath is the data source, so

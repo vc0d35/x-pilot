@@ -1,7 +1,8 @@
 import { z } from 'zod';
-import { defineTool, fail } from '../../../shared/tools';
+import type { Post } from '../../../shared/page';
+import { clampedInt, defineTool, fail, ok } from '../../../shared/tools';
 import type { XViewToolCtx } from './context';
-import { VIEW_ARG, navigateStep, parseView, withView } from './target';
+import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
 
 const POST_PATH = /^\/(?:[^/]+\/status\/\d+|i\/article\/\d+|[^/]+\/article\/\d+)/;
 
@@ -22,8 +23,8 @@ export function normalizePostUrl(input: string): string | null {
 export const readPost = defineTool({
   name: 'x_read_post',
   description:
-    'Reads a post, thread, or X Article by URL and returns the full text, any quoted post, link cards and media, the author\'s thread, and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
-  args: z.strictObject({ url: z.string(), ...VIEW_ARG }),
+    'Reads a post, thread, or X Article by URL: the full text, any quoted post, link cards and media, the posts it replies to (ancestors, oldest first, the last being the direct parent), the author\'s own thread continuation, the replies to it (one screen; pass pages to scroll for more), and article title/body. Reads in a hidden window and leaves the user\'s screen untouched; pass view: "visible" only when the user asked to open it on screen.',
+  args: z.strictObject({ url: z.string(), pages: clampedInt(1, 5, 'How many screens of replies to read (default 1)'), ...VIEW_ARG }),
   annotations: { readOnlyHint: true },
   execute: async (args, ctx: XViewToolCtx, signal) => {
     const target = normalizePostUrl(args.url);
@@ -36,7 +37,26 @@ export const readPost = defineTool({
         const stopped = await navigateStep(view, target, signal);
         if (stopped) return stopped;
       }
-      return view.callPreload('x_read_current_post', {}, signal);
+      const first = await view.callPreload('x_read_current_post', {}, signal);
+      const pages = args.pages ?? 1;
+      if (!first.success || pages <= 1) return first;
+      const content = first.content as { post: Post; ancestors: Post[]; thread: Post[]; replies: Post[] };
+      const known = new Set([content.post, ...content.ancestors, ...content.thread, ...content.replies].map((p) => p.id));
+      const replies = [...content.replies];
+      // Scrolling can take the main post out of the DOM, so the extra screens are read as replies only.
+      for (let i = 1; i < pages; i++) {
+        const gone = cancelled(signal);
+        if (gone) return gone;
+        await view.callPreload('x_scroll', { direction: 'down', amount: 2000 }, signal);
+        const more = await view.callPreload('x_read_replies_in_page', { limit: 100 }, signal);
+        if (!more.success) break;
+        for (const p of more.content as Post[]) {
+          if (known.has(p.id)) continue;
+          known.add(p.id);
+          replies.push(p);
+        }
+      }
+      return ok({ ...content, replies, pages });
     });
   },
 });

@@ -2,7 +2,7 @@ import { fail, runTool, type ToolModule, type ToolResult } from '../../../../sha
 import type { PreloadCtx } from '../../context';
 import { pageState } from './page-state';
 import { readVisiblePosts } from './read-visible';
-import { readCurrentPost } from './read-current-post';
+import { readCurrentPost, readRepliesInPage } from './read-current-post';
 import { scroll } from './scroll';
 import { bookmarkInPage, likeInPage, selectHomeTab } from './engage';
 import { openNotificationInPage, readNotificationsInPage } from './notifications';
@@ -15,6 +15,7 @@ export const adapterTools: ToolModule<PreloadCtx>[] = [
   pageState,
   readVisiblePosts,
   readCurrentPost,
+  readRepliesInPage,
   scroll,
   readComposer,
   typeInComposer,

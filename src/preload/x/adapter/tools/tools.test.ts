@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fixture } from '../../../../../tests/fixtures';
 import { pageState } from './page-state';
 import { NO_POSTS_WARNING, readVisiblePosts } from './read-visible';
-import { readCurrentPost } from './read-current-post';
+import { readCurrentPost, readRepliesInPage } from './read-current-post';
 import { showNewPosts } from './widgets';
 import { adapterTools, runAdapterTool } from './index';
 import { adapterToolSpecs } from './specs';
@@ -138,13 +138,22 @@ describe('preload tools', () => {
     document.querySelector<HTMLElement>('[data-testid="tweet-text-show-more-link"]')!.addEventListener('click', () => clicked++);
     const r = (await run(readCurrentPost, {})) as {
       success: boolean;
-      content: { post: { id: string }; thread: { id: string }[]; article: unknown };
+      content: { post: { id: string }; ancestors: { id: string }[]; thread: { id: string }[]; replies: { id: string }[]; article: unknown };
     };
     expect(r.success).toBe(true);
     expect(clicked).toBe(1);
     expect(r.content.post.id).toBe('111');
+    expect(r.content.ancestors.map((p) => p.id)).toEqual(['100']);
     expect(r.content.thread.map((p) => p.id)).toEqual(['112', '113']);
+    expect(r.content.replies.map((p) => p.id)).toEqual(['999']);
     expect(r.content.article).toBeNull();
+  });
+
+  it('x_read_replies_in_page reads what a scrolled post page shows below, up to the limit', async () => {
+    window.history.pushState({}, '', '/alice/status/111');
+    document.body.innerHTML = fixture('x-status.html');
+    const r = (await run(readRepliesInPage, { limit: 2 })) as { content: { id: string }[] };
+    expect(r.content.map((p) => p.id)).toEqual(['100', '112']);
   });
 
   it('x_read_current_post returns the quoted post with the post that quotes it', async () => {

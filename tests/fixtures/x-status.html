@@ -1,8 +1,23 @@
 <div data-testid="primaryColumn">
+  <article data-testid="tweet" tabindex="0">
+    <div data-testid="User-Name">
+      <a role="link" href="/bob"><span>Bob</span></a>
+      <a role="link" href="/bob"><span>@bob</span></a>
+    </div>
+    <a href="/bob/status/100" role="link"><time datetime="2026-09-01T09:00:00.000Z">Sep 1</time></a>
+    <div data-testid="tweetText"><span>The question that started it</span></div>
+    <div role="group" aria-label="1 reply, 0 reposts, 0 likes, 50 views"><button data-testid="like"></button></div>
+  </article>
   <article data-testid="tweet" tabindex="-1">
     <div data-testid="User-Name">
       <a role="link" href="/alice"><span>Alice Doe</span></a>
       <a role="link" href="/alice"><span>@alice</span></a>
+    </div>
+    <div dir="ltr">
+      Replying to
+      <div>
+        <a dir="ltr" href="/bob" role="link"><span>@bob</span></a>
+      </div>
     </div>
     <div data-testid="tweetText"><span>Main post text. </span><span>More text here…</span></div>
     <button data-testid="tweet-text-show-more-link">Show more</button>
@@ -34,6 +49,19 @@
     </div>
     <a href="/carol/status/999" role="link"><time datetime="2026-09-01T12:00:00.000Z">Sep 1</time></a>
     <div data-testid="tweetText"><span>Nice thread!</span></div>
+    <div role="group" aria-label="0 replies, 0 reposts, 0 likes, 5 views"><button data-testid="like"></button></div>
+  </article>
+  <div data-testid="cellInnerDiv">
+    <h2>Discover more</h2>
+    <span>Sourced from across X</span>
+  </div>
+  <article data-testid="tweet" tabindex="0">
+    <div data-testid="User-Name">
+      <a role="link" href="/dave"><span>Dave</span></a
+      ><a role="link" href="/dave"><span>@dave</span></a>
+    </div>
+    <a href="/dave/status/5000" role="link"><time datetime="2026-09-02T12:00:00.000Z">Sep 2</time></a>
+    <div data-testid="tweetText"><span>Unrelated post X recommends</span></div>
     <div role="group" aria-label="0 replies, 0 reposts, 0 likes, 5 views"><button data-testid="like"></button></div>
   </article>
 </div>

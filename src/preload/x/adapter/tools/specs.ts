@@ -27,7 +27,7 @@ export const readVisiblePostsDef = {
 export const readCurrentPostDef = {
   name: 'x_read_current_post',
   description:
-    "Reads the post the page is currently showing (must be on a post or article page): full text, any post it quotes, its link cards and media, the author's own thread continuation, and the X Article title/body when present.",
+    "Reads the post the page is currently showing (must be on a post or article page): full text, any post it quotes, its link cards and media, the posts it replies to (ancestors, oldest first), the author's own thread continuation, the replies rendered below it, and the X Article title/body when present.",
   args: z.strictObject({ timeoutMs: z.int().default(10000) }),
   annotations: { readOnlyHint: true },
 } satisfies ToolDef;
@@ -66,6 +66,13 @@ export const likeInPageDef = {
   description: 'Internal: like or unlike a post rendered in this window by post URL or id.',
   args: z.strictObject({ url: z.string(), action: z.enum(['like', 'unlike']).optional(), timeoutMs: z.int().default(8000) }),
   annotations: { destructiveHint: true, internal: true },
+} satisfies ToolDef;
+
+export const readRepliesInPageDef = {
+  name: 'x_read_replies_in_page',
+  description: 'Internal: the replies rendered on this post page, for a read that scrolled for more of them.',
+  args: z.strictObject({ limit: clampedInt(1, 100, 'How many replies to return', 100) }),
+  annotations: { readOnlyHint: true, internal: true },
 } satisfies ToolDef;
 
 export const readNotificationsInPageDef = {
@@ -135,6 +142,7 @@ export const adapterToolSpecs: ToolSpec[] = [
   pageStateDef,
   readVisiblePostsDef,
   readCurrentPostDef,
+  readRepliesInPageDef,
   scrollDef,
   readComposerDef,
   typeInComposerDef,

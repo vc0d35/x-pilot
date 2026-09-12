@@ -288,6 +288,7 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
   const cards = extractCards(article);
   const media = extractMedia(article);
   const avatar = mediaUrl(own(article, SEL.authorAvatar)?.getAttribute('src'));
+  const inReplyTo = extractInReplyTo(article);
   const liked = own(article, SEL.unlikeButton) ? true : own(article, SEL.likeButton) ? false : undefined;
   const bookmarked = own(article, SEL.removeBookmarkButton) ? true : own(article, SEL.bookmarkButton) ? false : undefined;
   return {
@@ -300,6 +301,7 @@ export function extractPost(article: Element, fallbackUrl?: string): Post | null
     kind: 'post',
     stats: statsLabel ? parseStats(statsLabel) : null,
     quoted: extractQuoted(article),
+    ...(inReplyTo.length > 0 ? { inReplyTo } : {}),
     ...(liked !== undefined ? { liked } : {}),
     ...(bookmarked !== undefined ? { bookmarked } : {}),
     ...(avatar ? { authorAvatar: avatar } : {}),
@@ -331,6 +333,78 @@ export function findMainArticle(root: ParentNode, url: string): Element | null {
   const m = PERMALINK.exec(new URL(url).pathname);
   if (m) return articles.find((a) => permalinkOf(a)?.id === m[2]) ?? null;
   return articles[0];
+}
+
+const REPLYING_TO = /^Replying to\b/;
+const REPLY_HANDLE = /^\/([A-Za-z0-9_]{1,15})$/;
+
+/**
+ * The handles in the post's "Replying to @a and @b" line: a `dir="ltr"` box whose text starts
+ * with those words, holding one profile link per handle. Only the handles are trusted, and only
+ * from the link paths: the words around them are page text.
+ */
+function extractInReplyTo(article: Element): string[] {
+  const handles: string[] = [];
+  for (const a of article.querySelectorAll('a[href]')) {
+    if (a.closest(SEL.quotedPost)) continue;
+    const box = a.closest('div[dir="ltr"]');
+    if (!box || !REPLYING_TO.test((box.textContent ?? '').trim())) continue;
+    const m = REPLY_HANDLE.exec(a.getAttribute('href') ?? '');
+    if (m && !handles.includes(m[1])) handles.push(m[1]);
+  }
+  return handles.slice(0, 10);
+}
+
+const UNRELATED_HEADING = /^(discover more|more posts)/i;
+
+/**
+ * Where the conversation ends on a post page: X appends a "Discover more" section of unrelated
+ * posts below the replies, under a heading. Everything after that heading is not a reply.
+ */
+function conversationEnd(root: ParentNode): Element | null {
+  for (const h of root.querySelectorAll(SEL.sectionHeading)) if (UNRELATED_HEADING.test((h.textContent ?? '').trim())) return h;
+  return null;
+}
+
+const isAfter = (marker: Element, el: Element): boolean => !!(marker.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+/**
+ * A post page, read by position: the articles above the main one are its ancestors, oldest
+ * first, so the last is the direct parent; below it come the author's own continuation, then
+ * everyone else's replies, until the unrelated section X appends.
+ */
+export function extractConversation(
+  root: ParentNode,
+  main: Element,
+  authorHandle: string,
+): { ancestors: Post[]; thread: Post[]; replies: Post[] } {
+  const end = conversationEnd(root);
+  const articles = [...root.querySelectorAll(SEL.article)].filter((a) => !end || !isAfter(end, a));
+  const at = articles.indexOf(main);
+  const posts = (list: Element[]) => list.map((a) => extractPost(a)).filter((p): p is Post => p !== null);
+  const thread = extractThread(root, main, authorHandle);
+  return {
+    ancestors: at < 0 ? [] : posts(articles.slice(0, at)),
+    thread,
+    replies: at < 0 ? [] : posts(articles.slice(at + 1 + thread.length)),
+  };
+}
+
+/**
+ * The replies rendered on a post page after scrolling for more, when the main post may have
+ * left the DOM: every article before the unrelated section, less the post itself. The caller
+ * drops what it already holds.
+ */
+export function extractRepliesBelow(root: ParentNode, url: string): Post[] {
+  const end = conversationEnd(root);
+  const m = PERMALINK.exec(new URL(url).pathname);
+  const out: Post[] = [];
+  for (const a of root.querySelectorAll(SEL.article)) {
+    if (end && isAfter(end, a)) break;
+    const p = extractPost(a);
+    if (p && p.id !== m?.[2]) out.push(p);
+  }
+  return out;
 }
 
 /** Consecutive articles after `main` by the same author (the author's own thread). */

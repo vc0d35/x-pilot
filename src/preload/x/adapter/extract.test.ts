@@ -13,6 +13,8 @@ import {
   extractArticle,
   extractNotifications,
   unreadNotificationCount,
+  extractConversation,
+  extractRepliesBelow,
 } from './extract';
 import { SEL } from './selectors';
 
@@ -147,7 +149,25 @@ describe('status page extraction', () => {
 
   it('falls back to the first article on a non-status page', () => {
     const main = findMainArticle(document, 'https://x.com/i/article/555')!;
-    expect(extractPost(main, 'https://x.com/i/article/555')!.id).toBe('111');
+    expect(extractPost(main, 'https://x.com/i/article/555')!.id).toBe('100');
+  });
+
+  it('reads the conversation by position: ancestors above, the thread, then replies until "Discover more"', () => {
+    const url = 'https://x.com/alice/status/111';
+    const main = findMainArticle(document, url)!;
+    const post = extractPost(main, url)!;
+    expect(post.inReplyTo).toEqual(['bob']);
+    const c = extractConversation(document, main, 'alice');
+    expect(c.ancestors.map((p) => p.id)).toEqual(['100']);
+    expect(c.thread.map((p) => p.id)).toEqual(['112', '113']);
+    expect(c.replies.map((p) => p.id)).toEqual(['999']);
+    expect(c.replies[0].inReplyTo).toBeUndefined();
+  });
+
+  it('reads the replies below after a scroll, without the post itself and without the unrelated section', () => {
+    expect(extractRepliesBelow(document, 'https://x.com/alice/status/111').map((p) => p.id)).toEqual(['100', '112', '113', '999']);
+    document.querySelectorAll(SEL.article)[1].remove();
+    expect(extractRepliesBelow(document, 'https://x.com/alice/status/111').map((p) => p.id)).toEqual(['100', '112', '113', '999']);
   });
 
   it('returns no main article when the page is a status page and nothing on it carries that permalink', () => {
@@ -156,7 +176,7 @@ describe('status page extraction', () => {
 
   it('stops the thread at an impostor whose display name matches but whose permalink does not', () => {
     const main = findMainArticle(document, 'https://x.com/alice/status/111')!;
-    document.querySelectorAll(SEL.article)[1].insertAdjacentHTML(
+    document.querySelectorAll(SEL.article)[2].insertAdjacentHTML(
       'beforebegin',
       `
       <article data-testid="tweet">
@@ -183,7 +203,8 @@ describe('page-controlled identity', () => {
 
   it('takes the handle from the permalink, never from the display name', () => {
     document.body.insertAdjacentHTML('beforeend', hostile('', '/attacker/status/1734000000000000000'));
-    const post = extractPost(document.querySelectorAll(SEL.article)[4])!;
+    const articles = document.querySelectorAll(SEL.article);
+    const post = extractPost(articles[articles.length - 1])!;
     expect(post.authorHandle).toBe('attacker');
     expect(post.url).toBe('https://x.com/attacker/status/1734000000000000000');
     expect(post.authorName).not.toContain('nytimes');
@@ -467,7 +488,11 @@ describe('notifications', () => {
       ['repost', 'Carol reposted your post'],
       ['follow', 'Dave followed you'],
     ]);
-    expect(entries[0].post).toMatchObject({ id: '2098773361820065897', url: 'https://x.com/serros404/status/2098773361820065897' });
+    expect(entries[0].post).toMatchObject({
+      id: '2098773361820065897',
+      url: 'https://x.com/serros404/status/2098773361820065897',
+      inReplyTo: ['v_c0d35'],
+    });
     expect(entries[0].text).toBe('foram pra triagem');
     expect(entries[1]).toMatchObject({
       actors: [{ handle: 'avsa', name: 'Alex Van de Sande (avsa.eth)' }],

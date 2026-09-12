@@ -47,6 +47,8 @@ export const PostSchema = z.object({
     .object({ replies: z.number(), reposts: z.number(), likes: z.number(), bookmarks: z.number(), views: z.number() })
     .nullable()
     .optional(),
+  /** The handles X names in the post's "Replying to" line, where it shows one (timelines, notifications). */
+  inReplyTo: z.array(z.string().max(64)).max(10).optional(),
   /** Read from the state of the post's own buttons; absent where the page renders none. */
   liked: z.boolean().optional(),
   bookmarked: z.boolean().optional(),
