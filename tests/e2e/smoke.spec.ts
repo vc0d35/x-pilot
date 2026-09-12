@@ -408,7 +408,7 @@ test('the starter view from the contract publishes a summary as soon as it loads
 /**
  * What a kept view may do to the account, and what the user is shown while it does it. A view is
  * agent-written code with no turn around it, so its calls are rows in the transcript and its cards
- * say whose they are — and the autonomous settings, which the user gave the agent, do not apply.
+ * say whose they are; the autonomous grant the user gave the agent covers a view they kept.
  */
 const WRITER_APP = [
   "window.__like = () => window.xpilotView.call('x_like_post', { url: 'https://x.com/alice/status/1' });",
@@ -417,15 +417,32 @@ const WRITER_APP = [
   "document.getElementById('out').textContent = 'rendered';",
 ].join('\n');
 
+/**
+ * One post, the shape the adapter reads, put on the fixture page for a like to land on: without it
+ * the like would leave for a hidden window and a network the tests do not have. The button flips
+ * on click the way X's does.
+ */
+const ALICE_POST = [
+  "const a = document.createElement('article');",
+  "a.dataset.testid = 'tweet'; a.id = 'alice-1';",
+  'a.innerHTML = \'<div data-testid="User-Name"><a role="link" href="/alice"><span>Alice</span></a></div>\'',
+  '  + \'<a href="/alice/status/1" role="link"><time datetime="2026-09-01T10:00:00.000Z">Sep 1</time></a>\'',
+  '  + \'<div data-testid="tweetText"><span>the one to like</span></div>\'',
+  '  + \'<div role="group"><button data-testid="like" aria-label="Like"></button></div>\';',
+  "const b = a.querySelector('button');",
+  "b.addEventListener('click', () => { b.dataset.testid = b.dataset.testid === 'like' ? 'unlike' : 'like'; });",
+  'document.body.append(a);',
+].join('\n');
+
 /** The cards main raised, and the events a view's calls put on the agent's stream. */
 type Card = { id: string; title: string; origin: { kind: string; name?: string } };
 type Traced = { type: string; name?: string; args?: unknown; success?: boolean; output?: string };
 const cards = () => inMain((_t) => (globalThis as { __cards?: Card[] }).__cards ?? []);
 const traced = () => inMain((_t) => (globalThis as { __traced?: Traced[] }).__traced ?? []);
 
-test('a view-originated like asks the user even in autonomous mode, and leaves a transcript row', async () => {
+test('a view-originated like follows the likes setting, and leaves a transcript row', async () => {
   await app.evaluate(
-    async (_electron, files: { index: string; app: string }) => {
+    async (_electron, files: { index: string; app: string; post: string }) => {
       const t = (globalThis as { __xpilotTest?: Harness }).__xpilotTest!;
       const collected: Card[] = [];
       (globalThis as { __cards?: Card[] }).__cards = collected;
@@ -437,34 +454,44 @@ test('a view-originated like asks the user even in autonomous mode, and leaves a
       t.agent.onEvent((e: Traced) => {
         if (e.name?.startsWith('view:')) events.push(e);
       });
-      // Both autonomous: what the user granted the agent, which a view does not inherit.
+      await t.xView.webContents.executeJavaScript(files.post);
       t.settings.update({ views: { mode: 'autonomous' }, likes: { mode: 'auto' } });
       t.views.write('writer', 'index.html', files.index);
       t.views.write('writer', 'app.js', files.app);
       return t.registry.call('xpilot_activate_view', { view: 'writer' });
     },
-    { index: VIEW_INDEX, app: WRITER_APP },
+    { index: VIEW_INDEX, app: WRITER_APP, post: ALICE_POST },
   );
   await expect.poll(() => inCanvas("document.getElementById('out').textContent"), { timeout: 15_000 }).toBe('rendered');
-  // Started, not awaited: the call stays on the card until it is answered, and an evaluate that
-  // waits for it would block every later one.
+  // Autonomous likes: a kept view inherits the user's grant, so no card is raised, the like lands
+  // on the page underneath, and the call still leaves its pair of view: rows on the agent's stream.
+  expect(await inCanvas('window.__like()')).toMatchObject({ success: true, content: { postId: '1', liked: true, changed: true } });
+  expect(await cards()).toHaveLength(0);
+  await expect.poll(traced, { timeout: 15_000 }).toHaveLength(2);
+  expect(await traced()).toMatchObject([
+    { type: 'tool.started', name: 'view:x_like_post', args: { url: 'https://x.com/alice/status/1' } },
+    { type: 'tool.completed', name: 'view:x_like_post', success: true },
+  ]);
+  expect(await inMain((t) => t.xView.webContents.executeJavaScript("document.querySelector('#alice-1 button').dataset.testid"))).toBe(
+    'unlike',
+  );
+  // Confirm mode: the card comes back, naming the view that asked, and nothing is clicked.
+  await inMain((t) => t.settings.update({ likes: { mode: 'confirm' } }));
   expect(await inCanvas("(window.__like(), 'started')")).toBe('started');
   await expect.poll(cards, { timeout: 15_000 }).toHaveLength(1);
   const card = (await cards())[0];
   expect(card.title).toBe('Like this post?');
   expect(card.origin).toEqual({ kind: 'view', name: 'writer' });
   expect(await inMain((t) => t.approvals.resolve((globalThis as { __cards?: Card[] }).__cards![0].id, 'cancel'))).toBe(true);
-  // The call is on the agent's own event stream, as the pair the model's calls produce, under a
-  // name that cannot be mistaken for one of the agent's.
-  await expect.poll(traced, { timeout: 15_000 }).toHaveLength(2);
-  expect(await traced()).toMatchObject([
-    { type: 'tool.started', name: 'view:x_like_post', args: { url: 'https://x.com/alice/status/1' } },
-    { type: 'tool.completed', name: 'view:x_like_post', success: true, output: expect.stringContaining('cancelled_by_user') },
-  ]);
-  // And it is a row in the sidebar, where the user can scroll back through it.
+  await expect.poll(traced, { timeout: 15_000 }).toHaveLength(4);
+  expect(await inMain((t) => t.xView.webContents.executeJavaScript("document.querySelector('#alice-1 button').dataset.testid"))).toBe(
+    'unlike',
+  );
   await expect
     .poll(() => inMain((t) => t.sidebar.webContents.executeJavaScript('document.body.innerText')), { timeout: 15_000 })
     .toContain('view:x_like_post');
+  await inMain((t) => t.xView.webContents.executeJavaScript("document.getElementById('alice-1').remove()"));
+  await inMain((t) => t.settings.update({ likes: { mode: 'auto' } }));
   await inMain((t) => t.registry.call('xpilot_deactivate_view', {}));
   await inMain((t) => t.views.delete('writer'));
 });

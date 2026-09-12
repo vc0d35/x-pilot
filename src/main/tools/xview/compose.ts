@@ -21,7 +21,7 @@ const composeIn = (ctx: XViewToolCtx): ViewTarget => (ctx.xview.isAvailable?.() 
  * as well as before it sends.
  */
 async function viewMayCompose(ctx: XViewToolCtx, text: string): Promise<string | null> {
-  if (!callingView(ctx)) return null;
+  if (!callingView(ctx) || ctx.postingMode() === 'autonomous') return null;
   const { decision } = await ctx.approvals.request(
     {
       origin: ctx.origin,
@@ -116,9 +116,7 @@ export const submitPost = defineTool({
       if (!composer.success) return composer;
       const state = composer.content as { present: boolean; text: string; canSubmit: boolean };
       if (!state.canSubmit) return fail('Post button is disabled (empty draft or over the length limit)');
-      // Autonomous posting is consent the user gave the agent, whose calls are all in the
-      // transcript; a view's call is not, so from a view the card is always raised.
-      if (ctx.postingMode() === 'confirm' || callingView(ctx)) {
+      if (ctx.postingMode() === 'confirm') {
         const approvedText = state.text;
         const { decision } = await ctx.approvals.request(
           {

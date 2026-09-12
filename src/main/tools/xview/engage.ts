@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { callingView, defineTool, fail, ok, clampedInt, type ToolResult } from '../../../shared/tools';
+import { defineTool, fail, ok, clampedInt, type ToolResult } from '../../../shared/tools';
 import type { XViewLike, XViewToolCtx } from './context';
 import { normalizePostUrl } from './read-post';
 import { VIEW_ARG, cancelled, navigateStep, parseView, withView } from './target';
@@ -31,13 +31,11 @@ const str = (value: unknown): string => (typeof value === 'string' ? value : '')
 const tidy = (value: unknown, max: number): string => str(value).replace(/\s+/g, ' ').trim().slice(0, max);
 
 /**
- * A card is raised whenever the setting says so — and always when a custom view asked, whatever the
- * setting says. The user set likes or bookmarks to autonomous for the agent, whose every call is a
- * row in a transcript they can scroll back through; a view's call is not that, so it asks.
+ * A card is raised whenever the setting says so, whoever asked. A custom view's call follows the
+ * same setting: only a kept view can reach a write (a previewed one is refused at the bridge), and
+ * every call it makes is a `view:` row in the transcript, so the user's autonomous grant extends to it.
  */
-function asks(ctx: XViewToolCtx, mode: 'auto' | 'confirm'): boolean {
-  return mode === 'confirm' || callingView(ctx) !== null;
-}
+const asks = (mode: 'auto' | 'confirm'): boolean => mode === 'confirm';
 
 /** The post on screen, or null. Read at most once per call: the card and the index both want it. */
 function onScreenPost(ctx: XViewToolCtx, target: string): () => Promise<VisiblePostRow | null> {
@@ -108,7 +106,7 @@ export const likePost = defineTool({
     const stopped = cancelled(signal);
     if (stopped) return stopped;
     const seen = onScreenPost(ctx, target);
-    if (asks(ctx, ctx.likesMode())) {
+    if (asks(ctx.likesMode())) {
       const detail = cardDetail(await seen(), target);
       const { decision } = await ctx.approvals.request(
         {
@@ -160,7 +158,7 @@ export const bookmarkPost = defineTool({
     const action = args.action ?? 'bookmark';
     const stopped = cancelled(signal);
     if (stopped) return stopped;
-    if (asks(ctx, ctx.bookmarksMode())) {
+    if (asks(ctx.bookmarksMode())) {
       const detail = cardDetail(await onScreenPost(ctx, target)(), target);
       const { decision } = await ctx.approvals.request(
         {

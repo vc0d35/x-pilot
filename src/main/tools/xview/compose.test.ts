@@ -44,8 +44,8 @@ const fromView = <C>(c: C, name = 'timeline'): C & { origin: { kind: 'view'; nam
 });
 
 describe('a custom view composing and posting', () => {
-  it('asks before it opens the composer at all, and opens nothing when the user says no', async () => {
-    const { c, approvals, events } = ctx('autonomous');
+  it('asks before it opens the composer in confirm mode, and opens nothing when the user says no', async () => {
+    const { c, approvals, events } = ctx('confirm');
     const p = composePost.execute({ text: 'buy my coin' }, fromView(c));
     await new Promise((r) => setTimeout(r, 0));
     const req = (events[0] as { request: { id: string; title: string; detail: string; origin: unknown } }).request;
@@ -57,8 +57,8 @@ describe('a custom view composing and posting', () => {
     expect(c.xview.navigate).not.toHaveBeenCalled();
   });
 
-  it('asks before it posts even when posting is autonomous', async () => {
-    const { c, approvals, events } = ctx('autonomous');
+  it('asks before it posts in confirm mode, with the view named', async () => {
+    const { c, approvals, events } = ctx('confirm');
     const composed = composePost.execute({ text: 'hello world' }, fromView(c));
     await new Promise((r) => setTimeout(r, 0));
     approvals.resolve((events[0] as { request: { id: string } }).request.id, 'open');
@@ -73,6 +73,13 @@ describe('a custom view composing and posting', () => {
     approvals.resolve(req.id, 'cancel');
     expect(await p).toMatchObject({ success: true, content: { posted: false, status: 'cancelled_by_user' } });
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_click_post_button', expect.anything(), undefined);
+  });
+
+  it('composes and posts from a view without a card when posting is autonomous', async () => {
+    const { c, events } = ctx('autonomous');
+    const composed = (await composePost.execute({ text: 'hello world' }, fromView(c))) as { content: { draftId: string } };
+    expect(await submitPost.execute({ draftId: composed.content.draftId }, fromView(c))).toMatchObject({ success: true });
+    expect(events.some((e) => e.type === 'approval.requested')).toBe(false);
   });
 
   it('leaves an autonomous post the agent asked for as it was: no card', async () => {

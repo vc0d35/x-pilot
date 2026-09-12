@@ -74,8 +74,15 @@ const fromView = <C>(c: C, name = 'timeline'): C & { origin: { kind: 'view'; nam
 });
 
 describe('a custom view asking for a write', () => {
-  it('raises a card for a like even when likes are autonomous, and says which view asked', async () => {
-    const { c, approvals, events } = ctx('auto', ['111'], []);
+  it('likes without a card when likes are autonomous: a kept view inherits the setting', async () => {
+    const { c, events } = ctx('auto', ['111'], []);
+    expect(await likePost.execute({ url: 'https://x.com/alice/status/111' }, fromView(c))).toMatchObject({ success: true });
+    expect(events.some((e) => e.type === 'approval.requested')).toBe(false);
+    expect(c.xview.callPreload).toHaveBeenCalledWith('x_like_in_page', expect.anything(), undefined);
+  });
+
+  it('raises a card for a like in confirm mode, and says which view asked', async () => {
+    const { c, approvals, events } = ctx('confirm', ['111'], []);
     const p = likePost.execute({ url: 'https://x.com/alice/status/111' }, fromView(c));
     await new Promise((r) => setTimeout(r, 0));
     const req = (events[0] as { request: { id: string; title: string; origin: unknown } }).request;
@@ -86,8 +93,8 @@ describe('a custom view asking for a write', () => {
     expect(c.xview.callPreload).not.toHaveBeenCalledWith('x_like_in_page', expect.anything());
   });
 
-  it('raises a card for a bookmark even when bookmarks are autonomous', async () => {
-    const { c, approvals, events } = ctx('auto', ['111'], []);
+  it('raises a card for a bookmark in confirm mode with the view named', async () => {
+    const { c, approvals, events } = ctx('confirm', ['111'], []);
     const p = bookmarkPost.execute({ url: 'https://x.com/alice/status/111' }, fromView(c));
     await new Promise((r) => setTimeout(r, 0));
     const req = (events[0] as { request: { id: string; title: string; origin: unknown } }).request;
