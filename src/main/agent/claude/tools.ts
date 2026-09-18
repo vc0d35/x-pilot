@@ -4,7 +4,7 @@ import { wrapToolOutput } from '../fence';
 
 /** The MCP content block a tool handler answers with; matches the SDK's `CallToolResult`. */
 export interface McpToolResult {
-  content: Array<{ type: 'text'; text: string }>;
+  content: Array<{ type: 'text'; text: string } | { type: 'image'; data: string; mimeType: string }>;
   isError?: boolean;
 }
 
@@ -43,6 +43,17 @@ export function toolResultText(result: ToolResult): string {
   return wrapToolOutput(result.success ? JSON.stringify(result.content) : `Error: ${result.error}`);
 }
 
+/** The text of a result, then any picture it carries as the image block the model looks at. */
+export function mcpToolResult(result: ToolResult): McpToolResult {
+  return {
+    content: [
+      { type: 'text', text: toolResultText(result) },
+      ...(result.images ?? []).map((i) => ({ type: 'image' as const, data: i.data, mimeType: i.mimeType })),
+    ],
+    isError: !result.success,
+  };
+}
+
 export interface SdkToolDeps {
   define: DefineSdkTool;
   call(spec: ToolSpec, args: Record<string, unknown>): Promise<ToolResult>;
@@ -59,7 +70,7 @@ export function sdkTools(specs: ToolSpec[], deps: SdkToolDeps): unknown[] {
     }
     return deps.define(spec.name, spec.description, shape, async (args) => {
       const result = await deps.call(spec, args ?? {});
-      return { content: [{ type: 'text', text: toolResultText(result) }], isError: !result.success };
+      return mcpToolResult(result);
     });
   });
 }

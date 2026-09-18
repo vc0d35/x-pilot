@@ -30,6 +30,7 @@ function ctx() {
     libraryDir: () => '/lib',
     exportPdf: async () => ({ path: '', title: '' }),
     openPath: async () => '',
+    fetchImage: async () => ({ mimeType: 'image/png', data: '' }),
   };
 }
 

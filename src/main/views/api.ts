@@ -39,8 +39,10 @@ window.xpilotView
   setState(state) -> Promise<{ success: true } | { success: false, error }>
     Tells the agent what your view is showing, so it can answer about the view instead of about the
     X page hidden underneath it:
-      { summary?: string (${VIEW_STATE_SUMMARY_MAX}), focus?: { url?, authorHandle?, text? (${VIEW_STATE_FOCUS_TEXT_MAX}) } | null,
+      { summary?: string (${VIEW_STATE_SUMMARY_MAX}), focus?: { url?, authorHandle?, text? (${VIEW_STATE_FOCUS_TEXT_MAX}), image? } | null,
         items?: [{ url?, authorHandle?, text? (${VIEW_STATE_ITEM_TEXT_MAX}) }] (${VIEW_STATE_ITEMS_MAX}), extra?: { key: string | number | boolean } }
+    focus.image is the twimg URL of the picture the user is looking at, when the focus is one (a
+    gallery, a lightbox): it is what "read this image" means to the agent, which can look at it.
     Publish the focused item every time it changes — while your view is on screen that focus is what
     the user means by "this post" — and a summary once, when the view loads, saying what it shows and
     how it is driven. focus: null says nothing is focused. Unknown keys are refused, long strings are

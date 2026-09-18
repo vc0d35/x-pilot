@@ -12,7 +12,7 @@ import { claudeMissingMessage, claudeSpawnEnv, resolveClaudeBinary } from './bin
 import { ClaudeStream } from './events';
 import { CLAUDE_MODELS } from './models';
 import type { ClaudeQueryHandle, ClaudeTool, RunQuery } from './query';
-import { toolResultText, toolShape } from './tools';
+import { toolResultText, toolShape, mcpToolResult } from './tools';
 
 const LIFECYCLE_EVENTS = new Set([
   'status',
@@ -266,7 +266,7 @@ export class ClaudeProvider implements AgentProvider {
         const text = toolResultText(result);
         this.stream.ownToolCompleted(itemId);
         this.emit({ type: 'tool.completed', itemId, name: spec.name, success: result.success, output: text });
-        return { content: [{ type: 'text' as const, text }], isError: !result.success };
+        return mcpToolResult(result);
       },
     }));
   }

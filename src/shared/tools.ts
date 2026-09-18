@@ -16,7 +16,13 @@ export const ToolResultSchema = z.discriminatedUnion('success', [
   z.object({ success: z.literal(true), content: z.unknown(), warning: z.string().optional() }),
   z.object({ success: z.literal(false), error: z.string() }),
 ]);
-export type ToolResult = z.infer<typeof ToolResultSchema>;
+/** A picture a tool hands the model to look at. Only main's own tools produce one: the schema above, which is what a preload's answer is parsed with, has no place for it. */
+export interface ToolImage {
+  mimeType: string;
+  /** base64 */
+  data: string;
+}
+export type ToolResult = z.infer<typeof ToolResultSchema> & { images?: ToolImage[] };
 
 /**
  * Who asked for a tool call. The model's own calls are `agent`; a call a custom view made through

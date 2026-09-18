@@ -1,3 +1,5 @@
+import type { ImageDetail } from '../../images';
+import type { ToolImage } from '../../../shared/tools';
 import type { CallOrigin } from '../../../shared/tools';
 import type { AppStore } from '../../history/store';
 import type { ApprovalBroker } from '../../approvals';
@@ -63,6 +65,8 @@ export interface AppToolCtx {
   /** Tries a selector on the visible page; null in a scheduled run, which has no visible view. */
   testSelector: ((selector: string) => Promise<SelectorTest | null>) | null;
   libraryDir(): string;
+  /** One picture from X's image CDN, fetched without cookies; rejects with the reason it would not. */
+  fetchImage(url: string, detail: ImageDetail, signal?: AbortSignal): Promise<ToolImage>;
   exportPdf(url: string, outDir: string, selectors: Record<SelectorKey, string>): Promise<{ path: string; title: string }>;
   openPath: (path: string) => Promise<string>; // resolves '' on success, error text otherwise (shell.openPath semantics)
 }

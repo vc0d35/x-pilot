@@ -96,6 +96,7 @@ export interface ViewFocus {
   url?: string;
   authorHandle?: string;
   text?: string;
+  image?: string;
 }
 
 /** One of the things a view is showing, as a line the agent can refer to. */

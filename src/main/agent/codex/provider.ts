@@ -69,6 +69,8 @@ export class CodexProvider implements AgentProvider {
   private proc: ChildProcessWithoutNullStreams | null = null;
   private rpc: JsonRpcStdio | null = null;
   private threadId: string | null = null;
+  private model: string | null = null;
+  private imageInput = true;
   private turnId: string | null = null;
   private running = false;
   private disconnected = false;
@@ -164,6 +166,7 @@ export class CodexProvider implements AgentProvider {
       inputSchema: t.inputSchema,
     }));
     const codex = opts.settings.codex;
+    this.model = codex.model || null;
     const common = {
       cwd: opts.workspaceDir,
       model: codex.model,
@@ -191,6 +194,8 @@ export class CodexProvider implements AgentProvider {
     this.threadId = res.thread.id;
     this.emit({ type: 'thread', threadId: this.threadId });
     this.emit({ type: 'status', status: 'ready' });
+    // Learns whether the model takes pictures; until it answers, and if it never does, they are sent.
+    void this.listModels().catch(() => {});
     return { threadId: this.threadId };
   }
 
@@ -241,8 +246,16 @@ export class CodexProvider implements AgentProvider {
   async listModels(): Promise<ModelInfo[]> {
     if (!this.rpc) return [];
     const res = await this.rpc.request<{
-      data: Array<{ id: string; displayName: string; isDefault: boolean; supportedReasoningEfforts: Array<{ reasoningEffort: string }> }>;
+      data: Array<{
+        id: string;
+        displayName: string;
+        isDefault: boolean;
+        inputModalities?: string[];
+        supportedReasoningEfforts: Array<{ reasoningEffort: string }>;
+      }>;
     }>('model/list', {});
+    const current = res.data.find((m) => (this.model ? m.id === this.model : m.isDefault));
+    if (current?.inputModalities) this.imageInput = current.inputModalities.includes('image');
     return res.data.map((m) => ({
       id: m.id,
       displayName: m.displayName,
@@ -400,6 +413,7 @@ export class CodexProvider implements AgentProvider {
         callTool: (name, args, signal) => this.deps.callTool(name, args, signal),
         approvals: this.deps.approvals,
         userInput: this.deps.userInput,
+        acceptsImages: () => this.imageInput,
         signal: this.turnAbort?.signal,
         onUserInputParams: (p) => this.logInputParamsOnce(p),
       });

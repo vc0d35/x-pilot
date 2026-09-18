@@ -72,6 +72,8 @@ const waitUntil = async (ready: () => boolean, ms = 3000) => {
   }
 };
 
+const textOf = (block: { type: string; text?: string }): string => block.text ?? '';
+
 describe('ClaudeProvider', () => {
   it('names a session up front, adopts the one the CLI reports, and resumes it on the next turn', async () => {
     const { provider, events, calls } = makeProvider([
@@ -135,7 +137,7 @@ describe('ClaudeProvider', () => {
         blockDelta(0, { type: 'input_json_delta', partial_json: '{"view":"visible"}' }),
         async (params) => {
           const tool = params.tools.find((t) => t.name === 'x_get_page_state')!;
-          answered = (await tool.handler({ view: 'visible' })).content[0].text;
+          answered = textOf((await tool.handler({ view: 'visible' })).content[0]);
         },
         blockStop(0),
         { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ignored' }] } },
@@ -170,7 +172,7 @@ describe('ClaudeProvider', () => {
         blockStart(0, { type: 'tool_use', id: 'toolu_2', name: 'mcp__xpilot__x_get_page_state' }),
         async (params) => {
           const r = await params.tools[0].handler({});
-          answered = { text: r.content[0].text, isError: r.isError };
+          answered = { text: textOf(r.content[0]), isError: r.isError };
         },
         blockStop(0),
         success(),

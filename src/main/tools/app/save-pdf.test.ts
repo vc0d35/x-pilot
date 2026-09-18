@@ -20,6 +20,7 @@ function ctx() {
       title: 'Alice: title',
     })),
     openPath: vi.fn(async () => ''),
+    fetchImage: async () => ({ mimeType: 'image/png', data: '' }),
     styles: {
       path: '/profile/page-styles.css',
       get: () => '',

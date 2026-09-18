@@ -33,6 +33,7 @@ import {
 import type { AgentEvent } from '../../shared/agent';
 import type { PageContext, VisiblePost } from '../../shared/page';
 import { createBudget } from '../links';
+import { mediaUrl } from '../../shared/media-url';
 
 /** What of a tool result is kept on the transcript row; the store truncates again at 4 000. */
 const TRACE_OUTPUT_MAX = 4000;
@@ -70,6 +71,12 @@ const FocusSchema = z.strictObject({
   url: cutTo(VIEW_STATE_URL_MAX).optional(),
   authorHandle: cutTo(VIEW_STATE_HANDLE_MAX).optional(),
   text: cutTo(VIEW_STATE_FOCUS_TEXT_MAX).optional(),
+  /** The picture in focus, so "read this image" has one to mean. Through the media gate, or dropped. */
+  image: z
+    .string()
+    .max(VIEW_STATE_URL_MAX * 2)
+    .transform((s) => mediaUrl(s))
+    .optional(),
 });
 
 /**

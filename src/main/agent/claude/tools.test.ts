@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { toolResultText, toolShape } from './tools';
+import { mcpToolResult, toolResultText, toolShape } from './tools';
 import { adapterToolSpecs } from '../../../preload/x/adapter/tools/specs';
 import { xviewTools } from '../../tools/xview';
 import { appTools } from '../../tools/app';
@@ -55,6 +55,18 @@ describe('toolShape', () => {
     const shape = toolShape({ type: 'object', properties: { url: { type: 'string' } }, required: ['url'] });
     expect(z.object(shape).safeParse({}).success).toBe(false);
     expect(z.object(shape).safeParse({ url: 'https://x.com' }).success).toBe(true);
+  });
+});
+
+describe('mcpToolResult', () => {
+  it('puts a picture after the text as an image block, and keeps the bytes out of the text', () => {
+    const r = mcpToolResult({ ...ok({ attached: true }), images: [{ mimeType: 'image/jpeg', data: 'AQID' }] });
+    expect(r.isError).toBe(false);
+    expect(r.content).toEqual([
+      { type: 'text', text: toolResultText(ok({ attached: true })) },
+      { type: 'image', data: 'AQID', mimeType: 'image/jpeg' },
+    ]);
+    expect(mcpToolResult(fail('nope'))).toMatchObject({ isError: true, content: [{ type: 'text' }] });
   });
 });
 

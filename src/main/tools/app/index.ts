@@ -7,8 +7,10 @@ import { scheduleTask, listTasks, updateTask, deleteTask } from './tasks';
 import { readPageStyles, writePageStyles, resetPageStyles } from './styles';
 import { listSelectors, testSelectorTool, setSelector, resetSelector } from './selectors';
 import { viewTools } from './views';
+import { viewImage } from './view-image';
 export const appTools: ToolModule<AppToolCtx>[] = [
   searchHistory,
+  viewImage,
   savePdf,
   listLibrary,
   openPdf,

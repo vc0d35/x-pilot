@@ -29,6 +29,7 @@ import { AppToolSource, ToolRegistry, type ToolSource } from './tools/registry';
 import { AdapterBridge } from './adapter/bridge';
 import { adapterToolSpecs } from '../preload/x/adapter/tools/specs';
 import { XViewController } from './xview';
+import { fetchImage, type ImageDetail } from './images';
 import { BackgroundXView } from './background-view';
 import { ApprovalBroker } from './approvals';
 import { UserInputBroker } from './user-input';
@@ -628,6 +629,7 @@ export function createApp(opts: AppOptions): XPilotApp {
     },
     stylesMode: () => settings.get().styles.mode,
     libraryDir,
+    fetchImage: (url: string, detail: ImageDetail, signal?: AbortSignal) => fetchImage(url, detail, { fetch }, signal),
     exportPdf: (url: string, outDir: string, sel: Record<SelectorKey, string>) =>
       exportPdf(
         { url, outDir, selectors: sel },

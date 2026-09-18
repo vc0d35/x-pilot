@@ -153,10 +153,15 @@ export function webSearchQueries(item: Record<string, unknown>): string[] {
   return q ? [q] : [];
 }
 
+export const NO_IMAGE_INPUT =
+  'Error: the model in use does not take image input, so the picture was not attached. Tell the user to pick a model with image input in Settings.';
+
 /** What answering a server-initiated request needs: the tools, the two brokers, the turn's signal. */
 export interface ServerRequestDeps {
   callTool(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<ToolResult>;
   approvals: ApprovalBroker;
+  /** False when the model in use takes no image input; a picture is then said, not sent. Unknown counts as yes. */
+  acceptsImages?(): boolean;
   /** Clarifying questions from the agent; without it `requestUserInput` is refused. */
   userInput?: UserInputBroker;
   /** Aborts when the turn is interrupted, times out, or ends. */
@@ -172,7 +177,16 @@ export async function handleServerRequest(method: string, params: unknown, deps:
       try {
         const result = await deps.callTool(p.tool as string, (p.arguments as Record<string, unknown>) ?? {}, deps.signal);
         const text = result.success ? JSON.stringify(result.content) : `Error: ${result.error}`;
-        return { contentItems: [{ type: 'inputText', text: wrapToolOutput(text) }], success: result.success };
+        const images = result.images ?? [];
+        if (images.length > 0 && deps.acceptsImages?.() === false)
+          return { contentItems: [{ type: 'inputText', text: wrapToolOutput(NO_IMAGE_INPUT) }], success: false };
+        return {
+          contentItems: [
+            { type: 'inputText', text: wrapToolOutput(text) },
+            ...images.map((i) => ({ type: 'inputImage', imageUrl: `data:${i.mimeType};base64,${i.data}` })),
+          ],
+          success: result.success,
+        };
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return { contentItems: [{ type: 'inputText', text: wrapToolOutput(`Error: ${message}`) }], success: false };

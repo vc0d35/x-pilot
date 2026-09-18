@@ -283,6 +283,16 @@ describe('the errors a view relays about itself', () => {
   });
 });
 
+describe('the picture a view says is in focus', () => {
+  it("is kept when it is one of X's own, and dropped when it is anything else", async () => {
+    const h = harness();
+    const image = 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&name=small';
+    await h.setState({ focus: { url: 'https://x.com/a/status/1', image } });
+    await h.setState({ focus: { url: 'https://x.com/a/status/1', image: 'https://evil.test/track.png' } });
+    expect(h.published).toEqual([{ focus: { url: 'https://x.com/a/status/1', image } }, { focus: { url: 'https://x.com/a/status/1' } }]);
+  });
+});
+
 describe('the state a view publishes about itself', () => {
   it('keeps what the view says it is showing, and says how big it was', async () => {
     const h = harness();

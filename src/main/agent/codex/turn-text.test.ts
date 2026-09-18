@@ -364,6 +364,11 @@ describe('buildTurnText with a custom view on screen', () => {
     );
   });
 
+  it('names the picture in focus, so "read this image" has a URL to look at', () => {
+    const image = 'https://pbs.twimg.com/media/HR7XqfOWAAcGIWv?format=jpg&name=small';
+    expect(buildTurnText('q', null, null, active({ focus: { authorHandle: 'b', image } }))).toContain(`focused: @b: image: ${image}`);
+  });
+
   it('says when the view has cleared its focus, and when it described it with nothing', () => {
     expect(buildTurnText('q', null, null, active({ focus: null }))).toContain('focused: nothing');
     expect(buildTurnText('q', null, null, active({ focus: {} }))).toContain('focused: something the view did not describe');

@@ -85,6 +85,7 @@ function focusLine(focus: NonNullable<ActiveViewState['state']>['focus'], textMa
   if (focus.authorHandle) parts.push(`@${fenceLine(focus.authorHandle, HANDLE_MAX)}:`);
   if (focus.text) parts.push(fenceLine(focus.text, textMax));
   if (focus.url) parts.push(`(${fenceLine(focus.url, URL_MAX)})`);
+  if (focus.image) parts.push(`image: ${fenceLine(focus.image, URL_MAX)}`);
   return `focused: ${parts.length ? parts.join(' ') : 'something the view did not describe'}`;
 }
 

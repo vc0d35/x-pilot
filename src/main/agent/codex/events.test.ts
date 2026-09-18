@@ -4,7 +4,15 @@ import { ApprovalBroker } from '../../approvals';
 import { UserInputBroker } from '../../user-input';
 import { ok, fail } from '../../../shared/tools';
 import type { AgentEvent } from '../../../shared/agent';
-import { handleNotification, handleServerRequest, inputQuestions, newItemPhases, webSearchQueries, wrapToolOutput } from './events';
+import {
+  handleNotification,
+  handleServerRequest,
+  inputQuestions,
+  newItemPhases,
+  webSearchQueries,
+  wrapToolOutput,
+  NO_IMAGE_INPUT,
+} from './events';
 
 /** Feeds notifications through one phase state, the way a live turn does, and collects the events. */
 function feed(...notifications: Array<[string, unknown]>) {
@@ -177,6 +185,24 @@ describe('handleServerRequest: tool calls', () => {
       contentItems: [{ type: 'inputText', text: wrapToolOutput('{"name":"x_read_post","args":{"url":"u"}}') }],
       success: true,
     });
+  });
+
+  it('sends a picture a tool handed over as an image item, and says so instead when the model takes none', async () => {
+    const withImage = async () => ({ ...ok({ attached: true }), images: [{ mimeType: 'image/png', data: 'AQID' }] });
+    expect(await handleServerRequest('item/tool/call', { tool: 'x_view_image' }, { callTool: withImage, approvals: approvals() })).toEqual({
+      contentItems: [
+        { type: 'inputText', text: wrapToolOutput('{"attached":true}') },
+        { type: 'inputImage', imageUrl: 'data:image/png;base64,AQID' },
+      ],
+      success: true,
+    });
+    expect(
+      await handleServerRequest(
+        'item/tool/call',
+        { tool: 'x_view_image' },
+        { callTool: withImage, approvals: approvals(), acceptsImages: () => false },
+      ),
+    ).toEqual({ contentItems: [{ type: 'inputText', text: wrapToolOutput(NO_IMAGE_INPUT) }], success: false });
   });
 
   it('reports a failed tool result, and a throwing tool, as failed output rather than crashing', async () => {
