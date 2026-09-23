@@ -18,6 +18,8 @@
   },
   "main": "./out/main/index.js",
   "scripts": {
+    "postinstall": "node scripts/ensure-dev.mjs",
+    "predev": "node scripts/ensure-dev.mjs",
     "dev": "electron-vite dev --watch",
     "build": "electron-vite build",
     "start": "electron-vite preview",
@@ -60,5 +62,9 @@
     "typescript-eslint": "^8.70.0",
     "vite": "^7.0.0",
     "vitest": "^5.0.0"
+  },
+  "allowScripts": {
+    "esbuild": true,
+    "fsevents": true
   }
 }
